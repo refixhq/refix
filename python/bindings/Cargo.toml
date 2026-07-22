@@ -1,13 +1,15 @@
 [package]
 name = "refix-bindings"
 version = "0.0.1"
+publish = false
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
-readme.workspace = true
-homepage.workspace = true
 repository.workspace = true
-keywords.workspace = true
-categories.workspace = true
+
+[lib]
+name = "_core"
+crate-type = ["cdylib"]
 
 [dependencies]
+pyo3 = { workspace = true }

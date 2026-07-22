@@ -16,4 +16,5 @@ keywords = ["fix", "fix-protocol", "fix-engine", "trading", "finance"]
 categories = ["encoding", "parsing", "finance"]
 
 [workspace.dependencies]
+pyo3 = "0.29.0"
 serde = "1.0.229"
