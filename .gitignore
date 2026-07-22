@@ -1,8 +1,31 @@
-# Rust
-target
-debug
-lcov.info
-**/*.rs.bk
+# Build files
+*.egg-info/
+dist/
+/build/
+_build/
+target/
+debug/
+*.so
 
 # IDEs
-/.idea
+.idea/
+.vscode/
+
+# Python bytecode and cache files
+*.py[cod]
+.cache/
+/.ghtopdep_cache/
+.hypothesis
+.mypy_cache/
+.pytest_cache/
+/.ruff_cache/
+
+# Virtual environments
+env/
+env3*/
+venv/
+.venv/
+__pypackages__/
+
+# Other
+.DS_Store
