@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "crates/*",
-    "python/bindings",
+    "python/refix-engine",
 ]
 default-members = [
     "crates/*",

@@ -7,8 +7,8 @@ describes how the repository is organised and the practices we follow.
 
 - `crates/` — pure Rust crates. Every crate in this directory is intended for
   publication to crates.io.
-- `python/` — everything Python. `python/bindings` contains the PyO3 crate
-  (`refix-bindings`) together with the pure-Python package; it builds the
+- `python/` — everything Python. `python/refix-engine` contains the PyO3 crate
+  (`refix-engine`) together with the pure-Python package; it builds the
   `refix-engine` distribution on PyPI (imported as `refix`) and is never
   published to crates.io. Other Python-related directories (benchmarks,
   examples) will live alongside it.
@@ -52,7 +52,7 @@ The Python bindings are excluded from default cargo commands and are built
 with [maturin](https://www.maturin.rs/):
 
 ```bash
-cd python/bindings
+cd python/refix-engine
 python -m venv .venv && source .venv/bin/activate
 pip install maturin
 maturin develop

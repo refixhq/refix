@@ -1,5 +1,5 @@
 [package]
-name = "refix-bindings"
+name = "refix-engine"
 version = "0.0.1"
 publish = false
 authors.workspace = true
