@@ -5,3 +5,7 @@ version = 4
 [[package]]
 name = "refix"
 version = "0.0.1"
+
+[[package]]
+name = "refix-bindings"
+version = "0.0.1"

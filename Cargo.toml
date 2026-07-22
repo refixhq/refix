@@ -1,8 +1,9 @@
 [workspace]
 members = [
     "crates/*",
+    "python/bindings",
 ]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 authors = ["David Steiner <david@davidsteiner.dev>"]
