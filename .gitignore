@@ -1,0 +1,8 @@
+# Rust
+target
+debug
+lcov.info
+**/*.rs.bk
+
+# IDEs
+/.idea
