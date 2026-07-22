@@ -10,7 +10,7 @@ sync:
 
 # Compile and install the extension module into the venv
 develop:
-    uv run --project {{py}} maturin develop --uv
+    cd {{py}} && uv run maturin develop --uv
 
 # Run the Python test suite
 pytest *args:
@@ -34,4 +34,4 @@ lint:
 
 # Build a release wheel
 wheel:
-    uv run --project {{py}} maturin build --release
+    cd {{py}} && uv run maturin build --release
