@@ -42,6 +42,10 @@ impl FrameScanner {
 
         let frame_len = validated_frame_len(buf, body_start, body_length, self.max_frame_size)?;
         let frame = &buf[..frame_len];
+        let checksum_start = body_start + body_length;
+
+        verify_trailer_start(buf, checksum_start)?;
+        verify_checksum(frame, checksum_start)?;
 
         todo!()
     }
@@ -163,6 +167,45 @@ fn validated_frame_len(
     Ok(frame_len)
 }
 
+/// Confirms BodyLength's jump landed on the CheckSum field: `10=` at a field
+/// boundary (SOH just before). A miss means BodyLength was wrong, so resync over
+/// the whole buffer.
+fn verify_trailer_start(buf: &[u8], checksum_start: usize) -> Result<(), Halt> {
+    if buf[checksum_start - 1] != SOH || &buf[checksum_start..checksum_start + 3] != b"10=" {
+        return Err(structural_garble(GarbledReason::BodyLengthMismatch, buf));
+    }
+    Ok(())
+}
+
+/// Verifies the `<CheckSum>␁` at `checksum_start`, the `10=` landing having
+/// already been confirmed.
+fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
+    let digits = &frame[checksum_start + 3..checksum_start + 6];
+    let trailing_soh = frame[checksum_start + 6];
+    if trailing_soh != SOH || !digits.iter().all(|b| b.is_ascii_digit()) {
+        return Err(Halt::Garbled {
+            reason: GarbledReason::MalformedChecksum,
+            skipped: frame.len(),
+        });
+    }
+
+    let stated = u16::from(digits[0] - b'0') * 100
+        + u16::from(digits[1] - b'0') * 10
+        + u16::from(digits[2] - b'0');
+    let computed = frame[..checksum_start]
+        .iter()
+        .fold(0u8, |acc, &b| acc.wrapping_add(b));
+
+    if u16::from(computed) != stated {
+        return Err(Halt::Garbled {
+            reason: GarbledReason::ChecksumMismatch,
+            skipped: frame.len(),
+        });
+    }
+
+    Ok(())
+}
+
 impl Default for FrameScanner {
     fn default() -> Self {
         Self {
@@ -221,11 +264,12 @@ pub enum GarbledReason {
     MissingBodyLength,
     /// BodyLength is empty, contains a non-digit, or exceeds the digit cap.
     MalformedBodyLength,
-    /// The bytes at the BodyLength-implied offset are not `10=`.
+    /// The BodyLength-implied offset is not a `10=` trailer at a field boundary
+    /// (i.e. not preceded by SOH, or not `10=`).
     BodyLengthMismatch,
     /// The third tag is not `35=`.
     MissingMsgType,
-    /// CheckSum is present but its value is not exactly three digits.
+    /// The CheckSum field is not three digits followed by SOH.
     MalformedChecksum,
     /// The calculated checksum does not match the value of CheckSum.
     ChecksumMismatch,
