@@ -47,7 +47,11 @@ impl FrameScanner {
         verify_trailer_start(buf, checksum_start)?;
         verify_checksum(frame, checksum_start)?;
 
-        todo!()
+        let header = extract_header(frame, body_start, checksum_start, begin_string, body_length)?;
+        Ok(Frame {
+            bytes: frame,
+            header,
+        })
     }
 }
 
@@ -204,6 +208,91 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
     }
 
     Ok(())
+}
+
+/// Extracts the session-relevant header fields from the body region.
+fn extract_header<'a>(
+    frame: &'a [u8],
+    body_start: usize,
+    checksum_start: usize,
+    begin_string: BeginString<'a>,
+    body_length: usize,
+) -> Result<StandardHeader<'a>, Halt> {
+    let body = &frame[body_start..checksum_start];
+    let is_fixt = matches!(begin_string, BeginString::Fixt11);
+
+    let mut fields = body.split(|&b| b == SOH).filter(|f| !f.is_empty());
+
+    // MsgType(35) must be the first field of the body.
+    let msg_type = match fields.next().and_then(split_field) {
+        Some((b"35", value)) => value,
+        _ => {
+            return Err(Halt::Garbled {
+                reason: GarbledReason::MissingMsgType,
+                skipped: frame.len(),
+            });
+        }
+    };
+
+    let mut header = StandardHeader {
+        begin_string,
+        body_length,
+        msg_type,
+        msg_seq_num: None,
+        sender_comp_id: None,
+        target_comp_id: None,
+        poss_dup: None,
+        sending_time: None,
+        orig_sending_time: None,
+        appl_ver_id: None,
+    };
+
+    // First occurrence of each tag wins; unrecognised tags are skipped.
+    for field in fields {
+        let Some((tag, value)) = split_field(field) else {
+            continue;
+        };
+        match tag {
+            b"34" if header.msg_seq_num.is_none() => header.msg_seq_num = parse_u64(value),
+            b"49" if header.sender_comp_id.is_none() => header.sender_comp_id = Some(value),
+            b"56" if header.target_comp_id.is_none() => header.target_comp_id = Some(value),
+            b"43" if header.poss_dup.is_none() => header.poss_dup = parse_bool(value),
+            b"52" if header.sending_time.is_none() => header.sending_time = Some(value),
+            b"122" if header.orig_sending_time.is_none() => header.orig_sending_time = Some(value),
+            b"1128" if is_fixt && header.appl_ver_id.is_none() => header.appl_ver_id = Some(value),
+            _ => {}
+        }
+    }
+
+    Ok(header)
+}
+
+/// Splits a `tag=value` field on its first `=`. `None` if there's no `=`.
+fn split_field(field: &[u8]) -> Option<(&[u8], &[u8])> {
+    let eq = field.iter().position(|&b| b == b'=')?;
+    Some((&field[..eq], &field[eq + 1..]))
+}
+
+/// Parses ASCII digits to `u64`. `None` if empty, non-digit, or it overflows.
+fn parse_u64(bytes: &[u8]) -> Option<u64> {
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut n: u64 = 0;
+    for &b in bytes {
+        let digit = b.checked_sub(b'0').filter(|&d| d < 10)?;
+        n = n.checked_mul(10)?.checked_add(u64::from(digit))?;
+    }
+    Some(n)
+}
+
+/// `PossDupFlag`: `Y`/`N` to bool, anything else `None`.
+fn parse_bool(value: &[u8]) -> Option<bool> {
+    match value {
+        b"Y" => Some(true),
+        b"N" => Some(false),
+        _ => None,
+    }
 }
 
 impl Default for FrameScanner {
@@ -520,7 +609,6 @@ mod tests {
         use super::*;
 
         #[test]
-        #[ignore = "reaches todo!() until StandardHeader extraction lands"]
         fn valid_frame_scans() {
             let buf = construct_valid_frame("FIX.4.4", "35=A|34=1|49=ME|56=YOU|");
             assert!(matches!(scan(&buf), ScanOutcome::Frame(_)));
