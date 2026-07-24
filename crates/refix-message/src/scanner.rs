@@ -20,17 +20,24 @@ impl FrameScanner {
     }
 
     pub fn scan<'a>(&self, buf: &'a [u8]) -> ScanOutcome<'a> {
-        if buf.is_empty() || buf == b"8" {
-            return ScanOutcome::Incomplete;
+        match self.try_scan(buf) {
+            Ok(frame) => ScanOutcome::Frame(frame),
+            Err(halt) => halt.into(),
         }
+    }
 
+    fn try_scan<'a>(&self, buf: &'a [u8]) -> Result<Frame<'a>, Halt> {
+        if buf.is_empty() || buf == b"8" {
+            return Err(Halt::Incomplete);
+        }
         if !buf.starts_with(b"8=") {
-            return ScanOutcome::Garbled {
+            return Err(Halt::Garbled {
                 reason: GarbledReason::MissingBeginString,
                 skipped: find_next_begin_string(buf),
-            };
+            });
         }
 
+        let (begin_string, next) = parse_begin_string(buf)?;
         todo!()
     }
 }
@@ -56,6 +63,33 @@ fn find_next_begin_string(buf: &[u8]) -> usize {
     }
 
     buf.len()
+}
+
+fn parse_begin_string(buf: &'_ [u8]) -> Result<(BeginString<'_>, usize), Halt> {
+    let search_end = buf.len().min(MAX_BEGIN_STRING_LEN + 1);
+    let soh = match buf[2..search_end].iter().position(|&b| b == SOH) {
+        Some(rel) => rel + 2,
+        None if buf.len() <= MAX_BEGIN_STRING_LEN => return Err(Halt::Incomplete),
+        None => {
+            return Err(Halt::Garbled {
+                reason: GarbledReason::MalformedBeginString,
+                skipped: find_next_begin_string(buf),
+            });
+        }
+    };
+
+    let value = &buf[2..soh];
+    let begin_string = match value {
+        b"FIX.4.0" => BeginString::Fix40,
+        b"FIX.4.1" => BeginString::Fix41,
+        b"FIX.4.2" => BeginString::Fix42,
+        b"FIX.4.3" => BeginString::Fix43,
+        b"FIX.4.4" => BeginString::Fix44,
+        b"FIXT.1.1" => BeginString::Fixt11,
+        other => BeginString::Other(other),
+    };
+
+    Ok((begin_string, soh + 1)) // soh + 1 = start of the 9= field
 }
 
 impl Default for FrameScanner {
@@ -87,6 +121,24 @@ pub struct Frame<'a> {
     pub bytes: &'a [u8],
     /// The session-relevant fields in the header.
     pub header: StandardHeader<'a>,
+}
+
+/// A scan that ended without a frame.
+enum Halt {
+    Incomplete,
+    Garbled {
+        reason: GarbledReason,
+        skipped: usize,
+    },
+}
+
+impl<'a> From<Halt> for ScanOutcome<'a> {
+    fn from(halt: Halt) -> Self {
+        match halt {
+            Halt::Incomplete => ScanOutcome::Incomplete,
+            Halt::Garbled { reason, skipped } => ScanOutcome::Garbled { reason, skipped },
+        }
+    }
 }
 
 pub enum GarbledReason {
