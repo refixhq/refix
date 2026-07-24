@@ -644,4 +644,73 @@ mod tests {
             assert_eq!(frame(&buf).msg_type, b"A".as_slice());
         }
     }
+
+    mod truncation {
+        use super::*;
+
+        #[test]
+        fn every_prefix_of_a_valid_frame_is_incomplete() {
+            let frames = [
+                construct_valid_frame("FIX.4.4", "35=A|"),
+                construct_valid_frame("FIX.4.4", "35=D|34=2|49=SENDER|56=TARGET|"),
+                construct_valid_frame("FIXT.1.1", "35=A|1128=9|"),
+                construct_valid_frame("FIX.4.2", "35=0|"),
+            ];
+            for full in &frames {
+                for len in 0..full.len() {
+                    assert!(
+                        matches!(scan(&full[..len]), ScanOutcome::Incomplete),
+                        "prefix of length {len} (of a {}-byte frame) should be Incomplete",
+                        full.len(),
+                    );
+                }
+            }
+        }
+    }
+
+    mod chunking {
+        use super::*;
+
+        /// Drives the scanner over `stream` delivered in `chunk_size`-byte pieces,
+        /// returning the frame byte-slices produced, in order. Models a caller that
+        /// accumulates bytes, consumes complete frames/garbles, waits on Incomplete.
+        fn drive(stream: &[u8], chunk_size: usize) -> Vec<Vec<u8>> {
+            let scanner = FrameScanner::default();
+            let mut frames = Vec::new();
+            let mut buf: Vec<u8> = Vec::new();
+            for chunk in stream.chunks(chunk_size) {
+                buf.extend_from_slice(chunk);
+                loop {
+                    let advance = match scanner.scan(&buf) {
+                        ScanOutcome::Frame(f) => {
+                            frames.push(f.bytes.to_vec());
+                            f.bytes.len()
+                        }
+                        ScanOutcome::Garbled { skipped, .. } => skipped,
+                        ScanOutcome::Incomplete => break,
+                    };
+                    buf.drain(..advance);
+                }
+            }
+            frames
+        }
+
+        #[test]
+        fn clean_stream_is_chunk_invariant() {
+            let f1 = construct_valid_frame("FIX.4.4", "35=A|34=1|");
+            let f2 = construct_valid_frame("FIXT.1.1", "35=D|1128=9|");
+            let mut stream = f1.clone();
+            stream.extend_from_slice(&f2);
+
+            let whole = drive(&stream, stream.len());
+            assert_eq!(whole, vec![f1, f2]);
+            for chunk_size in 1..=stream.len() {
+                assert_eq!(
+                    drive(&stream, chunk_size),
+                    whole,
+                    "chunk_size = {chunk_size}"
+                );
+            }
+        }
+    }
 }
