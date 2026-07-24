@@ -196,7 +196,10 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
     let digits = &frame[checksum_start + 3..checksum_start + 6];
     let trailing_soh = frame[checksum_start + 6];
     if trailing_soh != SOH || !digits.iter().all(|b| b.is_ascii_digit()) {
-        return Err(post_structural_garble(GarbledReason::MalformedChecksum, frame));
+        return Err(post_structural_garble(
+            GarbledReason::MalformedChecksum,
+            frame,
+        ));
     }
 
     let stated = u16::from(digits[0] - b'0') * 100
@@ -207,7 +210,10 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
         .fold(0u8, |acc, &b| acc.wrapping_add(b));
 
     if u16::from(computed) != stated {
-        return Err(post_structural_garble(GarbledReason::ChecksumMismatch, frame));
+        return Err(post_structural_garble(
+            GarbledReason::ChecksumMismatch,
+            frame,
+        ));
     }
 
     Ok(())
@@ -461,6 +467,15 @@ mod tests {
         );
     }
 
+    /// Scans a frame expected to be well-formed and returns its header.
+    #[track_caller]
+    fn header(buf: &[u8]) -> StandardHeader<'_> {
+        match scan(buf) {
+            ScanOutcome::Frame(frame) => frame.header,
+            _ => panic!("expected Frame"),
+        }
+    }
+
     /// The resync primitive on its own: pure, fiddly, and stable enough to test directly.
     mod resync {
         use super::*;
@@ -612,6 +627,85 @@ mod tests {
         fn valid_frame_scans() {
             let buf = construct_valid_frame("FIX.4.4", "35=A|34=1|49=ME|56=YOU|");
             assert!(matches!(scan(&buf), ScanOutcome::Frame(_)));
+        }
+    }
+
+    mod extraction {
+        use super::*;
+
+        #[test]
+        fn msg_type() {
+            let buf = construct_valid_frame("FIX.4.4", "35=D|");
+            assert_eq!(header(&buf).msg_type, b"D".as_slice());
+        }
+
+        #[test]
+        fn begin_string_and_body_length() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|");
+            let h = header(&buf);
+            assert!(matches!(h.begin_string, BeginString::Fix44));
+            assert_eq!(h.body_length, 5); // "35=A" + SOH
+        }
+
+        #[test]
+        fn session_fields() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|34=42|49=SENDER|56=TARGET|");
+            let h = header(&buf);
+            assert_eq!(h.msg_seq_num, Some(42));
+            assert_eq!(h.sender_comp_id, Some(b"SENDER".as_slice()));
+            assert_eq!(h.target_comp_id, Some(b"TARGET".as_slice()));
+        }
+
+        #[test]
+        fn absent_seq_num_is_none() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|");
+            assert_eq!(header(&buf).msg_seq_num, None);
+        }
+
+        #[test]
+        fn unparseable_seq_num_is_none() {
+            // Non-digit MsgSeqNum doesn't garble the frame; it just extracts as None.
+            let buf = construct_valid_frame("FIX.4.4", "35=A|34=1X|");
+            assert_eq!(header(&buf).msg_seq_num, None);
+        }
+
+        #[test]
+        fn poss_dup_flag() {
+            let yes = construct_valid_frame("FIX.4.4", "35=A|43=Y|");
+            assert_eq!(header(&yes).poss_dup, Some(true));
+            let no = construct_valid_frame("FIX.4.4", "35=A|43=N|");
+            assert_eq!(header(&no).poss_dup, Some(false));
+        }
+
+        #[test]
+        fn sending_times_are_raw_bytes() {
+            let buf = construct_valid_frame(
+                "FIX.4.4",
+                "35=A|52=20260724-12:00:00|122=20260724-11:00:00|",
+            );
+            let h = header(&buf);
+            assert_eq!(h.sending_time, Some(b"20260724-12:00:00".as_slice()));
+            assert_eq!(h.orig_sending_time, Some(b"20260724-11:00:00".as_slice()));
+        }
+
+        #[test]
+        fn appl_ver_id_extracted_on_fixt() {
+            let buf = construct_valid_frame("FIXT.1.1", "35=A|1128=9|");
+            let h = header(&buf);
+            assert!(matches!(h.begin_string, BeginString::Fixt11));
+            assert_eq!(h.appl_ver_id, Some(b"9".as_slice()));
+        }
+
+        #[test]
+        fn appl_ver_id_ignored_off_fixt() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|1128=9|");
+            assert_eq!(header(&buf).appl_ver_id, None);
+        }
+
+        #[test]
+        fn first_occurrence_of_a_tag_wins() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|49=FIRST|49=SECOND|");
+            assert_eq!(header(&buf).sender_comp_id, Some(b"FIRST".as_slice()));
         }
     }
 }
