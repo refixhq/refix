@@ -255,6 +255,7 @@ impl<'a> From<Halt> for ScanOutcome<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GarbledReason {
     /// It does not start with `8=`.
     MissingBeginString,
@@ -317,4 +318,212 @@ pub enum BeginString<'a> {
     Fix44,
     Fixt11,
     Other(&'a [u8]),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `|`-delimited readable string into SOH-delimited bytes.
+    fn to_wire(s: &str) -> Vec<u8> {
+        s.replace('|', "\x01").into_bytes()
+    }
+
+    /// FIX checksum: sum of all bytes mod 256, as a zero-padded 3-digit string.
+    fn calculate_checksum(bytes: &[u8]) -> String {
+        let sum = bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b));
+        format!("{sum:03}")
+    }
+
+    /// A complete, correctly-checksummed frame with a correct BodyLength.
+    /// `body` is `|`-delimited and includes its trailing `|`, e.g. "35=A|34=1|".
+    fn construct_valid_frame(begin: &str, body: &str) -> Vec<u8> {
+        let body = to_wire(body);
+        let mut bytes = to_wire(&format!("8={begin}|9={}|", body.len()));
+        bytes.extend_from_slice(&body);
+        let cs = calculate_checksum(&bytes);
+        bytes.extend_from_slice(&to_wire(&format!("10={cs}|")));
+        bytes
+    }
+
+    fn scan(buf: &[u8]) -> ScanOutcome<'_> {
+        FrameScanner::default().scan(buf)
+    }
+
+    #[track_caller]
+    fn assert_garbled(out: ScanOutcome, reason: GarbledReason, skipped: usize) {
+        match out {
+            ScanOutcome::Garbled {
+                reason: r,
+                skipped: s,
+            } => {
+                assert_eq!(r, reason, "reason");
+                assert_eq!(s, skipped, "skipped");
+            }
+            _ => panic!("expected Garbled({reason:?}), got a different outcome"),
+        }
+    }
+
+    #[track_caller]
+    fn assert_incomplete(out: ScanOutcome) {
+        assert!(
+            matches!(out, ScanOutcome::Incomplete),
+            "expected Incomplete"
+        );
+    }
+
+    /// The resync primitive on its own: pure, fiddly, and stable enough to test directly.
+    mod resync {
+        use super::*;
+
+        #[test]
+        fn finds_needle_after_offset_zero() {
+            assert_eq!(find_next_begin_string(b"XX8=FIX"), 2);
+        }
+
+        #[test]
+        fn finds_needle_at_offset_one() {
+            assert_eq!(find_next_begin_string(b"X8=FIX"), 1);
+        }
+
+        #[test]
+        fn no_match_skips_whole_buffer() {
+            assert_eq!(find_next_begin_string(b"XYZW"), 4);
+        }
+
+        #[test]
+        fn preserves_longest_partial_tail() {
+            // Ends in `8=FI`, a 4-byte partial the next read may complete.
+            assert_eq!(find_next_begin_string(b"garbage8=FI"), 7);
+        }
+
+        #[test]
+        fn preserves_short_partial_tail() {
+            assert_eq!(find_next_begin_string(b"xx8="), 2);
+        }
+    }
+
+    mod incomplete {
+        use super::*;
+
+        #[test]
+        fn empty() {
+            assert_incomplete(scan(b""));
+        }
+
+        #[test]
+        fn lone_8() {
+            assert_incomplete(scan(b"8"));
+        }
+
+        #[test]
+        fn begin_string_without_soh() {
+            assert_incomplete(scan(&to_wire("8=FIX.4.4")));
+        }
+
+        #[test]
+        fn body_not_yet_arrived() {
+            // BodyLength claims 100 bytes; only a handful are here.
+            assert_incomplete(scan(&to_wire("8=FIX.4.4|9=100|35=A")));
+        }
+    }
+
+    /// Extent untrustworthy: the skip resyncs by searching for the next BeginString.
+    mod structural {
+        use super::*;
+
+        #[test]
+        fn missing_begin_string() {
+            assert_garbled(scan(&to_wire("junk")), GarbledReason::MissingBeginString, 4);
+        }
+
+        #[test]
+        fn malformed_begin_string_overruns_bound() {
+            let mut buf = b"8=".to_vec();
+            buf.extend([b'X'; 18]); // 20 bytes, no SOH within MAX_BEGIN_STRING_LEN
+            assert_garbled(scan(&buf), GarbledReason::MalformedBeginString, 20);
+        }
+
+        #[test]
+        fn missing_body_length() {
+            assert_garbled(
+                scan(&to_wire("8=FIX.4.4|35=A|")),
+                GarbledReason::MissingBodyLength,
+                15,
+            );
+        }
+
+        #[test]
+        fn malformed_body_length_non_digit() {
+            assert_garbled(
+                scan(&to_wire("8=FIX.4.4|9=XY|")),
+                GarbledReason::MalformedBodyLength,
+                15,
+            );
+        }
+
+        #[test]
+        fn malformed_body_length_overruns_cap() {
+            // 15 digits, no SOH: exceeds MAX_BODY_LENGTH_DIGITS.
+            assert_garbled(
+                scan(&to_wire("8=FIX.4.4|9=123456789012345")),
+                GarbledReason::MalformedBodyLength,
+                27,
+            );
+        }
+
+        #[test]
+        fn frame_too_large_rejected_before_waiting() {
+            // frame_len of ~123 exceeds the cap of 50, so it rejects rather than waits.
+            let buf = to_wire("8=FIX.4.4|9=100|");
+            assert_garbled(
+                FrameScanner::new(50).scan(&buf),
+                GarbledReason::FrameTooLarge,
+                16,
+            );
+        }
+
+        #[test]
+        fn body_length_mismatch() {
+            // BodyLength says 3, real body is longer, so the jump lands mid-field.
+            assert_garbled(
+                scan(&to_wire("8=FIX.4.4|9=3|35=A|10=000|")),
+                GarbledReason::BodyLengthMismatch,
+                26,
+            );
+        }
+    }
+
+    /// Extent trusted: the skip is the whole frame, never a resync.
+    mod post_structural {
+        use super::*;
+
+        #[test]
+        fn checksum_mismatch() {
+            let mut buf = construct_valid_frame("FIX.4.4", "35=A|34=1|");
+            let len = buf.len();
+            let last_digit = &mut buf[len - 2]; // 3 digits then trailing SOH
+            *last_digit = if *last_digit == b'0' { b'1' } else { b'0' };
+            assert_garbled(scan(&buf), GarbledReason::ChecksumMismatch, len);
+        }
+
+        #[test]
+        fn malformed_checksum_non_digit() {
+            let mut buf = construct_valid_frame("FIX.4.4", "35=A|34=1|");
+            let len = buf.len();
+            buf[len - 2] = b'x'; // non-digit in the checksum value
+            assert_garbled(scan(&buf), GarbledReason::MalformedChecksum, len);
+        }
+    }
+
+    mod happy_path {
+        use super::*;
+
+        #[test]
+        #[ignore = "reaches todo!() until StandardHeader extraction lands"]
+        fn valid_frame_scans() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|34=1|49=ME|56=YOU|");
+            assert!(matches!(scan(&buf), ScanOutcome::Frame(_)));
+        }
+    }
 }
