@@ -9,9 +9,9 @@ const MAX_BODY_LENGTH_DIGITS: usize = 10;
 /// `10=` + three checksum digits + SOH.
 const CHECKSUM_FIELD_LEN: usize = 7;
 
-/// The shortest prefix common to every BeginString (`FIX.4.x` and `FIXT.1.1`).
-/// Used in the resync logic when scanning for the next frame start (i.e. the next BeginString).
-const RESYNC_BEGIN_STRING_PREFIX: &[u8] = b"8=FIX";
+/// The shortest prefix common to every BeginString: the FIX spec fixes every
+/// one to the form `FIX.x.y` or `FIXT.x.y`, so `8=FIX` marks the start of any frame.
+const BEGIN_STRING_PREFIX: &[u8] = b"8=FIX";
 
 /// A stateless framing scanner: each [`scan`](FrameScanner::scan) call attempts
 /// to delimit one checksum-verified frame from the start of a buffer.
@@ -45,11 +45,14 @@ impl FrameScanner {
     }
 
     fn try_scan<'a>(&self, buf: &'a [u8]) -> Result<Frame<'a>, Halt> {
-        if buf.is_empty() || buf == b"8" {
-            return Err(Halt::Incomplete);
-        }
-        if !buf.starts_with(b"8=") {
-            return Err(structural_garble(GarbledReason::MissingBeginString, buf));
+        if !buf.starts_with(BEGIN_STRING_PREFIX) {
+            // If `buf` is still a prefix of `8=FIX`, more bytes
+            // could complete it; otherwise it's garbage to resync past.
+            return if BEGIN_STRING_PREFIX.starts_with(buf) {
+                Err(Halt::Incomplete)
+            } else {
+                Err(structural_garble(GarbledReason::MissingBeginString, buf))
+            };
         }
 
         let (begin_string, body_length_start) = parse_begin_string(buf)?;
@@ -79,15 +82,15 @@ impl FrameScanner {
 /// Failing that, skips the whole buffer.
 fn find_next_begin_string(buf: &[u8]) -> usize {
     if let Some(skip) = buf[1..]
-        .windows(RESYNC_BEGIN_STRING_PREFIX.len())
-        .position(|b| b == RESYNC_BEGIN_STRING_PREFIX)
+        .windows(BEGIN_STRING_PREFIX.len())
+        .position(|b| b == BEGIN_STRING_PREFIX)
     {
         return skip + 1;
     }
 
-    let max_k = (RESYNC_BEGIN_STRING_PREFIX.len() - 1).min(buf.len());
+    let max_k = (BEGIN_STRING_PREFIX.len() - 1).min(buf.len());
     for k in (1..=max_k).rev() {
-        if buf[buf.len() - k..] == RESYNC_BEGIN_STRING_PREFIX[..k] {
+        if buf[buf.len() - k..] == BEGIN_STRING_PREFIX[..k] {
             return buf.len() - k;
         }
     }
@@ -324,9 +327,9 @@ impl<'a> From<Halt> for ScanOutcome<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GarbledReason {
-    /// It does not start with `8=`.
+    /// It does not start with `8=FIX` (so it is not a frame start).
     MissingBeginString,
-    /// `8=` present, but no SOH within MAX_BEGIN_STRING_LEN.
+    /// `8=FIX` present, but no SOH within MAX_BEGIN_STRING_LEN.
     MalformedBeginString,
     /// The second tag is not `9=`.
     MissingBodyLength,
@@ -485,10 +488,21 @@ mod tests {
         }
 
         #[test]
+        fn non_fix_prefix_is_missing_begin_string() {
+            // `8=` but not `8=FIX`: not a frame start at all, so resync past it.
+            assert_garbled(
+                scan(&to_wire("8=NOTFIX|9=5|")),
+                GarbledReason::MissingBeginString,
+                13,
+            );
+        }
+
+        #[test]
         fn malformed_begin_string_overruns_bound() {
-            let mut buf = b"8=".to_vec();
-            buf.extend([b'X'; 18]); // 20 bytes, no SOH within MAX_BEGIN_STRING_LEN
-            assert_garbled(scan(&buf), GarbledReason::MalformedBeginString, 20);
+            // Starts with `8=FIX` but the BeginString runs past the bound with no SOH.
+            let mut buf = b"8=FIX".to_vec();
+            buf.extend([b'X'; 18]); // 23 bytes, no SOH within MAX_BEGIN_STRING_LEN
+            assert_garbled(scan(&buf), GarbledReason::MalformedBeginString, 23);
         }
 
         #[test]
@@ -642,6 +656,98 @@ mod tests {
             // concern and must not affect framing or the preamble.
             let buf = construct_valid_frame("FIX.4.4", "35=A|34=42|49=ME|56=YOU|");
             assert_eq!(frame(&buf).msg_type, b"A".as_slice());
+        }
+    }
+
+    mod truncation {
+        use super::*;
+
+        #[test]
+        fn every_prefix_of_a_valid_frame_is_incomplete() {
+            let frames = [
+                construct_valid_frame("FIX.4.4", "35=A|"),
+                construct_valid_frame("FIX.4.4", "35=D|34=2|49=SENDER|56=TARGET|"),
+                construct_valid_frame("FIXT.1.1", "35=A|1128=9|"),
+                construct_valid_frame("FIX.4.2", "35=0|"),
+            ];
+            for full in &frames {
+                for len in 0..full.len() {
+                    assert!(
+                        matches!(scan(&full[..len]), ScanOutcome::Incomplete),
+                        "prefix of length {len} (of a {}-byte frame) should be Incomplete",
+                        full.len(),
+                    );
+                }
+            }
+        }
+    }
+
+    mod chunking {
+        use super::*;
+
+        /// Drives the scanner over `stream` delivered in `chunk_size`-byte pieces,
+        /// returning the frame byte-slices produced, in order. Models a caller that
+        /// accumulates bytes, consumes complete frames/garbles, waits on Incomplete.
+        fn drive(stream: &[u8], chunk_size: usize) -> Vec<Vec<u8>> {
+            let scanner = FrameScanner::default();
+            let mut frames = Vec::new();
+            let mut buf: Vec<u8> = Vec::new();
+            for chunk in stream.chunks(chunk_size) {
+                buf.extend_from_slice(chunk);
+                loop {
+                    let advance = match scanner.scan(&buf) {
+                        ScanOutcome::Frame(f) => {
+                            frames.push(f.bytes.to_vec());
+                            f.bytes.len()
+                        }
+                        ScanOutcome::Garbled { skipped, .. } => skipped,
+                        ScanOutcome::Incomplete => break,
+                    };
+                    buf.drain(..advance);
+                }
+            }
+            frames
+        }
+
+        #[test]
+        fn clean_stream_is_chunk_invariant() {
+            let f1 = construct_valid_frame("FIX.4.4", "35=A|34=1|");
+            let f2 = construct_valid_frame("FIXT.1.1", "35=D|1128=9|");
+            let mut stream = f1.clone();
+            stream.extend_from_slice(&f2);
+
+            let whole = drive(&stream, stream.len());
+            assert_eq!(whole, vec![f1, f2]);
+            for chunk_size in 1..=stream.len() {
+                assert_eq!(
+                    drive(&stream, chunk_size),
+                    whole,
+                    "chunk_size = {chunk_size}"
+                );
+            }
+        }
+
+        #[test]
+        fn garbage_before_frame_is_chunk_invariant() {
+            // Regression: leading non-`8=` garbage, then `8=<non-FIX>` with no SOH
+            // before the real frame's BeginString SOH, then a valid frame. Under a
+            // weak `8=` start anchor, byte-by-byte delivery latched onto the `8=Z`,
+            // absorbed the real frame into a bogus BeginString, and skipped it on
+            // the checksum failure - losing a frame the whole-buffer scan kept. The
+            // `8=FIX` anchor makes both paths skip the garbage identically.
+            let f = construct_valid_frame("FIX.4.4", "35=0|");
+            let mut stream = b"YY8=Z".to_vec();
+            stream.extend_from_slice(&f);
+
+            let whole = drive(&stream, stream.len());
+            assert_eq!(whole, vec![f]);
+            for chunk_size in 1..=stream.len() {
+                assert_eq!(
+                    drive(&stream, chunk_size),
+                    whole,
+                    "chunk_size = {chunk_size}"
+                );
+            }
         }
     }
 }
