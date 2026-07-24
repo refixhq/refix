@@ -1,10 +1,10 @@
 const SOH: u8 = 0x01;
 
 /// Longest BeginString field we'll frame: `8=` through the byte before its SOH.
-/// `8=FIXT.1.1` (10 bytes) is the longest real one; the slack leaves room for a
-/// plausible-but-unrecognised version (→ `Other`) without ever mistaking a run
-/// of garbage after `8=` for a slow-arriving field.
 const MAX_BEGIN_STRING_LEN: usize = 16;
+
+/// Longest BodyLength value we'll frame, in digits.
+const MAX_BODY_LENGTH_DIGITS: usize = 10;
 
 /// The shortest prefix common to every BeginString (`FIX.4.x` and `FIXT.1.1`).
 /// Used in the resync logic when scanning for the next frame start (i.e. the next BeginString).
@@ -38,6 +38,7 @@ impl FrameScanner {
         }
 
         let (begin_string, next) = parse_begin_string(buf)?;
+        let (body_length, body_start) = parse_body_length(buf, next)?;
         todo!()
     }
 }
@@ -90,6 +91,55 @@ fn parse_begin_string(buf: &'_ [u8]) -> Result<(BeginString<'_>, usize), Halt> {
     };
 
     Ok((begin_string, soh + 1)) // soh + 1 = start of the 9= field
+}
+
+/// Parses the `9=<BodyLength>␁` field starting at `next`.
+///
+/// On success returns `(body_length, body_start)`, where `body_start` is the
+/// offset just past the BodyLength SOH.
+fn parse_body_length(buf: &[u8], next: usize) -> Result<(usize, usize), Halt> {
+    // Expect the `9=` tag. Fewer than 2 bytes → can't even test it yet.
+    let tag = &buf[next..];
+    if tag.len() < 2 {
+        return Err(Halt::Incomplete);
+    }
+    if &tag[..2] != b"9=" {
+        return Err(Halt::Garbled {
+            reason: GarbledReason::MissingBodyLength,
+            skipped: find_next_begin_string(buf),
+        });
+    }
+
+    // Digits run from just after `9=` to the terminating SOH, bounded by the cap.
+    let digits_start = next + 2;
+    let search_end = buf.len().min(digits_start + MAX_BODY_LENGTH_DIGITS + 1);
+    let soh_rel = match buf[digits_start..search_end].iter().position(|&b| b == SOH) {
+        Some(rel) => rel,
+        // Out-of-buffer first, cap-exceeded second — same ordering as BeginString.
+        None if buf.len() <= digits_start + MAX_BODY_LENGTH_DIGITS => return Err(Halt::Incomplete),
+        None => {
+            return Err(Halt::Garbled {
+                reason: GarbledReason::MalformedBodyLength,
+                skipped: find_next_begin_string(buf),
+            });
+        }
+    };
+
+    let digits = &buf[digits_start..digits_start + soh_rel];
+    if digits.is_empty() || !digits.iter().all(|b| b.is_ascii_digit()) {
+        return Err(Halt::Garbled {
+            reason: GarbledReason::MalformedBodyLength,
+            skipped: find_next_begin_string(buf),
+        });
+    }
+
+    // At most MAX_BODY_LENGTH_DIGITS ASCII digits, already validated - no overflow.
+    let body_length = digits
+        .iter()
+        .fold(0usize, |acc, &b| acc * 10 + (b - b'0') as usize);
+
+    let body_start = digits_start + soh_rel + 1; // just past the BodyLength SOH
+    Ok((body_length, body_start))
 }
 
 impl Default for FrameScanner {
