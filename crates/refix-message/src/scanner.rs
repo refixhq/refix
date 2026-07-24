@@ -13,15 +13,30 @@ const CHECKSUM_FIELD_LEN: usize = 7;
 /// Used in the resync logic when scanning for the next frame start (i.e. the next BeginString).
 const RESYNC_BEGIN_STRING_PREFIX: &[u8] = b"8=FIX";
 
+/// A stateless framing scanner: each [`scan`](FrameScanner::scan) call attempts
+/// to delimit one checksum-verified frame from the start of a buffer.
+///
+/// The [`Default`] scanner caps frames at 1 MiB; use [`FrameScanner::new`] to
+/// choose a different cap.
 pub struct FrameScanner {
     max_frame_size: usize,
 }
 
 impl FrameScanner {
+    /// Creates a scanner that reports frames longer than `max_frame_size`
+    /// bytes as [`GarbledReason::FrameTooLarge`].
     pub fn new(max_frame_size: usize) -> Self {
         Self { max_frame_size }
     }
 
+    /// Scans one frame from the start of `buf`.
+    ///
+    /// `buf` must begin at a presumed message boundary: the start of the
+    /// stream, or the position reached by advancing past a previous outcome.
+    /// After [`ScanOutcome::Frame`], advance by `frame.bytes.len()`; after
+    /// [`ScanOutcome::Garbled`], advance by `skipped`; on
+    /// [`ScanOutcome::Incomplete`], read more bytes and scan again from the
+    /// same position.
     pub fn scan<'a>(&self, buf: &'a [u8]) -> ScanOutcome<'a> {
         match self.try_scan(buf) {
             Ok(frame) => ScanOutcome::Frame(frame),
@@ -37,8 +52,8 @@ impl FrameScanner {
             return Err(structural_garble(GarbledReason::MissingBeginString, buf));
         }
 
-        let (begin_string, next) = parse_begin_string(buf)?;
-        let (body_length, body_start) = parse_body_length(buf, next)?;
+        let (begin_string, body_length_start) = parse_begin_string(buf)?;
+        let (body_length, body_start) = parse_body_length(buf, body_length_start)?;
 
         let frame_len = validated_frame_len(buf, body_start, body_length, self.max_frame_size)?;
         let frame = &buf[..frame_len];
@@ -47,7 +62,11 @@ impl FrameScanner {
         verify_trailer_start(buf, checksum_start)?;
         verify_checksum(frame, checksum_start)?;
 
-        todo!()
+        let header = extract_header(frame, body_start, body_length, begin_string)?;
+        Ok(Frame {
+            bytes: frame,
+            header,
+        })
     }
 }
 
@@ -75,12 +94,21 @@ fn find_next_begin_string(buf: &[u8]) -> usize {
 }
 
 /// Builds a structural garble - one whose extent isn't trustworthy, so the skip
-/// resyncs by searching for the next BeginString. Not for checksum garbles: their
-/// extent *is* trusted, so they skip the whole frame length instead.
+/// resyncs by searching for the next BeginString. For garbles found once the
+/// frame is checksum-verified, use [`post_structural_garble`] instead.
 fn structural_garble(reason: GarbledReason, buf: &[u8]) -> Halt {
     Halt::Garbled {
         reason,
         skipped: find_next_begin_string(buf),
+    }
+}
+
+/// Builds a post-structural garble - one found after the frame's extent is
+/// trusted (checksum-verified), so the skip is the whole frame, not a resync.
+fn post_structural_garble(reason: GarbledReason, frame: &[u8]) -> Halt {
+    Halt::Garbled {
+        reason,
+        skipped: frame.len(),
     }
 }
 
@@ -106,13 +134,13 @@ fn parse_begin_string(buf: &'_ [u8]) -> Result<(BeginString<'_>, usize), Halt> {
     Ok((begin_string, soh + 1)) // soh + 1 = start of the 9= field
 }
 
-/// Parses the `9=<BodyLength>␁` field starting at `next`.
+/// Parses the `9=<BodyLength><SOH>` field starting at `body_length_start`.
 ///
 /// On success returns `(body_length, body_start)`, where `body_start` is the
 /// offset just past the BodyLength SOH.
-fn parse_body_length(buf: &[u8], next: usize) -> Result<(usize, usize), Halt> {
-    // Expect the `9=` tag. Fewer than 2 bytes → can't even test it yet.
-    let tag = &buf[next..];
+fn parse_body_length(buf: &[u8], body_length_start: usize) -> Result<(usize, usize), Halt> {
+    // Expect the `9=` tag. With fewer than 2 bytes we can't even test it yet.
+    let tag = &buf[body_length_start..];
     if tag.len() < 2 {
         return Err(Halt::Incomplete);
     }
@@ -121,11 +149,11 @@ fn parse_body_length(buf: &[u8], next: usize) -> Result<(usize, usize), Halt> {
     }
 
     // Digits run from just after `9=` to the terminating SOH, bounded by the cap.
-    let digits_start = next + 2;
+    let digits_start = body_length_start + 2;
     let search_end = buf.len().min(digits_start + MAX_BODY_LENGTH_DIGITS + 1);
     let soh_rel = match buf[digits_start..search_end].iter().position(|&b| b == SOH) {
         Some(rel) => rel,
-        // Out-of-buffer first, cap-exceeded second — same ordering as BeginString.
+        // Out-of-buffer first, cap-exceeded second - same ordering as BeginString.
         None if buf.len() <= digits_start + MAX_BODY_LENGTH_DIGITS => return Err(Halt::Incomplete),
         None => return Err(structural_garble(GarbledReason::MalformedBodyLength, buf)),
     };
@@ -147,8 +175,8 @@ fn parse_body_length(buf: &[u8], next: usize) -> Result<(usize, usize), Halt> {
 /// The total frame length implied by BodyLength, bounded and fully buffered.
 ///
 /// `FrameTooLarge` if it exceeds `max_frame_size`; `Incomplete` if the frame
-/// hasn't fully arrived. The frame's *content* — the `10=` trailer and checksum —
-/// is not inspected here.
+/// hasn't fully arrived. The frame's *content* - the `10=` trailer and
+/// checksum - is not inspected here.
 fn validated_frame_len(
     buf: &[u8],
     body_start: usize,
@@ -177,16 +205,16 @@ fn verify_trailer_start(buf: &[u8], checksum_start: usize) -> Result<(), Halt> {
     Ok(())
 }
 
-/// Verifies the `<CheckSum>␁` at `checksum_start`, the `10=` landing having
-/// already been confirmed.
+/// Verifies the `<CheckSum><SOH>` at `checksum_start`, the `10=` landing
+/// having already been confirmed.
 fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
     let digits = &frame[checksum_start + 3..checksum_start + 6];
     let trailing_soh = frame[checksum_start + 6];
     if trailing_soh != SOH || !digits.iter().all(|b| b.is_ascii_digit()) {
-        return Err(Halt::Garbled {
-            reason: GarbledReason::MalformedChecksum,
-            skipped: frame.len(),
-        });
+        return Err(post_structural_garble(
+            GarbledReason::MalformedChecksum,
+            frame,
+        ));
     }
 
     let stated = u16::from(digits[0] - b'0') * 100
@@ -197,13 +225,94 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
         .fold(0u8, |acc, &b| acc.wrapping_add(b));
 
     if u16::from(computed) != stated {
-        return Err(Halt::Garbled {
-            reason: GarbledReason::ChecksumMismatch,
-            skipped: frame.len(),
-        });
+        return Err(post_structural_garble(
+            GarbledReason::ChecksumMismatch,
+            frame,
+        ));
     }
 
     Ok(())
+}
+
+/// Extracts the session-relevant header fields from the body region.
+fn extract_header<'a>(
+    frame: &'a [u8],
+    body_start: usize,
+    body_length: usize,
+    begin_string: BeginString<'a>,
+) -> Result<StandardHeader<'a>, Halt> {
+    let body = &frame[body_start..body_start + body_length];
+    let is_fixt = matches!(begin_string, BeginString::Fixt11);
+
+    let mut fields = body.split(|&b| b == SOH).filter(|f| !f.is_empty());
+
+    // MsgType(35) must be the first field of the body.
+    let msg_type = match fields.next().and_then(split_field) {
+        Some((b"35", value)) => value,
+        _ => {
+            return Err(post_structural_garble(GarbledReason::MissingMsgType, frame));
+        }
+    };
+
+    let mut header = StandardHeader {
+        begin_string,
+        body_length,
+        msg_type,
+        msg_seq_num: None,
+        sender_comp_id: None,
+        target_comp_id: None,
+        poss_dup: None,
+        sending_time: None,
+        orig_sending_time: None,
+        appl_ver_id: None,
+    };
+
+    // First occurrence of each tag wins; unrecognised tags are skipped.
+    for field in fields {
+        let Some((tag, value)) = split_field(field) else {
+            continue;
+        };
+        match tag {
+            b"34" if header.msg_seq_num.is_none() => header.msg_seq_num = parse_u64(value),
+            b"49" if header.sender_comp_id.is_none() => header.sender_comp_id = Some(value),
+            b"56" if header.target_comp_id.is_none() => header.target_comp_id = Some(value),
+            b"43" if header.poss_dup.is_none() => header.poss_dup = parse_bool(value),
+            b"52" if header.sending_time.is_none() => header.sending_time = Some(value),
+            b"122" if header.orig_sending_time.is_none() => header.orig_sending_time = Some(value),
+            b"1128" if is_fixt && header.appl_ver_id.is_none() => header.appl_ver_id = Some(value),
+            _ => {}
+        }
+    }
+
+    Ok(header)
+}
+
+/// Splits a `tag=value` field on its first `=`. `None` if there's no `=`.
+fn split_field(field: &[u8]) -> Option<(&[u8], &[u8])> {
+    let eq = field.iter().position(|&b| b == b'=')?;
+    Some((&field[..eq], &field[eq + 1..]))
+}
+
+/// Parses ASCII digits to `u64`. `None` if empty, non-digit, or it overflows.
+fn parse_u64(bytes: &[u8]) -> Option<u64> {
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut n: u64 = 0;
+    for &b in bytes {
+        let digit = b.checked_sub(b'0').filter(|&d| d < 10)?;
+        n = n.checked_mul(10)?.checked_add(u64::from(digit))?;
+    }
+    Some(n)
+}
+
+/// `PossDupFlag`: `Y`/`N` to bool, anything else `None`.
+fn parse_bool(value: &[u8]) -> Option<bool> {
+    match value {
+        b"Y" => Some(true),
+        b"N" => Some(false),
+        _ => None,
+    }
 }
 
 impl Default for FrameScanner {
@@ -214,6 +323,7 @@ impl Default for FrameScanner {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScanOutcome<'a> {
     /// A well-framed message, checksum verified.
     Frame(Frame<'a>),
@@ -225,11 +335,13 @@ pub enum ScanOutcome<'a> {
         reason: GarbledReason,
         /// Number of bytes to skip.
         ///
-        /// Always ≥ 1: the caller advances by this many bytes, so a garbled frame never stalls the stream.
+        /// Always at least 1: the caller advances by this many bytes, so a
+        /// garbled frame never stalls the stream.
         skipped: usize,
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame<'a> {
     /// The full frame: 8= through the SOH after CheckSum.
     pub bytes: &'a [u8],
@@ -268,7 +380,7 @@ pub enum GarbledReason {
     /// The BodyLength-implied offset is not a `10=` trailer at a field boundary
     /// (i.e. not preceded by SOH, or not `10=`).
     BodyLengthMismatch,
-    /// The third tag is not `35=`.
+    /// The first field after BodyLength is not `35=`.
     MissingMsgType,
     /// The CheckSum field is not three digits followed by SOH.
     MalformedChecksum,
@@ -286,6 +398,7 @@ pub enum GarbledReason {
 /// always present, whilst fields the session layer needs are optional.
 /// The values of these fields are checked by the validation and session
 /// layers, not here.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StandardHeader<'a> {
     /// `BeginString(8)`
     pub begin_string: BeginString<'a>,
@@ -310,6 +423,8 @@ pub struct StandardHeader<'a> {
     pub appl_ver_id: Option<&'a [u8]>,
 }
 
+/// The value of `BeginString(8)`, with recognised protocol versions decoded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BeginString<'a> {
     Fix40,
     Fix41,
@@ -317,6 +432,7 @@ pub enum BeginString<'a> {
     Fix43,
     Fix44,
     Fixt11,
+    /// An unrecognised BeginString, preserved as raw bytes.
     Other(&'a [u8]),
 }
 
@@ -370,6 +486,15 @@ mod tests {
             matches!(out, ScanOutcome::Incomplete),
             "expected Incomplete"
         );
+    }
+
+    /// Scans a frame expected to be well-formed and returns its header.
+    #[track_caller]
+    fn header(buf: &[u8]) -> StandardHeader<'_> {
+        match scan(buf) {
+            ScanOutcome::Frame(frame) => frame.header,
+            _ => panic!("expected Frame"),
+        }
     }
 
     /// The resync primitive on its own: pure, fiddly, and stable enough to test directly.
@@ -492,6 +617,15 @@ mod tests {
                 26,
             );
         }
+
+        #[test]
+        fn resync_lands_on_next_message() {
+            // Garbage, then a real message start 6 bytes in: the skip must land
+            // exactly on the next BeginString, not the end of the buffer.
+            let mut buf = to_wire("junk|X");
+            buf.extend_from_slice(&construct_valid_frame("FIX.4.4", "35=A|"));
+            assert_garbled(scan(&buf), GarbledReason::MissingBeginString, 6);
+        }
     }
 
     /// Extent trusted: the skip is the whole frame, never a resync.
@@ -514,16 +648,131 @@ mod tests {
             buf[len - 2] = b'x'; // non-digit in the checksum value
             assert_garbled(scan(&buf), GarbledReason::MalformedChecksum, len);
         }
+
+        #[test]
+        fn missing_msg_type() {
+            let buf = construct_valid_frame("FIX.4.4", "34=1|");
+            let len = buf.len();
+            assert_garbled(scan(&buf), GarbledReason::MissingMsgType, len);
+        }
+
+        #[test]
+        fn missing_msg_type_on_empty_body() {
+            let buf = construct_valid_frame("FIX.4.4", "");
+            let len = buf.len();
+            assert_garbled(scan(&buf), GarbledReason::MissingMsgType, len);
+        }
+
+        #[test]
+        fn skip_does_not_resync_into_body() {
+            // The body contains `8=FIX` inside a Text field. A checksum failure
+            // trusts the frame extent, so it must skip the whole frame rather
+            // than resync onto the embedded bytes.
+            let mut buf = construct_valid_frame("FIX.4.4", "35=A|58=8=FIX.4.4|");
+            let len = buf.len();
+            buf[len - 2] = b'x';
+            assert_garbled(scan(&buf), GarbledReason::MalformedChecksum, len);
+        }
     }
 
     mod happy_path {
         use super::*;
 
         #[test]
-        #[ignore = "reaches todo!() until StandardHeader extraction lands"]
         fn valid_frame_scans() {
             let buf = construct_valid_frame("FIX.4.4", "35=A|34=1|49=ME|56=YOU|");
             assert!(matches!(scan(&buf), ScanOutcome::Frame(_)));
+        }
+    }
+
+    mod extraction {
+        use super::*;
+
+        #[test]
+        fn msg_type() {
+            let buf = construct_valid_frame("FIX.4.4", "35=D|");
+            assert_eq!(header(&buf).msg_type, b"D".as_slice());
+        }
+
+        #[test]
+        fn begin_string_and_body_length() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|");
+            let h = header(&buf);
+            assert_eq!(h.begin_string, BeginString::Fix44);
+            assert_eq!(h.body_length, 5); // "35=A" + SOH
+        }
+
+        #[test]
+        fn unknown_begin_string_is_other() {
+            let buf = construct_valid_frame("FIX.5.0", "35=A|");
+            assert_eq!(header(&buf).begin_string, BeginString::Other(b"FIX.5.0"));
+        }
+
+        #[test]
+        fn session_fields() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|34=42|49=SENDER|56=TARGET|");
+            let h = header(&buf);
+            assert_eq!(h.msg_seq_num, Some(42));
+            assert_eq!(h.sender_comp_id, Some(b"SENDER".as_slice()));
+            assert_eq!(h.target_comp_id, Some(b"TARGET".as_slice()));
+        }
+
+        #[test]
+        fn absent_seq_num_is_none() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|");
+            assert_eq!(header(&buf).msg_seq_num, None);
+        }
+
+        #[test]
+        fn unparseable_seq_num_is_none() {
+            // Non-digit MsgSeqNum doesn't garble the frame; it just extracts as None.
+            let buf = construct_valid_frame("FIX.4.4", "35=A|34=1X|");
+            assert_eq!(header(&buf).msg_seq_num, None);
+        }
+
+        #[test]
+        fn poss_dup_flag() {
+            let yes = construct_valid_frame("FIX.4.4", "35=A|43=Y|");
+            assert_eq!(header(&yes).poss_dup, Some(true));
+            let no = construct_valid_frame("FIX.4.4", "35=A|43=N|");
+            assert_eq!(header(&no).poss_dup, Some(false));
+        }
+
+        #[test]
+        fn invalid_poss_dup_is_none() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|43=X|");
+            assert_eq!(header(&buf).poss_dup, None);
+        }
+
+        #[test]
+        fn sending_times_are_raw_bytes() {
+            let buf = construct_valid_frame(
+                "FIX.4.4",
+                "35=A|52=20260724-12:00:00|122=20260724-11:00:00|",
+            );
+            let h = header(&buf);
+            assert_eq!(h.sending_time, Some(b"20260724-12:00:00".as_slice()));
+            assert_eq!(h.orig_sending_time, Some(b"20260724-11:00:00".as_slice()));
+        }
+
+        #[test]
+        fn appl_ver_id_extracted_on_fixt() {
+            let buf = construct_valid_frame("FIXT.1.1", "35=A|1128=9|");
+            let h = header(&buf);
+            assert_eq!(h.begin_string, BeginString::Fixt11);
+            assert_eq!(h.appl_ver_id, Some(b"9".as_slice()));
+        }
+
+        #[test]
+        fn appl_ver_id_ignored_off_fixt() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|1128=9|");
+            assert_eq!(header(&buf).appl_ver_id, None);
+        }
+
+        #[test]
+        fn first_occurrence_of_a_tag_wins() {
+            let buf = construct_valid_frame("FIX.4.4", "35=A|49=FIRST|49=SECOND|");
+            assert_eq!(header(&buf).sender_comp_id, Some(b"FIRST".as_slice()));
         }
     }
 }
