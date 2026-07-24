@@ -234,7 +234,14 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
     Ok(())
 }
 
-/// Extracts the session-relevant header fields from the body region.
+/// Builds the header preamble, requiring `MsgType(35)` as the first body field.
+///
+/// Surfaces only the fields whose position is guaranteed by framing itself
+/// (`8`/`9`/`35` are the mandatory first three, in order). Every other header
+/// field - CompIDs, MsgSeqNum, timestamps - has no guaranteed wire position and
+/// may sit behind a length-prefixed data field, so reading it correctly needs
+/// the order-independent, data-field-aware walk that belongs to field decoding
+/// (the tokenizing layer above), not framing.
 fn extract_header<'a>(
     frame: &'a [u8],
     body_start: usize,
@@ -242,77 +249,26 @@ fn extract_header<'a>(
     begin_string: BeginString<'a>,
 ) -> Result<StandardHeader<'a>, Halt> {
     let body = &frame[body_start..body_start + body_length];
-    let is_fixt = matches!(begin_string, BeginString::Fixt11);
+    let first_field = body.split(|&b| b == SOH).find(|f| !f.is_empty());
 
-    let mut fields = body.split(|&b| b == SOH).filter(|f| !f.is_empty());
-
-    // MsgType(35) must be the first field of the body.
-    let msg_type = match fields.next().and_then(split_field) {
+    // MsgType(35) must be the first field of the body
+    // (body, as in the body that BodyLength measures - fields between the BodyLength field and the Checksum)
+    let msg_type = match first_field.and_then(split_field) {
         Some((b"35", value)) => value,
-        _ => {
-            return Err(post_structural_garble(GarbledReason::MissingMsgType, frame));
-        }
+        _ => return Err(post_structural_garble(GarbledReason::MissingMsgType, frame)),
     };
 
-    let mut header = StandardHeader {
+    Ok(StandardHeader {
         begin_string,
         body_length,
         msg_type,
-        msg_seq_num: None,
-        sender_comp_id: None,
-        target_comp_id: None,
-        poss_dup: None,
-        sending_time: None,
-        orig_sending_time: None,
-        appl_ver_id: None,
-    };
-
-    // First occurrence of each tag wins; unrecognised tags are skipped.
-    for field in fields {
-        let Some((tag, value)) = split_field(field) else {
-            continue;
-        };
-        match tag {
-            b"34" if header.msg_seq_num.is_none() => header.msg_seq_num = parse_u64(value),
-            b"49" if header.sender_comp_id.is_none() => header.sender_comp_id = Some(value),
-            b"56" if header.target_comp_id.is_none() => header.target_comp_id = Some(value),
-            b"43" if header.poss_dup.is_none() => header.poss_dup = parse_bool(value),
-            b"52" if header.sending_time.is_none() => header.sending_time = Some(value),
-            b"122" if header.orig_sending_time.is_none() => header.orig_sending_time = Some(value),
-            b"1128" if is_fixt && header.appl_ver_id.is_none() => header.appl_ver_id = Some(value),
-            _ => {}
-        }
-    }
-
-    Ok(header)
+    })
 }
 
 /// Splits a `tag=value` field on its first `=`. `None` if there's no `=`.
 fn split_field(field: &[u8]) -> Option<(&[u8], &[u8])> {
     let eq = field.iter().position(|&b| b == b'=')?;
     Some((&field[..eq], &field[eq + 1..]))
-}
-
-/// Parses ASCII digits to `u64`. `None` if empty, non-digit, or it overflows.
-fn parse_u64(bytes: &[u8]) -> Option<u64> {
-    if bytes.is_empty() {
-        return None;
-    }
-    let mut n: u64 = 0;
-    for &b in bytes {
-        let digit = b.checked_sub(b'0').filter(|&d| d < 10)?;
-        n = n.checked_mul(10)?.checked_add(u64::from(digit))?;
-    }
-    Some(n)
-}
-
-/// `PossDupFlag`: `Y`/`N` to bool, anything else `None`.
-fn parse_bool(value: &[u8]) -> Option<bool> {
-    match value {
-        b"Y" => Some(true),
-        b"N" => Some(false),
-        _ => None,
-    }
 }
 
 impl Default for FrameScanner {
@@ -390,14 +346,14 @@ pub enum GarbledReason {
     FrameTooLarge,
 }
 
-/// The session-relevant subset of a message's header.
+/// The framing preamble of a message: the three fields whose position is
+/// guaranteed by the frame structure itself.
 ///
-/// Produced only as part of a [`Frame`], so its existence guarantees
-/// the message was well-framed and checksum-verified, never garbled.
-/// It makes no validity claims beyond that. Fields required for framing are
-/// always present, whilst fields the session layer needs are optional.
-/// The values of these fields are checked by the validation and session
-/// layers, not here.
+/// Produced only as part of a [`Frame`], so its existence guarantees the
+/// message was well-framed and checksum-verified, never garbled. It makes no
+/// validity claims beyond that. Every other header field (CompIDs, MsgSeqNum,
+/// timestamps, …) has no guaranteed wire position and is read through the
+/// order-independent, data-field-aware field access of the layer above, not here.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StandardHeader<'a> {
     /// `BeginString(8)`
@@ -406,21 +362,6 @@ pub struct StandardHeader<'a> {
     pub body_length: usize,
     /// `MsgType(35)`
     pub msg_type: &'a [u8],
-    /// `MsgSeqNum(34)`: `None` when absent **or** unparseable - the session layer treats
-    /// both the same way (gap filling is impossible, so logout is initiated).
-    pub msg_seq_num: Option<u64>,
-    /// `SenderCompID(49)`
-    pub sender_comp_id: Option<&'a [u8]>,
-    /// `TargetCompID(56)`
-    pub target_comp_id: Option<&'a [u8]>,
-    /// `PossDupFlag(43)`
-    pub poss_dup: Option<bool>,
-    /// `SendingTime(52)` as raw bytes.
-    pub sending_time: Option<&'a [u8]>,
-    /// `OrigSendingTime(122)` as raw bytes.
-    pub orig_sending_time: Option<&'a [u8]>,
-    /// `ApplVerID(1128)`, only extracted on FIXT sessions.
-    pub appl_ver_id: Option<&'a [u8]>,
 }
 
 /// The value of `BeginString(8)`, with recognised protocol versions decoded.
@@ -709,70 +650,17 @@ mod tests {
         }
 
         #[test]
-        fn session_fields() {
-            let buf = construct_valid_frame("FIX.4.4", "35=A|34=42|49=SENDER|56=TARGET|");
-            let h = header(&buf);
-            assert_eq!(h.msg_seq_num, Some(42));
-            assert_eq!(h.sender_comp_id, Some(b"SENDER".as_slice()));
-            assert_eq!(h.target_comp_id, Some(b"TARGET".as_slice()));
+        fn fixt_begin_string() {
+            let buf = construct_valid_frame("FIXT.1.1", "35=A|");
+            assert_eq!(header(&buf).begin_string, BeginString::Fixt11);
         }
 
         #[test]
-        fn absent_seq_num_is_none() {
-            let buf = construct_valid_frame("FIX.4.4", "35=A|");
-            assert_eq!(header(&buf).msg_seq_num, None);
-        }
-
-        #[test]
-        fn unparseable_seq_num_is_none() {
-            // Non-digit MsgSeqNum doesn't garble the frame; it just extracts as None.
-            let buf = construct_valid_frame("FIX.4.4", "35=A|34=1X|");
-            assert_eq!(header(&buf).msg_seq_num, None);
-        }
-
-        #[test]
-        fn poss_dup_flag() {
-            let yes = construct_valid_frame("FIX.4.4", "35=A|43=Y|");
-            assert_eq!(header(&yes).poss_dup, Some(true));
-            let no = construct_valid_frame("FIX.4.4", "35=A|43=N|");
-            assert_eq!(header(&no).poss_dup, Some(false));
-        }
-
-        #[test]
-        fn invalid_poss_dup_is_none() {
-            let buf = construct_valid_frame("FIX.4.4", "35=A|43=X|");
-            assert_eq!(header(&buf).poss_dup, None);
-        }
-
-        #[test]
-        fn sending_times_are_raw_bytes() {
-            let buf = construct_valid_frame(
-                "FIX.4.4",
-                "35=A|52=20260724-12:00:00|122=20260724-11:00:00|",
-            );
-            let h = header(&buf);
-            assert_eq!(h.sending_time, Some(b"20260724-12:00:00".as_slice()));
-            assert_eq!(h.orig_sending_time, Some(b"20260724-11:00:00".as_slice()));
-        }
-
-        #[test]
-        fn appl_ver_id_extracted_on_fixt() {
-            let buf = construct_valid_frame("FIXT.1.1", "35=A|1128=9|");
-            let h = header(&buf);
-            assert_eq!(h.begin_string, BeginString::Fixt11);
-            assert_eq!(h.appl_ver_id, Some(b"9".as_slice()));
-        }
-
-        #[test]
-        fn appl_ver_id_ignored_off_fixt() {
-            let buf = construct_valid_frame("FIX.4.4", "35=A|1128=9|");
-            assert_eq!(header(&buf).appl_ver_id, None);
-        }
-
-        #[test]
-        fn first_occurrence_of_a_tag_wins() {
-            let buf = construct_valid_frame("FIX.4.4", "35=A|49=FIRST|49=SECOND|");
-            assert_eq!(header(&buf).sender_comp_id, Some(b"FIRST".as_slice()));
+        fn msg_type_read_regardless_of_trailing_fields() {
+            // Only MsgType is surfaced; the fields after it are the tokenizer's
+            // concern and must not affect framing or the preamble.
+            let buf = construct_valid_frame("FIX.4.4", "35=A|34=42|49=ME|56=YOU|");
+            assert_eq!(header(&buf).msg_type, b"A".as_slice());
         }
     }
 }
