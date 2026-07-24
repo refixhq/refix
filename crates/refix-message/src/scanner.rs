@@ -6,6 +6,10 @@ const SOH: u8 = 0x01;
 /// of garbage after `8=` for a slow-arriving field.
 const MAX_BEGIN_STRING_LEN: usize = 16;
 
+/// The shortest prefix common to every BeginString (`FIX.4.x` and `FIXT.1.1`).
+/// Used in the resync logic when scanning for the next frame start (i.e. the next BeginString).
+const RESYNC_BEGIN_STRING_PREFIX: &[u8] = b"8=FIX";
+
 pub struct FrameScanner {
     max_frame_size: usize,
 }
@@ -15,9 +19,43 @@ impl FrameScanner {
         Self { max_frame_size }
     }
 
-    pub fn scan<'a>(&self, _buf: &'a [u8]) -> ScanOutcome<'a> {
+    pub fn scan<'a>(&self, buf: &'a [u8]) -> ScanOutcome<'a> {
+        if buf.is_empty() || buf == b"8" {
+            return ScanOutcome::Incomplete;
+        }
+
+        if !buf.starts_with(b"8=") {
+            return ScanOutcome::Garbled {
+                reason: GarbledReason::MissingBeginString,
+                skipped: find_next_begin_string(buf),
+            };
+        }
+
         todo!()
     }
+}
+
+/// Bytes to skip to resynchronise onto the next frame start.
+///
+/// Returns the offset of the next `8=FIX` after offset 0. If none is present,
+/// preserves the longest partial `8=FIX` prefix hanging off the tail.
+/// Failing that, skips the whole buffer.
+fn find_next_begin_string(buf: &[u8]) -> usize {
+    if let Some(skip) = buf[1..]
+        .windows(RESYNC_BEGIN_STRING_PREFIX.len())
+        .position(|b| b == RESYNC_BEGIN_STRING_PREFIX)
+    {
+        return skip + 1;
+    }
+
+    let max_k = (RESYNC_BEGIN_STRING_PREFIX.len() - 1).min(buf.len());
+    for k in (1..=max_k).rev() {
+        if buf[buf.len() - k..] == RESYNC_BEGIN_STRING_PREFIX[..k] {
+            return buf.len() - k;
+        }
+    }
+
+    buf.len()
 }
 
 impl Default for FrameScanner {
@@ -35,7 +73,11 @@ pub enum ScanOutcome<'a> {
     Incomplete,
     /// The message is garbled.
     Garbled {
+        /// The reason for the supplied bytes being garbled.
         reason: GarbledReason,
+        /// Number of bytes to skip.
+        ///
+        /// Always ≥ 1: the caller advances by this many bytes, so a garbled frame never stalls the stream.
         skipped: usize,
     },
 }
