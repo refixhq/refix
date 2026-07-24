@@ -168,10 +168,12 @@ fn parse_body_length(buf: &[u8], body_length_start: usize) -> Result<(usize, usi
         return Err(structural_garble(GarbledReason::MalformedBodyLength, buf));
     }
 
-    // At most MAX_BODY_LENGTH_DIGITS ASCII digits, already validated - no overflow.
     let body_length = digits
         .iter()
-        .fold(0usize, |acc, &b| acc * 10 + (b - b'0') as usize);
+        .try_fold(0usize, |acc, &b| {
+            acc.checked_mul(10)?.checked_add(usize::from(b - b'0'))
+        })
+        .ok_or_else(|| structural_garble(GarbledReason::MalformedBodyLength, buf))?;
 
     let body_start = digits_start + soh_rel + 1; // just past the BodyLength SOH
     Ok((body_length, body_start))
@@ -333,7 +335,8 @@ pub enum GarbledReason {
     MalformedBeginString,
     /// The second tag is not `9=`.
     MissingBodyLength,
-    /// BodyLength is empty, contains a non-digit, or exceeds the digit cap.
+    /// BodyLength is empty, contains a non-digit, exceeds the digit cap, or is
+    /// too large to represent.
     MalformedBodyLength,
     /// The BodyLength-implied offset is not a `10=` trailer at a field boundary
     /// (i.e. not preceded by SOH, or not `10=`).
@@ -531,6 +534,15 @@ mod tests {
                 GarbledReason::MalformedBodyLength,
                 27,
             );
+        }
+
+        #[test]
+        fn max_digit_body_length_does_not_panic() {
+            // The largest cap-legal BodyLength. It fits usize on a 64-bit target
+            // (rejected as FrameTooLarge) but overruns it on a 32-bit one (rejected
+            // as malformed); either way it must garble, never panic or wrap.
+            let buf = to_wire("8=FIX.4.4|9=9999999999|35=A|");
+            assert!(matches!(scan(&buf), ScanOutcome::Garbled { .. }));
         }
 
         #[test]
