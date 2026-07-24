@@ -62,10 +62,12 @@ impl FrameScanner {
         verify_trailer_start(buf, checksum_start)?;
         verify_checksum(frame, checksum_start)?;
 
-        let header = extract_header(frame, body_start, body_length, begin_string)?;
+        let msg_type = extract_msg_type(frame, body_start, body_length)?;
         Ok(Frame {
             bytes: frame,
-            header,
+            begin_string,
+            body_length,
+            msg_type,
         })
     }
 }
@@ -234,35 +236,24 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
     Ok(())
 }
 
-/// Builds the header preamble, requiring `MsgType(35)` as the first body field.
+/// Reads `MsgType(35)`, which framing guarantees to be the first body field.
 ///
-/// Surfaces only the fields whose position is guaranteed by framing itself
-/// (`8`/`9`/`35` are the mandatory first three, in order). Every other header
+/// Only `8`/`9`/`35` (first three, in order) and `10` (last) have positions
+/// fixed by the frame structure, so those are all L0 reads. Every other header
 /// field - CompIDs, MsgSeqNum, timestamps - has no guaranteed wire position and
 /// may sit behind a length-prefixed data field, so reading it correctly needs
 /// the order-independent, data-field-aware walk that belongs to field decoding
 /// (the tokenizing layer above), not framing.
-fn extract_header<'a>(
-    frame: &'a [u8],
-    body_start: usize,
-    body_length: usize,
-    begin_string: BeginString<'a>,
-) -> Result<StandardHeader<'a>, Halt> {
+fn extract_msg_type(frame: &[u8], body_start: usize, body_length: usize) -> Result<&[u8], Halt> {
+    // The body BodyLength measures: fields between the BodyLength field and the CheckSum.
+    // MsgType(35) must be the first of them.
     let body = &frame[body_start..body_start + body_length];
     let first_field = body.split(|&b| b == SOH).find(|f| !f.is_empty());
 
-    // MsgType(35) must be the first field of the body
-    // (body, as in the body that BodyLength measures - fields between the BodyLength field and the Checksum)
-    let msg_type = match first_field.and_then(split_field) {
-        Some((b"35", value)) => value,
-        _ => return Err(post_structural_garble(GarbledReason::MissingMsgType, frame)),
-    };
-
-    Ok(StandardHeader {
-        begin_string,
-        body_length,
-        msg_type,
-    })
+    match first_field.and_then(split_field) {
+        Some((b"35", value)) => Ok(value),
+        _ => Err(post_structural_garble(GarbledReason::MissingMsgType, frame)),
+    }
 }
 
 /// Splits a `tag=value` field on its first `=`. `None` if there's no `=`.
@@ -297,12 +288,20 @@ pub enum ScanOutcome<'a> {
     },
 }
 
+/// One well-framed, checksum-verified message.
+///
+/// Carries the raw frame bytes plus the three preamble fields whose position is
+/// guaranteed by the frame structure itself (`8`/`9`/`35`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame<'a> {
     /// The full frame: 8= through the SOH after CheckSum.
     pub bytes: &'a [u8],
-    /// The session-relevant fields in the header.
-    pub header: StandardHeader<'a>,
+    /// `BeginString(8)`
+    pub begin_string: BeginString<'a>,
+    /// `BodyLength(9)`
+    pub body_length: usize,
+    /// `MsgType(35)`
+    pub msg_type: &'a [u8],
 }
 
 /// A scan that ended without a frame.
@@ -344,24 +343,6 @@ pub enum GarbledReason {
     ChecksumMismatch,
     /// The BodyLength-implied frame length exceeds max_frame_size.
     FrameTooLarge,
-}
-
-/// The framing preamble of a message: the three fields whose position is
-/// guaranteed by the frame structure itself.
-///
-/// Produced only as part of a [`Frame`], so its existence guarantees the
-/// message was well-framed and checksum-verified, never garbled. It makes no
-/// validity claims beyond that. Every other header field (CompIDs, MsgSeqNum,
-/// timestamps, …) has no guaranteed wire position and is read through the
-/// order-independent, data-field-aware field access of the layer above, not here.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StandardHeader<'a> {
-    /// `BeginString(8)`
-    pub begin_string: BeginString<'a>,
-    /// `BodyLength(9)`
-    pub body_length: usize,
-    /// `MsgType(35)`
-    pub msg_type: &'a [u8],
 }
 
 /// The value of `BeginString(8)`, with recognised protocol versions decoded.
@@ -429,11 +410,11 @@ mod tests {
         );
     }
 
-    /// Scans a frame expected to be well-formed and returns its header.
+    /// Scans a buffer expected to be a well-formed frame and returns it.
     #[track_caller]
-    fn header(buf: &[u8]) -> StandardHeader<'_> {
+    fn frame(buf: &[u8]) -> Frame<'_> {
         match scan(buf) {
-            ScanOutcome::Frame(frame) => frame.header,
+            ScanOutcome::Frame(frame) => frame,
             _ => panic!("expected Frame"),
         }
     }
@@ -632,13 +613,13 @@ mod tests {
         #[test]
         fn msg_type() {
             let buf = construct_valid_frame("FIX.4.4", "35=D|");
-            assert_eq!(header(&buf).msg_type, b"D".as_slice());
+            assert_eq!(frame(&buf).msg_type, b"D".as_slice());
         }
 
         #[test]
         fn begin_string_and_body_length() {
             let buf = construct_valid_frame("FIX.4.4", "35=A|");
-            let h = header(&buf);
+            let h = frame(&buf);
             assert_eq!(h.begin_string, BeginString::Fix44);
             assert_eq!(h.body_length, 5); // "35=A" + SOH
         }
@@ -646,13 +627,13 @@ mod tests {
         #[test]
         fn unknown_begin_string_is_other() {
             let buf = construct_valid_frame("FIX.5.0", "35=A|");
-            assert_eq!(header(&buf).begin_string, BeginString::Other(b"FIX.5.0"));
+            assert_eq!(frame(&buf).begin_string, BeginString::Other(b"FIX.5.0"));
         }
 
         #[test]
         fn fixt_begin_string() {
             let buf = construct_valid_frame("FIXT.1.1", "35=A|");
-            assert_eq!(header(&buf).begin_string, BeginString::Fixt11);
+            assert_eq!(frame(&buf).begin_string, BeginString::Fixt11);
         }
 
         #[test]
@@ -660,7 +641,7 @@ mod tests {
             // Only MsgType is surfaced; the fields after it are the tokenizer's
             // concern and must not affect framing or the preamble.
             let buf = construct_valid_frame("FIX.4.4", "35=A|34=42|49=ME|56=YOU|");
-            assert_eq!(header(&buf).msg_type, b"A".as_slice());
+            assert_eq!(frame(&buf).msg_type, b"A".as_slice());
         }
     }
 }
