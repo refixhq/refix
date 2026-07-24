@@ -6,6 +6,9 @@ const MAX_BEGIN_STRING_LEN: usize = 16;
 /// Longest BodyLength value we'll frame, in digits.
 const MAX_BODY_LENGTH_DIGITS: usize = 10;
 
+/// `10=` + three checksum digits + SOH.
+const CHECKSUM_FIELD_LEN: usize = 7;
+
 /// The shortest prefix common to every BeginString (`FIX.4.x` and `FIXT.1.1`).
 /// Used in the resync logic when scanning for the next frame start (i.e. the next BeginString).
 const RESYNC_BEGIN_STRING_PREFIX: &[u8] = b"8=FIX";
@@ -31,14 +34,15 @@ impl FrameScanner {
             return Err(Halt::Incomplete);
         }
         if !buf.starts_with(b"8=") {
-            return Err(Halt::Garbled {
-                reason: GarbledReason::MissingBeginString,
-                skipped: find_next_begin_string(buf),
-            });
+            return Err(structural_garble(GarbledReason::MissingBeginString, buf));
         }
 
         let (begin_string, next) = parse_begin_string(buf)?;
         let (body_length, body_start) = parse_body_length(buf, next)?;
+
+        let frame_len = validated_frame_len(buf, body_start, body_length, self.max_frame_size)?;
+        let frame = &buf[..frame_len];
+
         todo!()
     }
 }
@@ -66,17 +70,22 @@ fn find_next_begin_string(buf: &[u8]) -> usize {
     buf.len()
 }
 
+/// Builds a structural garble - one whose extent isn't trustworthy, so the skip
+/// resyncs by searching for the next BeginString. Not for checksum garbles: their
+/// extent *is* trusted, so they skip the whole frame length instead.
+fn structural_garble(reason: GarbledReason, buf: &[u8]) -> Halt {
+    Halt::Garbled {
+        reason,
+        skipped: find_next_begin_string(buf),
+    }
+}
+
 fn parse_begin_string(buf: &'_ [u8]) -> Result<(BeginString<'_>, usize), Halt> {
     let search_end = buf.len().min(MAX_BEGIN_STRING_LEN + 1);
     let soh = match buf[2..search_end].iter().position(|&b| b == SOH) {
         Some(rel) => rel + 2,
         None if buf.len() <= MAX_BEGIN_STRING_LEN => return Err(Halt::Incomplete),
-        None => {
-            return Err(Halt::Garbled {
-                reason: GarbledReason::MalformedBeginString,
-                skipped: find_next_begin_string(buf),
-            });
-        }
+        None => return Err(structural_garble(GarbledReason::MalformedBeginString, buf)),
     };
 
     let value = &buf[2..soh];
@@ -104,10 +113,7 @@ fn parse_body_length(buf: &[u8], next: usize) -> Result<(usize, usize), Halt> {
         return Err(Halt::Incomplete);
     }
     if &tag[..2] != b"9=" {
-        return Err(Halt::Garbled {
-            reason: GarbledReason::MissingBodyLength,
-            skipped: find_next_begin_string(buf),
-        });
+        return Err(structural_garble(GarbledReason::MissingBodyLength, buf));
     }
 
     // Digits run from just after `9=` to the terminating SOH, bounded by the cap.
@@ -117,20 +123,12 @@ fn parse_body_length(buf: &[u8], next: usize) -> Result<(usize, usize), Halt> {
         Some(rel) => rel,
         // Out-of-buffer first, cap-exceeded second — same ordering as BeginString.
         None if buf.len() <= digits_start + MAX_BODY_LENGTH_DIGITS => return Err(Halt::Incomplete),
-        None => {
-            return Err(Halt::Garbled {
-                reason: GarbledReason::MalformedBodyLength,
-                skipped: find_next_begin_string(buf),
-            });
-        }
+        None => return Err(structural_garble(GarbledReason::MalformedBodyLength, buf)),
     };
 
     let digits = &buf[digits_start..digits_start + soh_rel];
     if digits.is_empty() || !digits.iter().all(|b| b.is_ascii_digit()) {
-        return Err(Halt::Garbled {
-            reason: GarbledReason::MalformedBodyLength,
-            skipped: find_next_begin_string(buf),
-        });
+        return Err(structural_garble(GarbledReason::MalformedBodyLength, buf));
     }
 
     // At most MAX_BODY_LENGTH_DIGITS ASCII digits, already validated - no overflow.
@@ -140,6 +138,29 @@ fn parse_body_length(buf: &[u8], next: usize) -> Result<(usize, usize), Halt> {
 
     let body_start = digits_start + soh_rel + 1; // just past the BodyLength SOH
     Ok((body_length, body_start))
+}
+
+/// The total frame length implied by BodyLength, bounded and fully buffered.
+///
+/// `FrameTooLarge` if it exceeds `max_frame_size`; `Incomplete` if the frame
+/// hasn't fully arrived. The frame's *content* — the `10=` trailer and checksum —
+/// is not inspected here.
+fn validated_frame_len(
+    buf: &[u8],
+    body_start: usize,
+    body_length: usize,
+    max_frame_size: usize,
+) -> Result<usize, Halt> {
+    let frame_len = body_start
+        .saturating_add(body_length)
+        .saturating_add(CHECKSUM_FIELD_LEN);
+    if frame_len > max_frame_size {
+        return Err(structural_garble(GarbledReason::FrameTooLarge, buf));
+    }
+    if buf.len() < frame_len {
+        return Err(Halt::Incomplete);
+    }
+    Ok(frame_len)
 }
 
 impl Default for FrameScanner {
@@ -227,7 +248,7 @@ pub struct StandardHeader<'a> {
     pub body_length: usize,
     /// `MsgType(35)`
     pub msg_type: &'a [u8],
-    /// `MsgSeqNum(34)`: `None` when absent **or** unparseable — the session layer treats
+    /// `MsgSeqNum(34)`: `None` when absent **or** unparseable - the session layer treats
     /// both the same way (gap filling is impossible, so logout is initiated).
     pub msg_seq_num: Option<u64>,
     /// `SenderCompID(49)`
