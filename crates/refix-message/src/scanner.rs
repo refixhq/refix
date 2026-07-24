@@ -79,12 +79,21 @@ fn find_next_begin_string(buf: &[u8]) -> usize {
 }
 
 /// Builds a structural garble - one whose extent isn't trustworthy, so the skip
-/// resyncs by searching for the next BeginString. Not for checksum garbles: their
-/// extent *is* trusted, so they skip the whole frame length instead.
+/// resyncs by searching for the next BeginString. For garbles found once the
+/// frame is checksum-verified, use [`post_structural_garble`] instead.
 fn structural_garble(reason: GarbledReason, buf: &[u8]) -> Halt {
     Halt::Garbled {
         reason,
         skipped: find_next_begin_string(buf),
+    }
+}
+
+/// Builds a post-structural garble - one found after the frame's extent is
+/// trusted (checksum-verified), so the skip is the whole frame, not a resync.
+fn post_structural_garble(reason: GarbledReason, frame: &[u8]) -> Halt {
+    Halt::Garbled {
+        reason,
+        skipped: frame.len(),
     }
 }
 
@@ -187,10 +196,7 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
     let digits = &frame[checksum_start + 3..checksum_start + 6];
     let trailing_soh = frame[checksum_start + 6];
     if trailing_soh != SOH || !digits.iter().all(|b| b.is_ascii_digit()) {
-        return Err(Halt::Garbled {
-            reason: GarbledReason::MalformedChecksum,
-            skipped: frame.len(),
-        });
+        return Err(post_structural_garble(GarbledReason::MalformedChecksum, frame));
     }
 
     let stated = u16::from(digits[0] - b'0') * 100
@@ -201,10 +207,7 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
         .fold(0u8, |acc, &b| acc.wrapping_add(b));
 
     if u16::from(computed) != stated {
-        return Err(Halt::Garbled {
-            reason: GarbledReason::ChecksumMismatch,
-            skipped: frame.len(),
-        });
+        return Err(post_structural_garble(GarbledReason::ChecksumMismatch, frame));
     }
 
     Ok(())
@@ -227,10 +230,7 @@ fn extract_header<'a>(
     let msg_type = match fields.next().and_then(split_field) {
         Some((b"35", value)) => value,
         _ => {
-            return Err(Halt::Garbled {
-                reason: GarbledReason::MissingMsgType,
-                skipped: frame.len(),
-            });
+            return Err(post_structural_garble(GarbledReason::MissingMsgType, frame));
         }
     };
 
