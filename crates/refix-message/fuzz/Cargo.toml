@@ -21,3 +21,10 @@ path = "fuzz_targets/scan_invariants.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "chunking_equivalence"
+path = "fuzz_targets/chunking_equivalence.rs"
+test = false
+doc = false
+bench = false
