@@ -1,3 +1,48 @@
+//! Framing: delimiting one checksum-verified FIX message from a byte stream.
+//!
+//! A FIX connection is an unbroken stream with no external length prefix, so the
+//! only way to know where a message starts is to know where the previous one
+//! ended. [`FrameScanner::scan`] answers that one message at a time, borrowing
+//! from the caller's buffer and allocating nothing.
+//!
+//! Each call returns one of three outcomes, and each implies a different action:
+//! a [`Frame`] to consume, [`ScanOutcome::Incomplete`] to wait on, or
+//! [`ScanOutcome::Garbled`] to skip. Driving it is a loop:
+//!
+//! ```
+//! use refix_message::scanner::{FrameScanner, ScanOutcome};
+//!
+//! // Two heartbeats back to back, SOH-delimited.
+//! let stream = b"8=FIX.4.4\x019=10\x0135=0\x0134=2\x0110=166\x01\
+//!                8=FIX.4.4\x019=10\x0135=0\x0134=2\x0110=166\x01";
+//!
+//! let scanner = FrameScanner::default();
+//! let mut buf = &stream[..];
+//! let mut seen = Vec::new();
+//! loop {
+//!     let advance = match scanner.scan(buf) {
+//!         ScanOutcome::Frame(frame) => {
+//!             seen.push(frame.msg_type.to_vec());
+//!             frame.bytes.len()
+//!         }
+//!         ScanOutcome::Garbled { skipped, .. } => skipped,
+//!         ScanOutcome::Incomplete => break, // read more from the socket
+//!     };
+//!     buf = &buf[advance..];
+//! }
+//! assert_eq!(seen, vec![b"0".to_vec(), b"0".to_vec()]);
+//! ```
+//!
+//! # Scope
+//!
+//! Framing reads only the fields whose position the frame structure fixes:
+//! `BeginString`, `BodyLength`, `MsgType` and `CheckSum`, each checked
+//! positionally at its known offset. Every other header field has no guaranteed
+//! wire position and may sit behind a length-prefixed data field, so reading it
+//! needs the order-independent, data-field-aware decoding of the layer above.
+//! Nothing here judges values, and nothing here is lenient - leniency belongs to
+//! a log reader, not the wire path.
+
 const SOH: u8 = 0x01;
 
 /// Longest BeginString field we'll frame: `8=` through the byte before its SOH.
@@ -65,7 +110,7 @@ impl FrameScanner {
         verify_trailer_start(buf, checksum_start)?;
         verify_checksum(frame, checksum_start)?;
 
-        let msg_type = extract_msg_type(frame, body_start, body_length)?;
+        let msg_type = parse_msg_type(frame, body_start, body_length)?;
         Ok(Frame {
             bytes: frame,
             begin_string,
@@ -122,6 +167,7 @@ fn post_structural_garble(reason: GarbledReason, frame: &[u8]) -> Halt {
     }
 }
 
+/// Parses `BeginString(8)`, the first field of a message.
 fn parse_begin_string(buf: &'_ [u8]) -> Result<(BeginString<'_>, usize), Halt> {
     let search_end = buf.len().min(MAX_BEGIN_STRING_LEN + 1);
     let soh = match buf[2..search_end].iter().position(|&b| b == SOH) {
@@ -144,10 +190,15 @@ fn parse_begin_string(buf: &'_ [u8]) -> Result<(BeginString<'_>, usize), Halt> {
     Ok((begin_string, soh + 1)) // soh + 1 = start of the 9= field
 }
 
-/// Parses the `9=<BodyLength><SOH>` field starting at `body_length_start`.
+/// Parses `BodyLength(9)`, the second field of a message (starting at `body_length_start`).
 ///
 /// On success returns `(body_length, body_start)`, where `body_start` is the
 /// offset just past the BodyLength SOH.
+///
+/// Throughout this module, `body_start` and `body_length` describe the region
+/// BodyLength measures: from its own terminating SOH up to and including the SOH
+/// before `10=`. That region holds most of the StandardHeader, so it is not the
+/// FIX "body" of application fields.
 fn parse_body_length(buf: &[u8], body_length_start: usize) -> Result<(usize, usize), Halt> {
     // Expect the `9=` tag. With fewer than 2 bytes we can't even test it yet.
     let tag = &buf[body_length_start..];
@@ -246,30 +297,18 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
     Ok(())
 }
 
-/// Reads `MsgType(35)`, which framing guarantees to be the first body field.
-///
-/// Only `8`/`9`/`35` (first three, in order) and `10` (last) have positions
-/// fixed by the frame structure, so those are all L0 reads. Every other header
-/// field - CompIDs, MsgSeqNum, timestamps - has no guaranteed wire position and
-/// may sit behind a length-prefixed data field, so reading it correctly needs
-/// the order-independent, data-field-aware walk that belongs to field decoding
-/// (the tokenizing layer above), not framing.
-fn extract_msg_type(frame: &[u8], body_start: usize, body_length: usize) -> Result<&[u8], Halt> {
-    // The body BodyLength measures: fields between the BodyLength field and the CheckSum.
-    // MsgType(35) must be the first of them.
-    let body = &frame[body_start..body_start + body_length];
-    let first_field = body.split(|&b| b == SOH).find(|f| !f.is_empty());
-
-    match first_field.and_then(split_field) {
-        Some((b"35", value)) => Ok(value),
-        _ => Err(post_structural_garble(GarbledReason::MissingMsgType, frame)),
-    }
-}
-
-/// Splits a `tag=value` field on its first `=`. `None` if there's no `=`.
-fn split_field(field: &[u8]) -> Option<(&[u8], &[u8])> {
-    let eq = field.iter().position(|&b| b == b'=')?;
-    Some((&field[..eq], &field[eq + 1..]))
+/// Parses `MsgType(35)`, the third field of a message.
+fn parse_msg_type(frame: &[u8], body_start: usize, body_length: usize) -> Result<&[u8], Halt> {
+    let region = &frame[body_start..body_start + body_length];
+    let Some(after_tag) = region.strip_prefix(b"35=") else {
+        return Err(post_structural_garble(GarbledReason::MissingMsgType, frame));
+    };
+    // The region's final byte is the SOH before `10=`,
+    // so a terminator is always present once the tag matched.
+    let Some(soh) = after_tag.iter().position(|&b| b == SOH) else {
+        return Err(post_structural_garble(GarbledReason::MissingMsgType, frame));
+    };
+    Ok(&after_tag[..soh])
 }
 
 impl Default for FrameScanner {
@@ -346,7 +385,7 @@ pub enum GarbledReason {
     /// The BodyLength-implied offset is not a `10=` trailer at a field boundary
     /// (i.e. not preceded by SOH, or not `10=`).
     BodyLengthMismatch,
-    /// The first field after BodyLength is not `35=`.
+    /// The third field is not `35=` (it must directly follow BodyLength).
     MissingMsgType,
     /// The CheckSum field is not three digits followed by SOH.
     MalformedChecksum,
@@ -645,6 +684,17 @@ mod tests {
         }
 
         #[test]
+        fn empty_first_field() {
+            // An empty field where MsgType belongs, so `35=` is only the fourth
+            // field: `8=FIX.4.4|9=6||35=A|10=182|`. BodyLength and CheckSum are
+            // both correct, so framing reaches the MsgType check, and requiring
+            // `35=` to sit exactly at the start of the region is what rejects it.
+            let buf = construct_valid_frame("FIX.4.4", "|35=A|");
+            let len = buf.len();
+            assert_garbled(scan(&buf), GarbledReason::MissingMsgType, len);
+        }
+
+        #[test]
         fn skip_does_not_resync_into_body() {
             // The body contains `8=FIX` inside a Text field. A checksum failure
             // trusts the frame extent, so it must skip the whole frame rather
@@ -666,7 +716,7 @@ mod tests {
         }
     }
 
-    mod extraction {
+    mod preamble {
         use super::*;
 
         #[test]
