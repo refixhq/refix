@@ -2,31 +2,31 @@
 //!
 //! A FIX connection is an unbroken stream with no external length prefix, so the
 //! only way to know where a message starts is to know where the previous one
-//! ended. [`FrameScanner::scan`] answers that one message at a time, borrowing
+//! ended. [`Scanner::scan`] answers that one message at a time, borrowing
 //! from the caller's buffer and allocating nothing.
 //!
 //! Each call returns one of three outcomes, and each implies a different action:
-//! a [`Frame`] to consume, [`ScanOutcome::Incomplete`] to wait on, or
-//! [`ScanOutcome::Garbled`] to skip. Driving it is a loop:
+//! a [`Frame`] to consume, [`Outcome::Incomplete`] to wait on, or
+//! [`Outcome::Garbled`] to skip. Driving it is a loop:
 //!
 //! ```
-//! use refix_message::scanner::{FrameScanner, ScanOutcome};
+//! use refix_message::framing::{Scanner, Outcome};
 //!
 //! // Two heartbeats back to back, SOH-delimited.
 //! let stream = b"8=FIX.4.4\x019=10\x0135=0\x0134=2\x0110=166\x01\
 //!                8=FIX.4.4\x019=10\x0135=0\x0134=2\x0110=166\x01";
 //!
-//! let scanner = FrameScanner::default();
+//! let scanner = Scanner::default();
 //! let mut buf = &stream[..];
 //! let mut seen = Vec::new();
 //! loop {
 //!     let advance = match scanner.scan(buf) {
-//!         ScanOutcome::Frame(frame) => {
+//!         Outcome::Frame(frame) => {
 //!             seen.push(frame.msg_type.to_vec());
 //!             frame.bytes.len()
 //!         }
-//!         ScanOutcome::Garbled { skipped, .. } => skipped,
-//!         ScanOutcome::Incomplete => break, // read more from the socket
+//!         Outcome::Garbled { skipped, .. } => skipped,
+//!         Outcome::Incomplete => break, // read more from the socket
 //!     };
 //!     buf = &buf[advance..];
 //! }
@@ -58,16 +58,16 @@ const CHECKSUM_FIELD_LEN: usize = 7;
 /// one to the form `FIX.x.y` or `FIXT.x.y`, so `8=FIX` marks the start of any frame.
 const BEGIN_STRING_PREFIX: &[u8] = b"8=FIX";
 
-/// A stateless framing scanner: each [`scan`](FrameScanner::scan) call attempts
+/// A stateless framing scanner: each [`scan`](Scanner::scan) call attempts
 /// to delimit one checksum-verified frame from the start of a buffer.
 ///
-/// The [`Default`] scanner caps frames at 1 MiB; use [`FrameScanner::new`] to
+/// The [`Default`] scanner caps frames at 1 MiB; use [`Scanner::new`] to
 /// choose a different cap.
-pub struct FrameScanner {
+pub struct Scanner {
     max_frame_size: usize,
 }
 
-impl FrameScanner {
+impl Scanner {
     /// Creates a scanner that reports frames longer than `max_frame_size`
     /// bytes as [`GarbledReason::FrameTooLarge`].
     pub fn new(max_frame_size: usize) -> Self {
@@ -78,13 +78,13 @@ impl FrameScanner {
     ///
     /// `buf` must begin at a presumed message boundary: the start of the
     /// stream, or the position reached by advancing past a previous outcome.
-    /// After [`ScanOutcome::Frame`], advance by `frame.bytes.len()`; after
-    /// [`ScanOutcome::Garbled`], advance by `skipped`; on
-    /// [`ScanOutcome::Incomplete`], read more bytes and scan again from the
+    /// After [`Outcome::Frame`], advance by `frame.bytes.len()`; after
+    /// [`Outcome::Garbled`], advance by `skipped`; on
+    /// [`Outcome::Incomplete`], read more bytes and scan again from the
     /// same position.
-    pub fn scan<'a>(&self, buf: &'a [u8]) -> ScanOutcome<'a> {
+    pub fn scan<'a>(&self, buf: &'a [u8]) -> Outcome<'a> {
         match self.try_scan(buf) {
-            Ok(frame) => ScanOutcome::Frame(frame),
+            Ok(frame) => Outcome::Frame(frame),
             Err(halt) => halt.into(),
         }
     }
@@ -311,7 +311,7 @@ fn parse_msg_type(frame: &[u8], body_start: usize, body_length: usize) -> Result
     Ok(&after_tag[..soh])
 }
 
-impl Default for FrameScanner {
+impl Default for Scanner {
     fn default() -> Self {
         Self {
             max_frame_size: 1 << 20,
@@ -320,7 +320,7 @@ impl Default for FrameScanner {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ScanOutcome<'a> {
+pub enum Outcome<'a> {
     /// A well-framed message, checksum verified.
     Frame(Frame<'a>),
     /// The bytes don't represent a complete message.
@@ -362,11 +362,11 @@ enum Halt {
     },
 }
 
-impl<'a> From<Halt> for ScanOutcome<'a> {
+impl<'a> From<Halt> for Outcome<'a> {
     fn from(halt: Halt) -> Self {
         match halt {
-            Halt::Incomplete => ScanOutcome::Incomplete,
-            Halt::Garbled { reason, skipped } => ScanOutcome::Garbled { reason, skipped },
+            Halt::Incomplete => Outcome::Incomplete,
+            Halt::Garbled { reason, skipped } => Outcome::Garbled { reason, skipped },
         }
     }
 }
@@ -434,14 +434,14 @@ mod tests {
         bytes
     }
 
-    fn scan(buf: &[u8]) -> ScanOutcome<'_> {
-        FrameScanner::default().scan(buf)
+    fn scan(buf: &[u8]) -> Outcome<'_> {
+        Scanner::default().scan(buf)
     }
 
     #[track_caller]
-    fn assert_garbled(out: ScanOutcome, reason: GarbledReason, skipped: usize) {
+    fn assert_garbled(out: Outcome, reason: GarbledReason, skipped: usize) {
         match out {
-            ScanOutcome::Garbled {
+            Outcome::Garbled {
                 reason: r,
                 skipped: s,
             } => {
@@ -453,18 +453,15 @@ mod tests {
     }
 
     #[track_caller]
-    fn assert_incomplete(out: ScanOutcome) {
-        assert!(
-            matches!(out, ScanOutcome::Incomplete),
-            "expected Incomplete"
-        );
+    fn assert_incomplete(out: Outcome) {
+        assert!(matches!(out, Outcome::Incomplete), "expected Incomplete");
     }
 
     /// Scans a buffer expected to be a well-formed frame and returns it.
     #[track_caller]
     fn frame(buf: &[u8]) -> Frame<'_> {
         match scan(buf) {
-            ScanOutcome::Frame(frame) => frame,
+            Outcome::Frame(frame) => frame,
             _ => panic!("expected Frame"),
         }
     }
@@ -614,7 +611,7 @@ mod tests {
             // (rejected as FrameTooLarge) but overruns it on a 32-bit one (rejected
             // as malformed); either way it must garble, never panic or wrap.
             let buf = to_wire("8=FIX.4.4|9=9999999999|35=A|");
-            assert!(matches!(scan(&buf), ScanOutcome::Garbled { .. }));
+            assert!(matches!(scan(&buf), Outcome::Garbled { .. }));
         }
 
         #[test]
@@ -622,7 +619,7 @@ mod tests {
             // frame_len of ~123 exceeds the cap of 50, so it rejects rather than waits.
             let buf = to_wire("8=FIX.4.4|9=100|");
             assert_garbled(
-                FrameScanner::new(50).scan(&buf),
+                Scanner::new(50).scan(&buf),
                 GarbledReason::FrameTooLarge,
                 16,
             );
@@ -712,7 +709,7 @@ mod tests {
         #[test]
         fn valid_frame_scans() {
             let buf = construct_valid_frame("FIX.4.4", "35=A|34=1|49=ME|56=YOU|");
-            assert!(matches!(scan(&buf), ScanOutcome::Frame(_)));
+            assert!(matches!(scan(&buf), Outcome::Frame(_)));
         }
     }
 
@@ -768,7 +765,7 @@ mod tests {
             for full in &frames {
                 for len in 0..full.len() {
                     assert!(
-                        matches!(scan(&full[..len]), ScanOutcome::Incomplete),
+                        matches!(scan(&full[..len]), Outcome::Incomplete),
                         "prefix of length {len} (of a {}-byte frame) should be Incomplete",
                         full.len(),
                     );
@@ -784,19 +781,19 @@ mod tests {
         /// returning the frame byte-slices produced, in order. Models a caller that
         /// accumulates bytes, consumes complete frames/garbles, waits on Incomplete.
         fn drive(stream: &[u8], chunk_size: usize) -> Vec<Vec<u8>> {
-            let scanner = FrameScanner::default();
+            let scanner = Scanner::default();
             let mut frames = Vec::new();
             let mut buf: Vec<u8> = Vec::new();
             for chunk in stream.chunks(chunk_size) {
                 buf.extend_from_slice(chunk);
                 loop {
                     let advance = match scanner.scan(&buf) {
-                        ScanOutcome::Frame(f) => {
+                        Outcome::Frame(f) => {
                             frames.push(f.bytes.to_vec());
                             f.bytes.len()
                         }
-                        ScanOutcome::Garbled { skipped, .. } => skipped,
-                        ScanOutcome::Incomplete => break,
+                        Outcome::Garbled { skipped, .. } => skipped,
+                        Outcome::Incomplete => break,
                     };
                     buf.drain(..advance);
                 }

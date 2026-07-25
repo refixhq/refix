@@ -1,24 +1,24 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use refix_message::scanner::{FrameScanner, ScanOutcome};
+use refix_message::framing::{Outcome, Scanner};
 
 /// Drives the scanner over `stream` delivered in `chunk_size`-byte pieces,
 /// returning the frames produced in order.
 fn drive(stream: &[u8], chunk_size: usize) -> Vec<Vec<u8>> {
-    let scanner = FrameScanner::default();
+    let scanner = Scanner::default();
     let mut frames = Vec::new();
     let mut buf: Vec<u8> = Vec::new();
     for chunk in stream.chunks(chunk_size) {
         buf.extend_from_slice(chunk);
         loop {
             let advance = match scanner.scan(&buf) {
-                ScanOutcome::Frame(f) => {
+                Outcome::Frame(f) => {
                     frames.push(f.bytes.to_vec());
                     f.bytes.len()
                 }
-                ScanOutcome::Garbled { skipped, .. } => skipped,
-                ScanOutcome::Incomplete => break,
+                Outcome::Garbled { skipped, .. } => skipped,
+                Outcome::Incomplete => break,
             };
             assert!(
                 advance >= 1 && advance <= buf.len(),

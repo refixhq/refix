@@ -23,7 +23,7 @@ cargo +nightly fuzz run chunking_equivalence \
 every input dies at the BeginString anchor and never reaches the framing arithmetic.
 
 `corpus/`, `artifacts/`, `target/` and `coverage/` are generated and ignored. When a run does find a crash, minimise it
-with `cargo fuzz tmin` and translate the result into a unit test in `scanner.rs` rather than committing the artifact.
+with `cargo fuzz tmin` and translate the result into a unit test in `framing.rs` rather than committing the artifact.
 
 ## seeds/
 
