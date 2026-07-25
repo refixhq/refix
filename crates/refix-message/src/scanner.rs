@@ -1,3 +1,48 @@
+//! Framing: delimiting one checksum-verified FIX message from a byte stream.
+//!
+//! A FIX connection is an unbroken stream with no external length prefix, so the
+//! only way to know where a message starts is to know where the previous one
+//! ended. [`FrameScanner::scan`] answers that one message at a time, borrowing
+//! from the caller's buffer and allocating nothing.
+//!
+//! Each call returns one of three outcomes, and each implies a different action:
+//! a [`Frame`] to consume, [`ScanOutcome::Incomplete`] to wait on, or
+//! [`ScanOutcome::Garbled`] to skip. Driving it is a loop:
+//!
+//! ```
+//! use refix_message::scanner::{FrameScanner, ScanOutcome};
+//!
+//! // Two heartbeats back to back, SOH-delimited.
+//! let stream = b"8=FIX.4.4\x019=10\x0135=0\x0134=2\x0110=166\x01\
+//!                8=FIX.4.4\x019=10\x0135=0\x0134=2\x0110=166\x01";
+//!
+//! let scanner = FrameScanner::default();
+//! let mut buf = &stream[..];
+//! let mut seen = Vec::new();
+//! loop {
+//!     let advance = match scanner.scan(buf) {
+//!         ScanOutcome::Frame(frame) => {
+//!             seen.push(frame.msg_type.to_vec());
+//!             frame.bytes.len()
+//!         }
+//!         ScanOutcome::Garbled { skipped, .. } => skipped,
+//!         ScanOutcome::Incomplete => break, // read more from the socket
+//!     };
+//!     buf = &buf[advance..];
+//! }
+//! assert_eq!(seen, vec![b"0".to_vec(), b"0".to_vec()]);
+//! ```
+//!
+//! # Scope
+//!
+//! Framing reads only the fields whose position the frame structure fixes:
+//! `BeginString`, `BodyLength`, `MsgType` and `CheckSum`, each checked
+//! positionally at its known offset. Every other header field has no guaranteed
+//! wire position and may sit behind a length-prefixed data field, so reading it
+//! needs the order-independent, data-field-aware decoding of the layer above.
+//! Nothing here judges values, and nothing here is lenient - leniency belongs to
+//! a log reader, not the wire path.
+
 const SOH: u8 = 0x01;
 
 /// Longest BeginString field we'll frame: `8=` through the byte before its SOH.
@@ -253,13 +298,6 @@ fn verify_checksum(frame: &[u8], checksum_start: usize) -> Result<(), Halt> {
 }
 
 /// Parses `MsgType(35)`, the third field of a message.
-///
-/// Only `8`/`9`/`35` (the mandatory first three, in order) and `10` (last) have
-/// positions fixed by the frame structure, so those are all framing reads. Every
-/// other header field - CompIDs, MsgSeqNum, timestamps - has no guaranteed wire
-/// position and may sit behind a length-prefixed data field.
-/// Reading it correctly needs the order-independent, data-field-aware walk that belongs to
-/// field decoding (the tokenising layer above), not framing.
 fn parse_msg_type(frame: &[u8], body_start: usize, body_length: usize) -> Result<&[u8], Halt> {
     let region = &frame[body_start..body_start + body_length];
     let Some(after_tag) = region.strip_prefix(b"35=") else {
