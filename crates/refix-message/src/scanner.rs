@@ -81,6 +81,11 @@ impl FrameScanner {
 /// preserves the longest partial `8=FIX` prefix hanging off the tail.
 /// Failing that, skips the whole buffer.
 fn find_next_begin_string(buf: &[u8]) -> usize {
+    debug_assert!(
+        !BEGIN_STRING_PREFIX.starts_with(buf),
+        "a partial `8=FIX` has no resync distance; it is Incomplete",
+    );
+
     if let Some(skip) = buf[1..]
         .windows(BEGIN_STRING_PREFIX.len())
         .position(|b| b == BEGIN_STRING_PREFIX)
@@ -453,6 +458,34 @@ mod tests {
         #[test]
         fn preserves_short_partial_tail() {
             assert_eq!(find_next_begin_string(b"xx8="), 2);
+        }
+
+        #[test]
+        fn skip_is_always_in_range() {
+            // Every in-domain buffer (i.e. not itself a partial `8=FIX`, which is
+            // Incomplete) must yield a skip that both progresses and stays inside
+            // the buffer. Short ones matter most: that is where a tail match could
+            // otherwise cover the whole buffer and report 0.
+            for buf in [
+                &b"x"[..],
+                b"9",
+                b"=8",
+                b"junk",
+                b"8=FIXX",
+                b"xx8=",
+                b"x8=FI",
+                b"garbage8=FI",
+                b"XX8=FIX",
+                b"8=NOTFIX",
+            ] {
+                let skipped = find_next_begin_string(buf);
+                assert!(
+                    (1..=buf.len()).contains(&skipped),
+                    "skip of {skipped} out of range 1..={} for {:?}",
+                    buf.len(),
+                    String::from_utf8_lossy(buf),
+                );
+            }
         }
     }
 
