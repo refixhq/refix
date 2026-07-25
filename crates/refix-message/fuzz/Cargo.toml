@@ -1,0 +1,23 @@
+[package]
+name = "refix-message-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.refix-message]
+path = ".."
+
+[[bin]]
+name = "scan_invariants"
+path = "fuzz_targets/scan_invariants.rs"
+test = false
+doc = false
+bench = false
