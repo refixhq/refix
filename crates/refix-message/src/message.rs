@@ -1,4 +1,4 @@
-use crate::framing::{Outcome, SOH, Scanner};
+use crate::framing::{GarbledReason, Outcome, SOH, Scanner};
 use bytes::Bytes;
 
 /// Tag recorded for a run of bytes that could not be tokenised into a field.
@@ -62,8 +62,18 @@ impl RawMessage {
 #[derive(Default)]
 pub struct Tokenizer;
 
+/// Issues that can arise when the bytes handed to the tokeniser are not a valid FIX message.
 #[derive(Clone, Debug)]
-pub struct TokenizeError;
+pub enum TokenizeError {
+    /// The bytes fail the frame-level checks.
+    Garbled(GarbledReason),
+    /// The bytes end mid-message.
+    Incomplete,
+    /// One message was found, but the input continues past it.
+    TrailingBytes { frame_len: usize },
+    /// The frame is too long for the index's `u32` offsets to address.
+    TooLargeToIndex,
+}
 
 impl Tokenizer {
     pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
@@ -163,13 +173,15 @@ fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
     match scanner.scan(bytes) {
         Outcome::Frame(frame) => {
             if frame.bytes.len() != bytes.len() {
-                Err(TokenizeError)
+                Err(TokenizeError::TrailingBytes {
+                    frame_len: frame.bytes.len(),
+                })
             } else {
                 Ok(())
             }
         }
-        Outcome::Incomplete => Err(TokenizeError),
-        Outcome::Garbled { .. } => Err(TokenizeError),
+        Outcome::Incomplete => Err(TokenizeError::Incomplete),
+        Outcome::Garbled { reason, .. } => Err(TokenizeError::Garbled(reason)),
     }
 }
 
