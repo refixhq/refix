@@ -169,6 +169,10 @@ fn find_soh(bytes: &[u8], from: usize) -> Option<usize> {
 }
 
 fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
+    if u32::try_from(bytes.len()).is_err() {
+        return Err(TokenizeError::TooLargeToIndex);
+    }
+
     let scanner = Scanner::new(bytes.len());
     match scanner.scan(bytes) {
         Outcome::Frame(frame) => {
