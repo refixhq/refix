@@ -409,24 +409,7 @@ pub enum BeginString<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::to_wire;
-
-    /// FIX checksum: sum of all bytes mod 256, as a zero-padded 3-digit string.
-    fn calculate_checksum(bytes: &[u8]) -> String {
-        let sum = bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b));
-        format!("{sum:03}")
-    }
-
-    /// A complete, correctly-checksummed frame with a correct BodyLength.
-    /// `body` is `|`-delimited and includes its trailing `|`, e.g. "35=A|34=1|".
-    fn construct_valid_frame(begin: &str, body: &str) -> Vec<u8> {
-        let body = to_wire(body);
-        let mut bytes = to_wire(&format!("8={begin}|9={}|", body.len()));
-        bytes.extend_from_slice(&body);
-        let cs = calculate_checksum(&bytes);
-        bytes.extend_from_slice(&to_wire(&format!("10={cs}|")));
-        bytes
-    }
+    use crate::test_utils::{construct_valid_frame, to_wire};
 
     fn scan(buf: &[u8]) -> Outcome<'_> {
         Scanner::default().scan(buf)

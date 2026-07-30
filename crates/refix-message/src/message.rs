@@ -191,13 +191,52 @@ fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::to_wire;
+    use crate::test_utils::{construct_valid_frame, to_wire};
     use crate::{RawMessage, Tokenizer};
     use bytes::Bytes;
 
+    /// Tokenises a `|`-delimited body wrapped in a valid FIX.4.4 frame,
+    /// asserting the invariant every index must satisfy.
+    #[track_caller]
+    fn tokenize_body(body: &str) -> RawMessage {
+        let frame = construct_valid_frame("FIX.4.4", body);
+        let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
+        assert_tiles(&message);
+        message
+    }
+
+    /// Every field of the frame, in wire order.
     #[track_caller]
     fn assert_entries(message: &RawMessage, expected: &[(u32, &str)]) {
-        let actual: Vec<(u32, String)> = message
+        let expected: Vec<(u32, String)> = expected
+            .iter()
+            .map(|&(tag, value)| (tag, value.to_owned()))
+            .collect();
+        assert_eq!(entries_of(message), expected);
+    }
+
+    /// The fields between the preamble (8, 9) and the trailer (10), so bodies
+    /// can be asserted without hand-computing BodyLength and CheckSum.
+    #[track_caller]
+    fn assert_body_entries(message: &RawMessage, expected: &[(u32, &str)]) {
+        let entries = entries_of(message);
+        let tags: Vec<u32> = entries.iter().map(|&(tag, _)| tag).collect();
+        assert_eq!(
+            tags[..2],
+            [8, 9],
+            "frame must open with BeginString, BodyLength"
+        );
+        assert_eq!(*tags.last().unwrap(), 10, "frame must close with CheckSum");
+
+        let body: Vec<(u32, &str)> = entries[2..entries.len() - 1]
+            .iter()
+            .map(|(tag, value)| (*tag, value.as_str()))
+            .collect();
+        assert_eq!(body, expected);
+    }
+
+    fn entries_of(message: &RawMessage) -> Vec<(u32, String)> {
+        message
             .fields
             .iter()
             .map(|&field| {
@@ -206,29 +245,71 @@ mod tests {
                     String::from_utf8_lossy(message.slice(field)).into_owned(),
                 )
             })
-            .collect();
-        let expected: Vec<(u32, String)> = expected
-            .iter()
-            .map(|&(tag, value)| (tag, value.to_owned()))
-            .collect();
-        assert_eq!(actual, expected);
+            .collect()
     }
 
-    #[test]
-    fn valid_heartbeat() {
-        let frame = to_wire("8=FIX.4.4|9=41|35=0|49=A|56=B|34=1|52=20260730-10:00:00|10=123|");
-        let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
-        let expected_fields = [
-            (8, "FIX.4.4"),
-            (9, "41"),
-            (35, "0"),
-            (49, "A"),
-            (56, "B"),
-            (34, "1"),
-            (52, "20260730-10:00:00"),
-            (10, "123"),
-        ];
+    /// The index tiles the frame: each field starts one byte past the
+    /// previous field's value, and the last value's SOH ends the frame.
+    #[track_caller]
+    fn assert_tiles(message: &RawMessage) {
+        let mut expected_tag_start = 0;
+        for (i, &field) in message.fields.iter().enumerate() {
+            assert!(
+                field.value_start >= expected_tag_start,
+                "slot {i} starts before the previous field ended",
+            );
+            assert!(
+                field.value_end >= field.value_start,
+                "slot {i} has an inverted value range",
+            );
+            expected_tag_start = field.value_end + 1;
+        }
+        assert_eq!(
+            expected_tag_start as usize,
+            message.bytes.len(),
+            "index stops short of the frame end",
+        );
+    }
 
-        assert_entries(&message, &expected_fields);
+    mod well_formed {
+        use super::*;
+
+        #[test]
+        fn valid_message() {
+            let frame = to_wire("8=FIX.4.4|9=41|35=0|49=A|56=B|34=1|52=20260730-10:00:00|10=123|");
+            let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
+            assert_tiles(&message);
+
+            let expected_fields = [
+                (8, "FIX.4.4"),
+                (9, "41"),
+                (35, "0"),
+                (49, "A"),
+                (56, "B"),
+                (34, "1"),
+                (52, "20260730-10:00:00"),
+                (10, "123"),
+            ];
+
+            assert_entries(&message, &expected_fields);
+        }
+
+        #[test]
+        fn empty_value() {
+            let message = tokenize_body("35=0|58=|");
+            assert_body_entries(&message, &[(35, "0"), (58, "")]);
+        }
+
+        #[test]
+        fn value_containing_equals() {
+            let message = tokenize_body("35=0|58=px=1.23|");
+            assert_body_entries(&message, &[(35, "0"), (58, "px=1.23")]);
+        }
+
+        #[test]
+        fn duplicate_tags_all_indexed() {
+            let message = tokenize_body("35=0|58=first|58=second|");
+            assert_body_entries(&message, &[(35, "0"), (58, "first"), (58, "second")]);
+        }
     }
 }
