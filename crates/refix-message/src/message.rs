@@ -45,7 +45,7 @@ impl RawMessage {
 
     /// First occurrence of `tag` at or after `from`, with its slot so the
     /// caller can continue or bound a range.
-    pub fn find(&self, tag: u32, from: Slot) -> Option<(Slot, &[u8])> {
+    fn find(&self, tag: u32, from: Slot) -> Option<(Slot, &[u8])> {
         let rest = self.fields.get(from.index()..)?;
         let offset = rest.iter().position(|field| field.tag == tag)?;
         let slot = Slot((from.index() + offset) as u32);
