@@ -312,4 +312,29 @@ mod tests {
             assert_body_entries(&message, &[(35, "0"), (58, "first"), (58, "second")]);
         }
     }
+
+    mod lookup {
+        use super::*;
+
+        #[test]
+        fn get_returns_first_occurrence() {
+            let message = tokenize_body("35=0|58=first|58=second|");
+            assert_eq!(message.get(58), Some(b"first".as_slice()));
+        }
+
+        #[test]
+        fn get_absent_tag() {
+            let message = tokenize_body("35=0|");
+            assert_eq!(message.get(58), None);
+        }
+
+        #[test]
+        fn preamble_and_trailer_are_ordinary_fields() {
+            let message = tokenize_body("35=0|");
+            assert_eq!(message.get(8), Some(b"FIX.4.4".as_slice()));
+            assert_eq!(message.get(9), Some(b"5".as_slice()));
+            assert_eq!(message.get(35), Some(b"0".as_slice()));
+            assert!(message.get(10).is_some());
+        }
+    }
 }
