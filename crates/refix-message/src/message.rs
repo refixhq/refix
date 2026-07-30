@@ -1,4 +1,4 @@
-use crate::framing::{Outcome, SOH, Scanner};
+use crate::framing::{GarbledReason, Outcome, SOH, Scanner};
 use bytes::Bytes;
 
 /// Tag recorded for a run of bytes that could not be tokenised into a field.
@@ -62,8 +62,18 @@ impl RawMessage {
 #[derive(Default)]
 pub struct Tokenizer;
 
+/// Issues that can arise when the bytes handed to the tokeniser are not a valid FIX message.
 #[derive(Clone, Debug)]
-pub struct TokenizeError;
+pub enum TokenizeError {
+    /// The bytes fail the frame-level checks.
+    Garbled(GarbledReason),
+    /// The bytes end mid-message.
+    Incomplete,
+    /// One message was found, but the input continues past it.
+    TrailingBytes { frame_len: usize },
+    /// The frame is too long for the index's `u32` offsets to address.
+    TooLargeToIndex,
+}
 
 impl Tokenizer {
     pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
@@ -88,9 +98,9 @@ fn tokenize_fields(bytes: &[u8]) -> Vec<RawField> {
 }
 
 fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
-    match find_delimiter(bytes, pos) {
+    match find_tag_end(bytes, pos) {
         None => None,
-        Some((delimiter_pos, b'=')) => {
+        Some(TagEnd::Equals(delimiter_pos)) => {
             let value_end = match find_soh(bytes, delimiter_pos) {
                 None => bytes.len(),
                 Some(end) => end,
@@ -104,7 +114,7 @@ fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
 
             Some((field, value_end + 1))
         }
-        Some((delimiter_pos, SOH)) => {
+        Some(TagEnd::Soh(delimiter_pos)) => {
             let field = RawField {
                 tag: MALFORMED_TAG,
                 value_start: pos as u32,
@@ -113,7 +123,6 @@ fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
 
             Some((field, delimiter_pos + 1))
         }
-        Some(_) => panic!("unexpected delimiter - this can never happen"),
     }
 }
 
@@ -128,46 +137,106 @@ fn parse_u32(digits: &[u8]) -> Option<u32> {
     })
 }
 
-/// Offset of the first `=` or SOH at or after `from`, with the byte found.
-fn find_delimiter(bytes: &[u8], from: usize) -> Option<(usize, u8)> {
-    bytes[from..]
+enum TagEnd {
+    Equals(usize),
+    Soh(usize),
+}
+
+/// Offset of the first `=` or SOH at or after `from`.
+///
+/// This is specifically used to find the ending byte of a tag,
+/// which would normally be `=`, but potentially a SOH in malformed
+/// fields.
+fn find_tag_end(bytes: &[u8], from: usize) -> Option<TagEnd> {
+    bytes
+        .get(from..)?
         .iter()
-        .position(|&b| b == b'=' || b == SOH)
-        .map(|rel| (from + rel, bytes[from + rel]))
+        .enumerate()
+        .find_map(|(rel, &byte)| match byte {
+            b'=' => Some(TagEnd::Equals(from + rel)),
+            SOH => Some(TagEnd::Soh(from + rel)),
+            _ => None,
+        })
 }
 
 /// Offset for the first SOH at or after `from`.
 fn find_soh(bytes: &[u8], from: usize) -> Option<usize> {
-    bytes[from..]
+    bytes
+        .get(from..)?
         .iter()
         .position(|&b| b == SOH)
         .map(|rel| from + rel)
 }
 
 fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
+    if u32::try_from(bytes.len()).is_err() {
+        return Err(TokenizeError::TooLargeToIndex);
+    }
+
     let scanner = Scanner::new(bytes.len());
     match scanner.scan(bytes) {
         Outcome::Frame(frame) => {
             if frame.bytes.len() != bytes.len() {
-                Err(TokenizeError)
+                Err(TokenizeError::TrailingBytes {
+                    frame_len: frame.bytes.len(),
+                })
             } else {
                 Ok(())
             }
         }
-        Outcome::Incomplete => Err(TokenizeError),
-        Outcome::Garbled { .. } => Err(TokenizeError),
+        Outcome::Incomplete => Err(TokenizeError::Incomplete),
+        Outcome::Garbled { reason, .. } => Err(TokenizeError::Garbled(reason)),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::to_wire;
+    use crate::test_utils::{construct_valid_frame, to_wire};
     use crate::{RawMessage, Tokenizer};
     use bytes::Bytes;
 
+    /// Tokenises a `|`-delimited body wrapped in a valid FIX.4.4 frame,
+    /// asserting the invariant every index must satisfy.
+    #[track_caller]
+    fn tokenize_body(body: &str) -> RawMessage {
+        let frame = construct_valid_frame("FIX.4.4", body);
+        let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
+        assert_tiles(&message);
+        message
+    }
+
+    /// Every field of the frame, in wire order.
     #[track_caller]
     fn assert_entries(message: &RawMessage, expected: &[(u32, &str)]) {
-        let actual: Vec<(u32, String)> = message
+        let expected: Vec<(u32, String)> = expected
+            .iter()
+            .map(|&(tag, value)| (tag, value.to_owned()))
+            .collect();
+        assert_eq!(entries_of(message), expected);
+    }
+
+    /// The fields between the preamble (8, 9) and the trailer (10), so bodies
+    /// can be asserted without hand-computing BodyLength and CheckSum.
+    #[track_caller]
+    fn assert_body_entries(message: &RawMessage, expected: &[(u32, &str)]) {
+        let entries = entries_of(message);
+        let tags: Vec<u32> = entries.iter().map(|&(tag, _)| tag).collect();
+        assert_eq!(
+            tags[..2],
+            [8, 9],
+            "frame must open with BeginString, BodyLength"
+        );
+        assert_eq!(*tags.last().unwrap(), 10, "frame must close with CheckSum");
+
+        let body: Vec<(u32, &str)> = entries[2..entries.len() - 1]
+            .iter()
+            .map(|(tag, value)| (*tag, value.as_str()))
+            .collect();
+        assert_eq!(body, expected);
+    }
+
+    fn entries_of(message: &RawMessage) -> Vec<(u32, String)> {
+        message
             .fields
             .iter()
             .map(|&field| {
@@ -176,29 +245,96 @@ mod tests {
                     String::from_utf8_lossy(message.slice(field)).into_owned(),
                 )
             })
-            .collect();
-        let expected: Vec<(u32, String)> = expected
-            .iter()
-            .map(|&(tag, value)| (tag, value.to_owned()))
-            .collect();
-        assert_eq!(actual, expected);
+            .collect()
     }
 
-    #[test]
-    fn valid_heartbeat() {
-        let frame = to_wire("8=FIX.4.4|9=41|35=0|49=A|56=B|34=1|52=20260730-10:00:00|10=123|");
-        let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
-        let expected_fields = [
-            (8, "FIX.4.4"),
-            (9, "41"),
-            (35, "0"),
-            (49, "A"),
-            (56, "B"),
-            (34, "1"),
-            (52, "20260730-10:00:00"),
-            (10, "123"),
-        ];
+    /// The index tiles the frame: each field starts one byte past the
+    /// previous field's value, and the last value's SOH ends the frame.
+    #[track_caller]
+    fn assert_tiles(message: &RawMessage) {
+        let mut expected_tag_start = 0;
+        for (i, &field) in message.fields.iter().enumerate() {
+            assert!(
+                field.value_start >= expected_tag_start,
+                "slot {i} starts before the previous field ended",
+            );
+            assert!(
+                field.value_end >= field.value_start,
+                "slot {i} has an inverted value range",
+            );
+            expected_tag_start = field.value_end + 1;
+        }
+        assert_eq!(
+            expected_tag_start as usize,
+            message.bytes.len(),
+            "index stops short of the frame end",
+        );
+    }
 
-        assert_entries(&message, &expected_fields);
+    mod well_formed {
+        use super::*;
+
+        #[test]
+        fn valid_message() {
+            let frame = to_wire("8=FIX.4.4|9=41|35=0|49=A|56=B|34=1|52=20260730-10:00:00|10=123|");
+            let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
+            assert_tiles(&message);
+
+            let expected_fields = [
+                (8, "FIX.4.4"),
+                (9, "41"),
+                (35, "0"),
+                (49, "A"),
+                (56, "B"),
+                (34, "1"),
+                (52, "20260730-10:00:00"),
+                (10, "123"),
+            ];
+
+            assert_entries(&message, &expected_fields);
+        }
+
+        #[test]
+        fn empty_value() {
+            let message = tokenize_body("35=0|58=|");
+            assert_body_entries(&message, &[(35, "0"), (58, "")]);
+        }
+
+        #[test]
+        fn value_containing_equals() {
+            let message = tokenize_body("35=0|58=px=1.23|");
+            assert_body_entries(&message, &[(35, "0"), (58, "px=1.23")]);
+        }
+
+        #[test]
+        fn duplicate_tags_all_indexed() {
+            let message = tokenize_body("35=0|58=first|58=second|");
+            assert_body_entries(&message, &[(35, "0"), (58, "first"), (58, "second")]);
+        }
+    }
+
+    mod lookup {
+        use super::*;
+
+        #[test]
+        fn get_returns_first_occurrence() {
+            let message = tokenize_body("35=0|58=first|58=second|");
+            assert_eq!(message.get(58), Some(b"first".as_slice()));
+        }
+
+        #[test]
+        fn get_absent_tag() {
+            let message = tokenize_body("35=0|");
+            assert_eq!(message.get(58), None);
+        }
+
+        #[test]
+        fn preamble_and_trailer_are_ordinary_fields() {
+            let message = tokenize_body("35=0|");
+            assert_eq!(message.get(8), Some(b"FIX.4.4".as_slice()));
+            assert_eq!(message.get(9), Some(b"5".as_slice()));
+            assert_eq!(message.get(35), Some(b"0".as_slice()));
+            assert!(message.get(10).is_some());
+        }
     }
 }
