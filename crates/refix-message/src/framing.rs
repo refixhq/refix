@@ -43,7 +43,7 @@
 //! Nothing here judges values, and nothing here is lenient - leniency belongs to
 //! a log reader, not the wire path.
 
-const SOH: u8 = 0x01;
+pub const SOH: u8 = 0x01;
 
 /// Longest BeginString field we'll frame: `8=` through the byte before its SOH.
 const MAX_BEGIN_STRING_LEN: usize = 16;
