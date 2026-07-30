@@ -40,8 +40,6 @@
 //! positionally at its known offset. Every other header field has no guaranteed
 //! wire position and may sit behind a length-prefixed data field, so reading it
 //! needs the order-independent, data-field-aware decoding of the layer above.
-//! Nothing here judges values, and nothing here is lenient - leniency belongs to
-//! a log reader, not the wire path.
 
 pub const SOH: u8 = 0x01;
 

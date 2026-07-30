@@ -88,9 +88,9 @@ fn tokenize_fields(bytes: &[u8]) -> Vec<RawField> {
 }
 
 fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
-    match find_delimiter(bytes, pos) {
+    match find_tag_end(bytes, pos) {
         None => None,
-        Some((delimiter_pos, b'=')) => {
+        Some(TagEnd::Equals(delimiter_pos)) => {
             let value_end = match find_soh(bytes, delimiter_pos) {
                 None => bytes.len(),
                 Some(end) => end,
@@ -104,7 +104,7 @@ fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
 
             Some((field, value_end + 1))
         }
-        Some((delimiter_pos, SOH)) => {
+        Some(TagEnd::Soh(delimiter_pos)) => {
             let field = RawField {
                 tag: MALFORMED_TAG,
                 value_start: pos as u32,
@@ -113,7 +113,6 @@ fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
 
             Some((field, delimiter_pos + 1))
         }
-        Some(_) => panic!("unexpected delimiter - this can never happen"),
     }
 }
 
@@ -128,17 +127,32 @@ fn parse_u32(digits: &[u8]) -> Option<u32> {
     })
 }
 
-/// Offset of the first `=` or SOH at or after `from`, with the byte found.
-fn find_delimiter(bytes: &[u8], from: usize) -> Option<(usize, u8)> {
-    bytes[from..]
+enum TagEnd {
+    Equals(usize),
+    Soh(usize),
+}
+
+/// Offset of the first `=` or SOH at or after `from`.
+///
+/// This is specifically used to find the ending byte of a tag,
+/// which would normally be `=`, but potentially a SOH in malformed
+/// fields.
+fn find_tag_end(bytes: &[u8], from: usize) -> Option<TagEnd> {
+    bytes
+        .get(from..)?
         .iter()
-        .position(|&b| b == b'=' || b == SOH)
-        .map(|rel| (from + rel, bytes[from + rel]))
+        .enumerate()
+        .find_map(|(rel, &byte)| match byte {
+            b'=' => Some(TagEnd::Equals(from + rel)),
+            SOH => Some(TagEnd::Soh(from + rel)),
+            _ => None,
+        })
 }
 
 /// Offset for the first SOH at or after `from`.
 fn find_soh(bytes: &[u8], from: usize) -> Option<usize> {
-    bytes[from..]
+    bytes
+        .get(from..)?
         .iter()
         .position(|&b| b == SOH)
         .map(|rel| from + rel)
