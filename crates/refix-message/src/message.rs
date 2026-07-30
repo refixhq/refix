@@ -18,7 +18,7 @@ impl Slot {
 }
 
 /// The tag and byte range of a field's value within the frame.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct RawField {
     tag: u32,
     value_start: u32,
@@ -26,6 +26,7 @@ pub(crate) struct RawField {
 }
 
 /// Raw bytes of a FIX message and an index of every field in wire order.
+#[derive(Clone, Debug)]
 pub struct RawMessage {
     bytes: Bytes,
     fields: Vec<RawField>,
@@ -63,7 +64,7 @@ impl RawMessage {
 pub struct Tokenizer;
 
 /// Issues that can arise when the bytes handed to the tokeniser are not a valid FIX message.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenizeError {
     /// The bytes fail the frame-level checks.
     Garbled(GarbledReason),
@@ -169,11 +170,7 @@ fn find_soh(bytes: &[u8], from: usize) -> Option<usize> {
 }
 
 fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
-    if u32::try_from(bytes.len()).is_err() {
-        return Err(TokenizeError::TooLargeToIndex);
-    }
-
-    let scanner = Scanner::new(bytes.len());
+    let scanner = Scanner::new(u32::MAX as usize);
     match scanner.scan(bytes) {
         Outcome::Frame(frame) => {
             if frame.bytes.len() != bytes.len() {
@@ -185,6 +182,10 @@ fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
             }
         }
         Outcome::Incomplete => Err(TokenizeError::Incomplete),
+        Outcome::Garbled {
+            reason: GarbledReason::FrameTooLarge,
+            ..
+        } => Err(TokenizeError::TooLargeToIndex),
         Outcome::Garbled { reason, .. } => Err(TokenizeError::Garbled(reason)),
     }
 }
@@ -192,7 +193,7 @@ fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
 #[cfg(test)]
 mod tests {
     use crate::test_utils::{construct_valid_frame, to_wire};
-    use crate::{RawMessage, Tokenizer};
+    use crate::{RawMessage, TokenizeError, Tokenizer};
     use bytes::Bytes;
 
     /// Tokenises a `|`-delimited body wrapped in a valid FIX.4.4 frame,
@@ -335,6 +336,37 @@ mod tests {
             assert_eq!(message.get(9), Some(b"5".as_slice()));
             assert_eq!(message.get(35), Some(b"0".as_slice()));
             assert!(message.get(10).is_some());
+        }
+    }
+
+    mod errors {
+        use super::*;
+
+        #[test]
+        fn truncated_frame_is_incomplete() {
+            let mut bytes = construct_valid_frame("FIX.4.4", "35=0|");
+            bytes.pop();
+
+            let error = Tokenizer.tokenize(Bytes::from(bytes)).unwrap_err();
+            assert_eq!(error, TokenizeError::Incomplete);
+        }
+
+        #[test]
+        fn absurd_body_length_is_too_large_to_index() {
+            let bytes = to_wire("8=FIX.4.4|9=4294967295|35=0|");
+
+            let error = Tokenizer.tokenize(Bytes::from(bytes)).unwrap_err();
+            assert_eq!(error, TokenizeError::TooLargeToIndex);
+        }
+
+        #[test]
+        fn two_messages_are_trailing_bytes() {
+            let mut bytes = construct_valid_frame("FIX.4.4", "35=0|");
+            let frame_len = bytes.len();
+            bytes.extend_from_slice(&construct_valid_frame("FIX.4.4", "35=0|"));
+
+            let error = Tokenizer.tokenize(Bytes::from(bytes)).unwrap_err();
+            assert_eq!(error, TokenizeError::TrailingBytes { frame_len });
         }
     }
 }
