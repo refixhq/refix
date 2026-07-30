@@ -369,4 +369,60 @@ mod tests {
             assert_eq!(error, TokenizeError::TrailingBytes { frame_len });
         }
     }
+
+    /// Tests for the MALFORMED_TAG sentinel value.
+    mod sentinel_runs {
+        use super::*;
+        use crate::message::MALFORMED_TAG;
+
+        #[test]
+        fn run_without_equals() {
+            let message = tokenize_body("35=0|junk|58=ok|");
+            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "junk"), (58, "ok")]);
+        }
+
+        #[test]
+        fn fields_after_a_fault_remain_readable() {
+            let message = tokenize_body("35=0|junk|58=ok|");
+            assert_eq!(message.get(58), Some(b"ok".as_slice()));
+        }
+
+        #[test]
+        fn non_numeric_tag() {
+            let message = tokenize_body("35=0|abc=x|");
+            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "x")]);
+        }
+
+        #[test]
+        fn empty_tag() {
+            let message = tokenize_body("35=0|=x|");
+            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "x")]);
+        }
+
+        #[test]
+        fn literal_tag_zero_is_a_sentinel() {
+            let message = tokenize_body("35=0|0=x|");
+            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "x")]);
+        }
+
+        #[test]
+        fn tag_overflowing_u32() {
+            let message = tokenize_body("35=0|4294967296=x|");
+            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "x")]);
+        }
+
+        #[test]
+        fn consecutive_runs() {
+            let message = tokenize_body("35=0|junk|more|58=ok|");
+            assert_body_entries(
+                &message,
+                &[
+                    (35, "0"),
+                    (MALFORMED_TAG, "junk"),
+                    (MALFORMED_TAG, "more"),
+                    (58, "ok"),
+                ],
+            );
+        }
+    }
 }
