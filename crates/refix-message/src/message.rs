@@ -64,6 +64,7 @@ impl RawMessage {
 #[derive(Default)]
 pub struct Tokenizer;
 
+#[derive(Clone, Debug)]
 pub struct TokenizeError;
 
 impl Tokenizer {
@@ -79,16 +80,9 @@ fn tokenize_fields(bytes: &[u8]) -> Vec<RawField> {
     let mut fields = Vec::with_capacity(256);
     let mut pos = 0;
 
-    while pos < bytes.len() {
-        match next_field(bytes, pos) {
-            Some((field, next)) => {
-                fields.push(field);
-                pos = next;
-            }
-            None => {
-                todo!()
-            }
-        }
+    while let Some((field, next)) = next_field(bytes, pos) {
+        fields.push(field);
+        pos = next;
     }
 
     fields
@@ -109,7 +103,7 @@ fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
                 value_end: value_end as u32,
             };
 
-            Some((field, value_end))
+            Some((field, value_end + 1))
         }
         Some((delimiter_pos, SOH)) => {
             let field = RawField {
@@ -118,7 +112,7 @@ fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
                 value_end: delimiter_pos as u32,
             };
 
-            Some((field, delimiter_pos))
+            Some((field, delimiter_pos + 1))
         }
         Some(_) => panic!("unexpected delimiter - this can never happen"),
     }
@@ -147,7 +141,7 @@ fn find_delimiter(bytes: &[u8], from: usize) -> Option<(usize, u8)> {
 fn find_soh(bytes: &[u8], from: usize) -> Option<usize> {
     bytes[from..]
         .iter()
-        .position(|&b| b == b'=' || b == SOH)
+        .position(|&b| b == SOH)
         .map(|rel| from + rel)
 }
 
@@ -163,5 +157,49 @@ fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
         }
         Outcome::Incomplete => Err(TokenizeError),
         Outcome::Garbled { .. } => Err(TokenizeError),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::to_wire;
+    use crate::{RawMessage, Tokenizer};
+    use bytes::Bytes;
+
+    #[track_caller]
+    fn assert_entries(message: &RawMessage, expected: &[(u32, &str)]) {
+        let actual: Vec<(u32, String)> = message
+            .fields
+            .iter()
+            .map(|&field| {
+                (
+                    field.tag,
+                    String::from_utf8_lossy(message.slice(field)).into_owned(),
+                )
+            })
+            .collect();
+        let expected: Vec<(u32, String)> = expected
+            .iter()
+            .map(|&(tag, value)| (tag, value.to_owned()))
+            .collect();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn valid_heartbeat() {
+        let frame = to_wire("8=FIX.4.4|9=41|35=0|49=A|56=B|34=1|52=20260730-10:00:00|10=123|");
+        let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
+        let expected_fields = [
+            (8, "FIX.4.4"),
+            (9, "41"),
+            (35, "0"),
+            (49, "A"),
+            (56, "B"),
+            (34, "1"),
+            (52, "20260730-10:00:00"),
+            (10, "123"),
+        ];
+
+        assert_entries(&message, &expected_fields);
     }
 }

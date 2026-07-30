@@ -411,11 +411,7 @@ pub enum BeginString<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// `|`-delimited readable string into SOH-delimited bytes.
-    fn to_wire(s: &str) -> Vec<u8> {
-        s.replace('|', "\x01").into_bytes()
-    }
+    use crate::test_utils::to_wire;
 
     /// FIX checksum: sum of all bytes mod 256, as a zero-padded 3-digit string.
     fn calculate_checksum(bytes: &[u8]) -> String {
