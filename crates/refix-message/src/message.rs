@@ -26,8 +26,6 @@ pub(crate) struct RawField {
 }
 
 /// Raw bytes of a FIX message and an index of every field in wire order.
-///
-/// The index doesn't form any opinions on architecture.
 pub struct RawMessage {
     bytes: Bytes,
     fields: Vec<RawField>,
@@ -96,7 +94,7 @@ fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
                 None => bytes.len(),
                 Some(end) => end,
             };
-            let tag = parse_u32(&bytes[pos..delimiter_pos]).unwrap();
+            let tag = parse_u32(&bytes[pos..delimiter_pos]).unwrap_or(MALFORMED_TAG);
             let field = RawField {
                 tag,
                 value_start: (delimiter_pos + 1) as u32,
