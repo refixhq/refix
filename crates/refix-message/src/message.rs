@@ -75,7 +75,8 @@ impl Tokenizer {
 }
 
 fn tokenize_fields(bytes: &[u8]) -> Vec<RawField> {
-    let mut fields = Vec::with_capacity(256);
+    // TODO: decide what capacity to start with
+    let mut fields = Vec::new();
     let mut pos = 0;
 
     while let Some((field, next)) = next_field(bytes, pos) {
