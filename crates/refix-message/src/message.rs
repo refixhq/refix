@@ -79,3 +79,40 @@ impl RawMessage {
         &self.fields
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::framing::SOH;
+
+    fn message_of(fields: &[(u32, &str)]) -> RawMessage {
+        let mut bytes = Vec::new();
+        let mut index = Vec::new();
+        for &(tag, value) in fields {
+            bytes.extend_from_slice(tag.to_string().as_bytes());
+            bytes.push(b'=');
+            let value_start = bytes.len() as u32;
+            bytes.extend_from_slice(value.as_bytes());
+            let value_end = bytes.len() as u32;
+            bytes.push(SOH);
+            index.push(RawField {
+                tag,
+                value_start,
+                value_end,
+            });
+        }
+        RawMessage::new(Bytes::from(bytes), index)
+    }
+
+    #[test]
+    fn get_returns_first_occurrence() {
+        let message = message_of(&[(35, "0"), (58, "first"), (58, "second")]);
+        assert_eq!(message.get(58), Some(b"first".as_slice()));
+    }
+
+    #[test]
+    fn get_absent_tag() {
+        let message = message_of(&[(35, "0")]);
+        assert_eq!(message.get(58), None);
+    }
+}

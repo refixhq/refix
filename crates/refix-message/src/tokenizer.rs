@@ -250,22 +250,6 @@ mod tests {
             let message = tokenize_body("35=0|58=first|58=second|");
             assert_body_entries(&message, &[(35, "0"), (58, "first"), (58, "second")]);
         }
-    }
-
-    mod lookup {
-        use super::*;
-
-        #[test]
-        fn get_returns_first_occurrence() {
-            let message = tokenize_body("35=0|58=first|58=second|");
-            assert_eq!(message.get(58), Some(b"first".as_slice()));
-        }
-
-        #[test]
-        fn get_absent_tag() {
-            let message = tokenize_body("35=0|");
-            assert_eq!(message.get(58), None);
-        }
 
         #[test]
         fn preamble_and_trailer_are_ordinary_fields() {
