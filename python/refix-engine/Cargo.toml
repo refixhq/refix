@@ -13,5 +13,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 bytes = { workspace = true }
-pyo3 = { workspace = true }
+pyo3 = { workspace = true, features = ["abi3-py312"] }
 refix-message = { workspace = true }

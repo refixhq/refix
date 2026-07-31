@@ -5,9 +5,23 @@ build-backend = 'maturin'
 [project]
 name = "refix-engine"
 description = "FIX message processing for Python, powered by Rust"
+readme = "README.md"
 license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+authors = [{ name = "David Steiner", email = "david@davidsteiner.dev" }]
 requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Office/Business :: Financial",
+    "Typing :: Typed",
+]
 dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/refixhq/refix"
 
 [tool.maturin]
 python-source = "python"
