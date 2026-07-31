@@ -1,5 +1,8 @@
 # ReFIX
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
+
 ReFIX is a FIX engine written in pure Rust with first-party bindings for Python.
 
 > [!WARNING]
