@@ -12,9 +12,13 @@ sync:
 develop:
     cd {{ py }} && uv run maturin develop --uv
 
-# Run the Python test suite
+# Run the Python test suite (benchmarks run once, untimed)
 pytest *args:
-    uv run --project {{ py }} pytest {{ args }}
+    uv run --project {{ py }} pytest --benchmark-disable {{ args }}
+
+# Run the Python benchmarks and save the results for comparison
+pybench:
+    cd {{ py }} && uv run pytest tests/test_benchmarks.py --benchmark-autosave
 
 # Run the Rust test suite
 cargo-test:
@@ -29,7 +33,7 @@ coverage-rust:
 
 # Run the Python test suite with coverage (xml output for codecov)
 coverage-python:
-    cd {{ py }} && uv run pytest --cov=refix --cov-report=xml
+    cd {{ py }} && uv run pytest --benchmark-disable --cov=refix --cov-report=xml
 
 # Format Rust code
 fmt:

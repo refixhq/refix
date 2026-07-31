@@ -16,6 +16,9 @@ debug/
 coverage.xml
 lcov.info
 
+# Benchmark results
+.benchmarks/
+
 # Python bytecode and cache files
 *.py[cod]
 .cache/
