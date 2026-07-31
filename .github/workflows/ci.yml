@@ -61,5 +61,7 @@ jobs:
         run: just sync
       - name: Build extension module
         run: just develop
+      - name: Type-check Python
+        run: just typecheck
       - name: Run Python tests
         run: just pytest
