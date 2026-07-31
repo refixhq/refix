@@ -20,7 +20,7 @@ impl Tokenizer {
         let mut length_tags: Vec<u32> = length_tags::STANDARD
             .iter()
             .copied()
-            .chain(extras)
+            .chain(extras.into_iter().filter(|&tag| tag != MALFORMED_TAG))
             .collect();
         length_tags.sort_unstable();
         length_tags.dedup();
@@ -60,7 +60,8 @@ impl Tokenizer {
     }
 
     fn is_length_tag(&self, tag: u32) -> bool {
-        tag >= 90 && self.length_tags.binary_search(&tag).is_ok()
+        self.length_tags.first().is_some_and(|&min| tag >= min)
+            && self.length_tags.binary_search(&tag).is_ok()
     }
 }
 
