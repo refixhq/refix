@@ -131,7 +131,7 @@ class TestGarbledFrames:
     ]
 
     @pytest.mark.parametrize(("frame", "reason"), FRAMES)
-    def test_garbled_frame_raises_with_reason(self, frame, reason):
+    def test_garbled_frame_raises_with_reason(self, frame: str, reason: GarbledReason):
         with pytest.raises(GarbledError) as excinfo:
             refix.Tokenizer().tokenize(to_wire(frame))
 
