@@ -22,7 +22,14 @@ dev = [
     "maturin>=1.9.4,<2",
     "pyright>=1.1",
     "pytest>=8",
+    "pytest-cov>=6",
 ]
+
+[tool.coverage.run]
+source = ["refix"]
+
+[tool.coverage.paths]
+source = ["python/refix", "*/site-packages/refix"]
 
 [tool.pyright]
 include = ["python", "tests"]

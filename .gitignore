@@ -11,6 +11,11 @@ debug/
 .idea/
 .vscode/
 
+# Coverage artifacts
+.coverage
+coverage.xml
+lcov.info
+
 # Python bytecode and cache files
 *.py[cod]
 .cache/

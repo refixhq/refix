@@ -41,8 +41,16 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Install just
         uses: taiki-e/install-action@just
-      - name: Run Rust tests
-        run: just cargo-test
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Run Rust tests with coverage
+        run: just coverage-rust
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/lcov.info
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   test-python:
     runs-on: ubuntu-latest
@@ -63,5 +71,11 @@ jobs:
         run: just develop
       - name: Type-check Python
         run: just typecheck
-      - name: Run Python tests
-        run: just pytest
+      - name: Run Python tests with coverage
+        run: just coverage-python
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: python/refix-engine/coverage.xml
+          flags: python
+          token: ${{ secrets.CODECOV_TOKEN }}

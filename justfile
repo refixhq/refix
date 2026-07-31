@@ -23,6 +23,14 @@ cargo-test:
 # Run all tests
 test: cargo-test pytest
 
+# Run the Rust test suite with coverage (lcov output for codecov)
+coverage-rust:
+    cargo llvm-cov --lcov --output-path target/lcov.info
+
+# Run the Python test suite with coverage (xml output for codecov)
+coverage-python:
+    cd {{ py }} && uv run pytest --cov=refix --cov-report=xml
+
 # Format Rust code
 fmt:
     cargo fmt --all
