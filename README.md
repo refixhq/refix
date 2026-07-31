@@ -4,6 +4,7 @@
 
 [![crates-badge]](https://crates.io/crates/refix)
 [![docs-badge]](https://docs.rs/refix)
+[![codecov](https://codecov.io/gh/refixhq/refix/graph/badge.svg?token=S738KU2U1K)](https://codecov.io/gh/refixhq/refix)
 [![CI](https://github.com/refixhq/refix/actions/workflows/ci.yml/badge.svg)](https://github.com/refixhq/refix/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
