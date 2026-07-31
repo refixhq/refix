@@ -29,9 +29,38 @@ impl Tokenizer {
 
     pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
         check_frame(&bytes)?;
-        let fields = tokenize_fields(&bytes);
+        let fields = self.tokenize_fields(&bytes);
 
         Ok(RawMessage::new(bytes, fields))
+    }
+
+    fn tokenize_fields(&self, bytes: &[u8]) -> Vec<RawField> {
+        // TODO: decide what capacity to start with
+        let mut fields = Vec::new();
+        let mut pos = 0;
+        let mut data_len: Option<usize> = None;
+
+        while let Some((field, next)) = next_field(bytes, pos, data_len.take()) {
+            data_len = self.pending_data_len(bytes, field);
+            fields.push(field);
+            pos = next;
+        }
+
+        fields
+    }
+
+    /// The value of `field` when it is a well-formed length tag, so the next
+    /// field's value can be read by extent instead of scanned for SOH.
+    fn pending_data_len(&self, bytes: &[u8], field: RawField) -> Option<usize> {
+        if !self.is_length_tag(field.tag) {
+            return None;
+        }
+        let value = &bytes[field.value_start as usize..field.value_end as usize];
+        parse_u32(value).map(|len| len as usize)
+    }
+
+    fn is_length_tag(&self, tag: u32) -> bool {
+        tag >= 90 && self.length_tags.binary_search(&tag).is_ok()
     }
 }
 
@@ -48,31 +77,19 @@ pub enum TokenizeError {
     TooLargeToIndex,
 }
 
-fn tokenize_fields(bytes: &[u8]) -> Vec<RawField> {
-    // TODO: decide what capacity to start with
-    let mut fields = Vec::new();
-    let mut pos = 0;
-
-    while let Some((field, next)) = next_field(bytes, pos) {
-        fields.push(field);
-        pos = next;
-    }
-
-    fields
-}
-
-fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
+fn next_field(bytes: &[u8], pos: usize, data_len: Option<usize>) -> Option<(RawField, usize)> {
     match find_tag_end(bytes, pos) {
         None => None,
         Some(TagEnd::Equals(delimiter_pos)) => {
-            let value_end = match find_soh(bytes, delimiter_pos) {
-                None => bytes.len(),
-                Some(end) => end,
-            };
             let tag = parse_u32(&bytes[pos..delimiter_pos]).unwrap_or(MALFORMED_TAG);
+            let value_start = delimiter_pos + 1;
+            let value_end = data_len
+                .and_then(|len| data_value_end(bytes, value_start, len))
+                .or_else(|| find_soh(bytes, value_start))
+                .unwrap_or(bytes.len());
             let field = RawField {
                 tag,
-                value_start: (delimiter_pos + 1) as u32,
+                value_start: value_start as u32,
                 value_end: value_end as u32,
             };
 
@@ -131,6 +148,12 @@ fn find_soh(bytes: &[u8], from: usize) -> Option<usize> {
         .iter()
         .position(|&b| b == SOH)
         .map(|rel| from + rel)
+}
+
+/// End of a length-delimited value.
+fn data_value_end(bytes: &[u8], value_start: usize, len: usize) -> Option<usize> {
+    let end = value_start.checked_add(len)?;
+    (bytes.get(end) == Some(&SOH)).then_some(end)
 }
 
 fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
