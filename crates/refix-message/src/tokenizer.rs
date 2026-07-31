@@ -1,10 +1,39 @@
 use crate::framing::{GarbledReason, Outcome, SOH, Scanner};
 use crate::message::RawField;
-use crate::{MALFORMED_TAG, RawMessage};
+use crate::{MALFORMED_TAG, RawMessage, length_tags};
 use bytes::Bytes;
 
-#[derive(Default)]
-pub struct Tokenizer;
+pub struct Tokenizer {
+    length_tags: Vec<u32>,
+}
+
+impl Default for Tokenizer {
+    fn default() -> Self {
+        Self {
+            length_tags: length_tags::STANDARD.to_vec(),
+        }
+    }
+}
+
+impl Tokenizer {
+    pub fn with_length_tags(extras: impl IntoIterator<Item = u32>) -> Self {
+        let mut length_tags: Vec<u32> = length_tags::STANDARD
+            .iter()
+            .copied()
+            .chain(extras)
+            .collect();
+        length_tags.sort_unstable();
+        length_tags.dedup();
+        Self { length_tags }
+    }
+
+    pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
+        check_frame(&bytes)?;
+        let fields = tokenize_fields(&bytes);
+
+        Ok(RawMessage::new(bytes, fields))
+    }
+}
 
 /// Issues that can arise when the bytes handed to the tokeniser are not a valid FIX message.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -17,15 +46,6 @@ pub enum TokenizeError {
     TrailingBytes { frame_len: usize },
     /// The frame is too long for the index's `u32` offsets to address.
     TooLargeToIndex,
-}
-
-impl Tokenizer {
-    pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
-        check_frame(&bytes)?;
-        let fields = tokenize_fields(&bytes);
-
-        Ok(RawMessage::new(bytes, fields))
-    }
 }
 
 fn tokenize_fields(bytes: &[u8]) -> Vec<RawField> {
@@ -145,7 +165,7 @@ mod tests {
     #[track_caller]
     fn tokenize_body(body: &str) -> RawMessage {
         let frame = construct_valid_frame("FIX.4.4", body);
-        let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
+        let message = Tokenizer::default().tokenize(Bytes::from(frame)).unwrap();
         assert_tiles(&message);
         message
     }
@@ -216,7 +236,7 @@ mod tests {
         #[test]
         fn valid_message() {
             let frame = to_wire("8=FIX.4.4|9=41|35=0|49=A|56=B|34=1|52=20260730-10:00:00|10=123|");
-            let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
+            let message = Tokenizer::default().tokenize(Bytes::from(frame)).unwrap();
             assert_tiles(&message);
 
             let expected_fields = [
@@ -269,7 +289,9 @@ mod tests {
             let mut bytes = construct_valid_frame("FIX.4.4", "35=0|");
             bytes.pop();
 
-            let error = Tokenizer.tokenize(Bytes::from(bytes)).unwrap_err();
+            let error = Tokenizer::default()
+                .tokenize(Bytes::from(bytes))
+                .unwrap_err();
             assert_eq!(error, TokenizeError::Incomplete);
         }
 
@@ -277,7 +299,9 @@ mod tests {
         fn absurd_body_length_is_too_large_to_index() {
             let bytes = to_wire("8=FIX.4.4|9=4294967295|35=0|");
 
-            let error = Tokenizer.tokenize(Bytes::from(bytes)).unwrap_err();
+            let error = Tokenizer::default()
+                .tokenize(Bytes::from(bytes))
+                .unwrap_err();
             assert_eq!(error, TokenizeError::TooLargeToIndex);
         }
 
@@ -287,7 +311,9 @@ mod tests {
             let frame_len = bytes.len();
             bytes.extend_from_slice(&construct_valid_frame("FIX.4.4", "35=0|"));
 
-            let error = Tokenizer.tokenize(Bytes::from(bytes)).unwrap_err();
+            let error = Tokenizer::default()
+                .tokenize(Bytes::from(bytes))
+                .unwrap_err();
             assert_eq!(error, TokenizeError::TrailingBytes { frame_len });
         }
     }

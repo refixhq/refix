@@ -3,6 +3,8 @@
 ///
 /// Derived from the QuickFIX FIX 4.0 - 5.0 SP2 dictionaries:
 /// every LENGTH field paired with a DATA field.
+///
+/// *Note*: these values must remain ordered.
 pub(crate) const STANDARD: &[u32] = &[
     90, 93, 95, 212, 348, 350, 352, 354, 356, 358, 360, 362, 364, 445, 618, 621, 1184, 1277, 1280,
     1282, 1397, 1401, 1403, 1468, 1525, 1578, 1620, 1664, 1678, 1733, 1871, 1874, 2072, 2074, 2111,
