@@ -1,6 +1,7 @@
 import pytest
 
 import refix
+from refix.errors import TokenizeError
 
 
 def to_wire(frame: str) -> bytes:
@@ -21,5 +22,5 @@ def test_tokenize_valid_frame():
 def test_tokenize_truncated_frame_raises():
     frame = to_wire("8=FIX.4.4|9=5|35=0|10=163|")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TokenizeError):
         refix.Tokenizer().tokenize(frame[:-1])
