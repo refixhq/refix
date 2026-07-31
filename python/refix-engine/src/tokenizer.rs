@@ -4,7 +4,7 @@ use pyo3::{PyResult, pyclass, pymethods};
 use refix_message::Tokenizer as CoreTokenizer;
 
 #[pyclass(frozen, module = "refix._core")]
-struct Tokenizer(CoreTokenizer);
+pub(crate) struct Tokenizer(CoreTokenizer);
 
 #[pymethods]
 impl Tokenizer {
