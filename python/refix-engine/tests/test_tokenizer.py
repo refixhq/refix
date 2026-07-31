@@ -111,6 +111,7 @@ class TestErrors:
             refix.Tokenizer().tokenize(frame + frame)
 
         assert excinfo.value.frame_len == len(frame)
+        assert str(excinfo.value) == f"one message of {len(frame)} bytes, then trailing input"
 
 
 class TestGarbledFrames:
@@ -136,6 +137,7 @@ class TestGarbledFrames:
             refix.Tokenizer().tokenize(to_wire(frame))
 
         assert excinfo.value.reason is reason
+        assert str(excinfo.value) == f"garbled frame: {reason.value}"
 
     def test_garbled_error_pickles(self):
         with pytest.raises(GarbledError) as excinfo:
