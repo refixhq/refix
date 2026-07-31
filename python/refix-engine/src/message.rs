@@ -21,4 +21,11 @@ impl RawMessage {
     fn get<'py>(&self, py: Python<'py>, tag: u32) -> Option<Bound<'py, PyBytes>> {
         self.0.get(tag).map(|value| PyBytes::new(py, value))
     }
+
+    fn entries<'py>(&self, py: Python<'py>) -> Vec<(u32, Bound<'py, PyBytes>)> {
+        self.0
+            .entries()
+            .map(|(tag, value)| (tag, PyBytes::new(py, value)))
+            .collect()
+    }
 }
