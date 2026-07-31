@@ -20,5 +20,13 @@ package = false
 [dependency-groups]
 dev = [
     "maturin>=1.9.4,<2",
+    "pyright>=1.1",
     "pytest>=8",
 ]
+
+[tool.pyright]
+include = ["python", "tests"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"

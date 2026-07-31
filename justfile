@@ -34,6 +34,10 @@ lint:
     cargo fmt --manifest-path crates/refix-message/fuzz/Cargo.toml --all -- --check
     cargo clippy --manifest-path crates/refix-message/fuzz/Cargo.toml --all-targets
 
+# Type-check the Python layer
+typecheck:
+    cd {{ py }} && uv run pyright
+
 # Build a release wheel
 wheel:
     cd {{ py }} && uv run maturin build --release
