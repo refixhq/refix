@@ -1,5 +1,6 @@
 [package]
 name = "refix-message"
+description = "Framing, tokenisation and raw message representation for the ReFIX engine"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
