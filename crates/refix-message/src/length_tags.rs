@@ -13,3 +13,13 @@ pub(crate) const STANDARD: &[u32] = &[
     41320, 41324, 41458, 41476, 41482, 41653, 41710, 41806, 41811, 41873, 41969, 42025, 42171,
     42451, 42652, 42947, 43109, 43110, 43111,
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn standard_is_sorted_and_unique() {
+        assert!(STANDARD.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+}
