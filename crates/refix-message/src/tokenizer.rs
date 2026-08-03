@@ -1,10 +1,79 @@
 use crate::framing::{GarbledReason, Outcome, SOH, Scanner};
 use crate::message::RawField;
-use crate::{MALFORMED_TAG, RawMessage};
+use crate::{MALFORMED_TAG, RawMessage, length_tags};
 use bytes::Bytes;
 
-#[derive(Default)]
-pub struct Tokenizer;
+/// Splits a framed FIX message into its fields.
+#[derive(Clone, Debug)]
+pub struct Tokenizer {
+    length_tags: Vec<u32>,
+}
+
+impl Default for Tokenizer {
+    fn default() -> Self {
+        Self {
+            length_tags: length_tags::STANDARD.to_vec(),
+        }
+    }
+}
+
+impl Tokenizer {
+    /// Constructs a [`Tokenizer`] with additional (non-standard) length tags.
+    ///
+    /// The supplied values are additive, they never replace the standard set.
+    /// Tag 0 is reserved as the malformed-field sentinel and is ignored.
+    pub fn with_length_tags(extras: impl IntoIterator<Item = u32>) -> Self {
+        let mut length_tags: Vec<u32> = length_tags::STANDARD
+            .iter()
+            .copied()
+            .chain(extras.into_iter().filter(|&tag| tag != MALFORMED_TAG))
+            .collect();
+        length_tags.sort_unstable();
+        length_tags.dedup();
+        Self { length_tags }
+    }
+
+    /// Tokenises exactly one complete FIX message into a [`RawMessage`].
+    ///
+    /// The bytes must contain a single well-framed message.
+    /// Frame-level issues surface as [`TokenizeError`], while malformed
+    /// fields inside a valid frame are indexed under [`MALFORMED_TAG`].
+    pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
+        check_frame(&bytes)?;
+        let fields = self.tokenize_fields(&bytes);
+
+        Ok(RawMessage::new(bytes, fields))
+    }
+
+    fn tokenize_fields(&self, bytes: &[u8]) -> Vec<RawField> {
+        let mut fields = Vec::with_capacity(bytes.len() / 8);
+        let mut pos = 0;
+        let mut data_len: Option<usize> = None;
+
+        while let Some((field, next)) = next_field(bytes, pos, data_len.take()) {
+            data_len = self.pending_data_len(bytes, field);
+            fields.push(field);
+            pos = next;
+        }
+
+        fields
+    }
+
+    /// The value of `field` when it is a well-formed length tag, so the next
+    /// field's value can be read by extent instead of scanned for SOH.
+    fn pending_data_len(&self, bytes: &[u8], field: RawField) -> Option<usize> {
+        if !self.is_length_tag(field.tag) {
+            return None;
+        }
+        let value = &bytes[field.value_start as usize..field.value_end as usize];
+        parse_u32(value).map(|len| len as usize)
+    }
+
+    fn is_length_tag(&self, tag: u32) -> bool {
+        self.length_tags.first().is_some_and(|&min| tag >= min)
+            && self.length_tags.binary_search(&tag).is_ok()
+    }
+}
 
 /// Issues that can arise when the bytes handed to the tokeniser are not a valid FIX message.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -19,40 +88,19 @@ pub enum TokenizeError {
     TooLargeToIndex,
 }
 
-impl Tokenizer {
-    pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
-        check_frame(&bytes)?;
-        let fields = tokenize_fields(&bytes);
-
-        Ok(RawMessage::new(bytes, fields))
-    }
-}
-
-fn tokenize_fields(bytes: &[u8]) -> Vec<RawField> {
-    // TODO: decide what capacity to start with
-    let mut fields = Vec::new();
-    let mut pos = 0;
-
-    while let Some((field, next)) = next_field(bytes, pos) {
-        fields.push(field);
-        pos = next;
-    }
-
-    fields
-}
-
-fn next_field(bytes: &[u8], pos: usize) -> Option<(RawField, usize)> {
+fn next_field(bytes: &[u8], pos: usize, data_len: Option<usize>) -> Option<(RawField, usize)> {
     match find_tag_end(bytes, pos) {
         None => None,
         Some(TagEnd::Equals(delimiter_pos)) => {
-            let value_end = match find_soh(bytes, delimiter_pos) {
-                None => bytes.len(),
-                Some(end) => end,
-            };
             let tag = parse_u32(&bytes[pos..delimiter_pos]).unwrap_or(MALFORMED_TAG);
+            let value_start = delimiter_pos + 1;
+            let value_end = data_len
+                .and_then(|len| data_value_end(bytes, value_start, len))
+                .or_else(|| find_soh(bytes, value_start))
+                .unwrap_or(bytes.len());
             let field = RawField {
                 tag,
-                value_start: (delimiter_pos + 1) as u32,
+                value_start: value_start as u32,
                 value_end: value_end as u32,
             };
 
@@ -113,6 +161,16 @@ fn find_soh(bytes: &[u8], from: usize) -> Option<usize> {
         .map(|rel| from + rel)
 }
 
+/// End of a length-delimited value.
+///
+/// Returns `None` unless the byte immediately after the claimed extent is SOH.
+/// A length that overruns the frame or lands mid-value is distrusted and the
+/// caller falls back to SOH scanning.
+fn data_value_end(bytes: &[u8], value_start: usize, len: usize) -> Option<usize> {
+    let end = value_start.checked_add(len)?;
+    (bytes.get(end) == Some(&SOH)).then_some(end)
+}
+
 fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
     let scanner = Scanner::new(u32::MAX as usize);
     match scanner.scan(bytes) {
@@ -145,7 +203,7 @@ mod tests {
     #[track_caller]
     fn tokenize_body(body: &str) -> RawMessage {
         let frame = construct_valid_frame("FIX.4.4", body);
-        let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
+        let message = Tokenizer::default().tokenize(Bytes::from(frame)).unwrap();
         assert_tiles(&message);
         message
     }
@@ -216,7 +274,7 @@ mod tests {
         #[test]
         fn valid_message() {
             let frame = to_wire("8=FIX.4.4|9=41|35=0|49=A|56=B|34=1|52=20260730-10:00:00|10=123|");
-            let message = Tokenizer.tokenize(Bytes::from(frame)).unwrap();
+            let message = Tokenizer::default().tokenize(Bytes::from(frame)).unwrap();
             assert_tiles(&message);
 
             let expected_fields = [
@@ -269,7 +327,9 @@ mod tests {
             let mut bytes = construct_valid_frame("FIX.4.4", "35=0|");
             bytes.pop();
 
-            let error = Tokenizer.tokenize(Bytes::from(bytes)).unwrap_err();
+            let error = Tokenizer::default()
+                .tokenize(Bytes::from(bytes))
+                .unwrap_err();
             assert_eq!(error, TokenizeError::Incomplete);
         }
 
@@ -277,7 +337,9 @@ mod tests {
         fn absurd_body_length_is_too_large_to_index() {
             let bytes = to_wire("8=FIX.4.4|9=4294967295|35=0|");
 
-            let error = Tokenizer.tokenize(Bytes::from(bytes)).unwrap_err();
+            let error = Tokenizer::default()
+                .tokenize(Bytes::from(bytes))
+                .unwrap_err();
             assert_eq!(error, TokenizeError::TooLargeToIndex);
         }
 
@@ -287,7 +349,9 @@ mod tests {
             let frame_len = bytes.len();
             bytes.extend_from_slice(&construct_valid_frame("FIX.4.4", "35=0|"));
 
-            let error = Tokenizer.tokenize(Bytes::from(bytes)).unwrap_err();
+            let error = Tokenizer::default()
+                .tokenize(Bytes::from(bytes))
+                .unwrap_err();
             assert_eq!(error, TokenizeError::TrailingBytes { frame_len });
         }
     }
@@ -345,6 +409,123 @@ mod tests {
                     (58, "ok"),
                 ],
             );
+        }
+    }
+
+    /// Tests for length-delimited data fields, whose values may contain SOH.
+    mod data_fields {
+        use super::*;
+        use crate::message::MALFORMED_TAG;
+
+        #[test]
+        fn value_with_embedded_soh() {
+            let message = tokenize_body("35=0|95=3|96=a|b|58=ok|");
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (95, "3"), (96, "a\x01b"), (58, "ok")],
+            );
+        }
+
+        #[test]
+        fn value_with_several_sohs() {
+            let message = tokenize_body("35=0|95=5|96=a|b|c|58=ok|");
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (95, "5"), (96, "a\x01b\x01c"), (58, "ok")],
+            );
+        }
+
+        #[test]
+        fn zero_length_value() {
+            let message = tokenize_body("35=0|95=0|96=|58=ok|");
+            assert_body_entries(&message, &[(35, "0"), (95, "0"), (96, ""), (58, "ok")]);
+        }
+
+        #[test]
+        fn data_value_last_in_body() {
+            let message = tokenize_body("35=0|95=3|96=a|b|");
+            assert_body_entries(&message, &[(35, "0"), (95, "3"), (96, "a\x01b")]);
+        }
+
+        #[test]
+        fn overrunning_length_is_distrusted() {
+            let message = tokenize_body("35=0|95=4294967295|96=ab|58=ok|");
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (95, "4294967295"), (96, "ab"), (58, "ok")],
+            );
+        }
+
+        #[test]
+        fn non_numeric_length_falls_back_to_scanning() {
+            let message = tokenize_body("35=0|95=abc|96=x|y|58=ok|");
+            assert_body_entries(
+                &message,
+                &[
+                    (35, "0"),
+                    (95, "abc"),
+                    (96, "x"),
+                    (MALFORMED_TAG, "y"),
+                    (58, "ok"),
+                ],
+            );
+        }
+
+        #[test]
+        fn short_length_surfaces_junk_after_the_data() {
+            let message = tokenize_body("35=0|95=1|96=a|b|58=ok|");
+            assert_body_entries(
+                &message,
+                &[
+                    (35, "0"),
+                    (95, "1"),
+                    (96, "a"),
+                    (MALFORMED_TAG, "b"),
+                    (58, "ok"),
+                ],
+            );
+        }
+
+        #[test]
+        fn dialect_extra_delimits_data() {
+            let frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|58=ok|");
+            let message = Tokenizer::with_length_tags([5001])
+                .tokenize(Bytes::from(frame))
+                .unwrap();
+            assert_tiles(&message);
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (5001, "3"), (5002, "a\x01b"), (58, "ok")],
+            );
+        }
+
+        #[test]
+        fn standard_set_survives_extras() {
+            let frame = construct_valid_frame("FIX.4.4", "35=0|95=3|96=a|b|");
+            let message = Tokenizer::with_length_tags([5001])
+                .tokenize(Bytes::from(frame))
+                .unwrap();
+            assert_tiles(&message);
+            assert_body_entries(&message, &[(35, "0"), (95, "3"), (96, "a\x01b")]);
+        }
+
+        #[test]
+        fn extra_below_the_standard_minimum() {
+            let frame = construct_valid_frame("FIX.4.4", "35=0|42=3|58=a|b|11=ok|");
+            let message = Tokenizer::with_length_tags([42])
+                .tokenize(Bytes::from(frame))
+                .unwrap();
+            assert_tiles(&message);
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (42, "3"), (58, "a\x01b"), (11, "ok")],
+            );
+        }
+
+        #[test]
+        fn tag_zero_extra_is_ignored() {
+            let tokenizer = Tokenizer::with_length_tags([0]);
+            assert!(!tokenizer.is_length_tag(MALFORMED_TAG));
         }
     }
 }

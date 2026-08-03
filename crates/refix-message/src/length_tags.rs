@@ -1,0 +1,25 @@
+/// Length tags whose value gives the byte count of the immediately following
+/// data field.
+///
+/// Derived from the QuickFIX FIX 4.0 - 5.0 SP2 dictionaries:
+/// every LENGTH field paired with a DATA field.
+///
+/// *Note*: these values must remain ordered.
+pub(crate) const STANDARD: &[u32] = &[
+    90, 93, 95, 212, 348, 350, 352, 354, 356, 358, 360, 362, 364, 445, 618, 621, 1184, 1277, 1280,
+    1282, 1397, 1401, 1403, 1468, 1525, 1578, 1620, 1664, 1678, 1733, 1871, 1874, 2072, 2074, 2111,
+    2179, 2287, 2351, 2372, 2481, 2494, 2522, 2637, 2651, 2665, 2715, 2718, 2721, 2797, 2802, 2809,
+    2815, 40004, 40008, 40978, 40980, 40982, 40984, 40986, 40988, 41083, 41101, 41107, 41256,
+    41320, 41324, 41458, 41476, 41482, 41653, 41710, 41806, 41811, 41873, 41969, 42025, 42171,
+    42451, 42652, 42947, 43109, 43110, 43111,
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn standard_is_sorted_and_unique() {
+        assert!(STANDARD.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+}
