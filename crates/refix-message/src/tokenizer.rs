@@ -3,6 +3,8 @@ use crate::message::RawField;
 use crate::{MALFORMED_TAG, RawMessage, length_tags};
 use bytes::Bytes;
 
+/// Splits a framed FIX message into its fields.
+#[derive(Clone, Debug)]
 pub struct Tokenizer {
     length_tags: Vec<u32>,
 }
@@ -16,7 +18,10 @@ impl Default for Tokenizer {
 }
 
 impl Tokenizer {
-    /// Construct a tokenizer with additional (non-standard) length tags.
+    /// Construct a [`Tokenizer`] with additional (non-standard) length tags.
+    ///
+    /// The supplied values are additive, they never replace the standard set.
+    /// Tag 0 is reserved as the malformed-field sentinel and is ignored.
     pub fn with_length_tags(extras: impl IntoIterator<Item = u32>) -> Self {
         let mut length_tags: Vec<u32> = length_tags::STANDARD
             .iter()
@@ -28,6 +33,11 @@ impl Tokenizer {
         Self { length_tags }
     }
 
+    /// Tokenises exactly one complete FIX message into a [`RawMessage`].
+    ///
+    /// The bytes must contain a single well-framed message.
+    /// Frame-level issues surface as [`TokenizeError`], while malformed
+    /// fields inside a valid frame are indexed under [`MALFORMED_TAG`].
     pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
         check_frame(&bytes)?;
         let fields = self.tokenize_fields(&bytes);
@@ -153,6 +163,10 @@ fn find_soh(bytes: &[u8], from: usize) -> Option<usize> {
 }
 
 /// End of a length-delimited value.
+///
+/// Returns `None` unless the byte immediately after the claimed extent is SOH.
+/// A length that overruns the frame or lands mid-value is distrusted and the
+/// caller falls back to SOH scanning.
 fn data_value_end(bytes: &[u8], value_start: usize, len: usize) -> Option<usize> {
     let end = value_start.checked_add(len)?;
     (bytes.get(end) == Some(&SOH)).then_some(end)
