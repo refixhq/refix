@@ -18,7 +18,7 @@ impl Default for Tokenizer {
 }
 
 impl Tokenizer {
-    /// Construct a [`Tokenizer`] with additional (non-standard) length tags.
+    /// Constructs a [`Tokenizer`] with additional (non-standard) length tags.
     ///
     /// The supplied values are additive, they never replace the standard set.
     /// Tag 0 is reserved as the malformed-field sentinel and is ignored.
@@ -46,8 +46,7 @@ impl Tokenizer {
     }
 
     fn tokenize_fields(&self, bytes: &[u8]) -> Vec<RawField> {
-        // TODO: decide what capacity to start with
-        let mut fields = Vec::new();
+        let mut fields = Vec::with_capacity(bytes.len() / 8);
         let mut pos = 0;
         let mut data_len: Option<usize> = None;
 
