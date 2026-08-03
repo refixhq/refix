@@ -16,6 +16,7 @@ impl Default for Tokenizer {
 }
 
 impl Tokenizer {
+    /// Construct a tokenizer with additional (non-standard) length tags.
     pub fn with_length_tags(extras: impl IntoIterator<Item = u32>) -> Self {
         let mut length_tags: Vec<u32> = length_tags::STANDARD
             .iter()
@@ -395,6 +396,123 @@ mod tests {
                     (58, "ok"),
                 ],
             );
+        }
+    }
+
+    /// Tests for length-delimited data fields, whose values may contain SOH.
+    mod data_fields {
+        use super::*;
+        use crate::message::MALFORMED_TAG;
+
+        #[test]
+        fn value_with_embedded_soh() {
+            let message = tokenize_body("35=0|95=3|96=a|b|58=ok|");
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (95, "3"), (96, "a\x01b"), (58, "ok")],
+            );
+        }
+
+        #[test]
+        fn value_with_several_sohs() {
+            let message = tokenize_body("35=0|95=5|96=a|b|c|58=ok|");
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (95, "5"), (96, "a\x01b\x01c"), (58, "ok")],
+            );
+        }
+
+        #[test]
+        fn zero_length_value() {
+            let message = tokenize_body("35=0|95=0|96=|58=ok|");
+            assert_body_entries(&message, &[(35, "0"), (95, "0"), (96, ""), (58, "ok")]);
+        }
+
+        #[test]
+        fn data_value_last_in_body() {
+            let message = tokenize_body("35=0|95=3|96=a|b|");
+            assert_body_entries(&message, &[(35, "0"), (95, "3"), (96, "a\x01b")]);
+        }
+
+        #[test]
+        fn overrunning_length_is_distrusted() {
+            let message = tokenize_body("35=0|95=4294967295|96=ab|58=ok|");
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (95, "4294967295"), (96, "ab"), (58, "ok")],
+            );
+        }
+
+        #[test]
+        fn non_numeric_length_falls_back_to_scanning() {
+            let message = tokenize_body("35=0|95=abc|96=x|y|58=ok|");
+            assert_body_entries(
+                &message,
+                &[
+                    (35, "0"),
+                    (95, "abc"),
+                    (96, "x"),
+                    (MALFORMED_TAG, "y"),
+                    (58, "ok"),
+                ],
+            );
+        }
+
+        #[test]
+        fn short_length_surfaces_junk_after_the_data() {
+            let message = tokenize_body("35=0|95=1|96=a|b|58=ok|");
+            assert_body_entries(
+                &message,
+                &[
+                    (35, "0"),
+                    (95, "1"),
+                    (96, "a"),
+                    (MALFORMED_TAG, "b"),
+                    (58, "ok"),
+                ],
+            );
+        }
+
+        #[test]
+        fn dialect_extra_delimits_data() {
+            let frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|58=ok|");
+            let message = Tokenizer::with_length_tags([5001])
+                .tokenize(Bytes::from(frame))
+                .unwrap();
+            assert_tiles(&message);
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (5001, "3"), (5002, "a\x01b"), (58, "ok")],
+            );
+        }
+
+        #[test]
+        fn standard_set_survives_extras() {
+            let frame = construct_valid_frame("FIX.4.4", "35=0|95=3|96=a|b|");
+            let message = Tokenizer::with_length_tags([5001])
+                .tokenize(Bytes::from(frame))
+                .unwrap();
+            assert_tiles(&message);
+            assert_body_entries(&message, &[(35, "0"), (95, "3"), (96, "a\x01b")]);
+        }
+
+        #[test]
+        fn extra_below_the_standard_minimum() {
+            let frame = construct_valid_frame("FIX.4.4", "35=0|42=3|58=a|b|11=ok|");
+            let message = Tokenizer::with_length_tags([42])
+                .tokenize(Bytes::from(frame))
+                .unwrap();
+            assert_tiles(&message);
+            assert_body_entries(
+                &message,
+                &[(35, "0"), (42, "3"), (58, "a\x01b"), (11, "ok")],
+            );
+        }
+
+        #[test]
+        fn tag_zero_extra_is_ignored() {
+            let tokenizer = Tokenizer::with_length_tags([0]);
+            assert!(!tokenizer.is_length_tag(MALFORMED_TAG));
         }
     }
 }

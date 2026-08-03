@@ -15,7 +15,7 @@ pub(crate) struct Tokenizer(CoreTokenizer);
 impl Tokenizer {
     #[new]
     fn new() -> Self {
-        Self(CoreTokenizer)
+        Self(CoreTokenizer::default())
     }
 
     fn tokenize(&self, data: &[u8]) -> PyResult<crate::message::RawMessage> {
