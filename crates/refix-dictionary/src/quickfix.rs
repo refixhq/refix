@@ -5,6 +5,7 @@ use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
+/// Parses a QuickFIX-format XML data dictionary into a [`Dictionary`].
 pub fn parse(xml: &str) -> Result<Parsed, Error> {
     let document = roxmltree::Document::parse(xml).map_err(Error::Xml)?;
     let root = document.root_element();
@@ -235,12 +236,17 @@ fn int_attribute_or<T: FromStr<Err = ParseIntError>>(
     }
 }
 
+/// The result of a successful parse.
+///
+/// This contains the parsed dictionary as well as any
+/// [`Warning`] that was produced along the way.
 #[derive(Debug)]
 pub struct Parsed {
     pub dictionary: Dictionary,
     pub warnings: Vec<Warning>,
 }
 
+/// A construct the parser recognised but the model does not hold yet.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Warning {
     UnsupportedEnumValues { field: String },
@@ -278,6 +284,9 @@ impl fmt::Display for Warning {
     }
 }
 
+/// A defect that prevents producing a dictionary at all.
+///
+/// Anything survivable is a [`Warning`] instead; see [`parse`].
 #[derive(Debug)]
 pub enum Error {
     Xml(roxmltree::Error),
