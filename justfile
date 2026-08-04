@@ -35,9 +35,10 @@ coverage-rust:
 coverage-python:
     cd {{ py }} && uv run pytest --benchmark-disable --cov=refix --cov-report=xml
 
-# Format Rust code
+# Format Rust and Python code
 fmt:
     cargo fmt --all
+    cd {{ py }} && uv run ruff format
 
 # Check formatting and lints without modifying anything
 lint:
@@ -45,6 +46,8 @@ lint:
     cargo clippy --all-targets
     cargo fmt --manifest-path crates/refix-message/fuzz/Cargo.toml --all -- --check
     cargo clippy --manifest-path crates/refix-message/fuzz/Cargo.toml --all-targets
+    cd {{ py }} && uv run ruff format --check
+    cd {{ py }} && uv run ruff check
 
 # Type-check the Python layer
 typecheck:

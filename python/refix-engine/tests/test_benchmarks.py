@@ -1,4 +1,5 @@
-from typing import Any, Callable, Protocol, TypeVar
+from collections.abc import Callable
+from typing import Any, Protocol, TypeVar
 
 import refix
 from test_tokenizer import construct_valid_frame

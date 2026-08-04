@@ -7,9 +7,11 @@ from refix._core import Garble, MessageStream, RawMessage
 _CHUNK_SIZE = 65536
 
 
-def read_log(source: str | os.PathLike[str] | BinaryIO,
-             *,
-             extra_length_tags: Sequence[int] = (), ) -> Iterator[RawMessage | Garble]:
+def read_log(
+    source: str | os.PathLike[str] | BinaryIO,
+    *,
+    extra_length_tags: Sequence[int] = (),
+) -> Iterator[RawMessage | Garble]:
     """Yields each message in a FIX message log, in order.
 
     Bytes between frames that are not FIX (timestamps, newlines, junk) are yielded as `Garble`.
@@ -22,7 +24,9 @@ def read_log(source: str | os.PathLike[str] | BinaryIO,
         yield from _drive(source, extra_length_tags)
 
 
-def _drive(file: BinaryIO, extra_length_tags: Sequence[int]) -> Iterator[RawMessage | Garble]:
+def _drive(
+    file: BinaryIO, extra_length_tags: Sequence[int]
+) -> Iterator[RawMessage | Garble]:
     stream = MessageStream(extra_length_tags=extra_length_tags)
     while chunk := file.read(_CHUNK_SIZE):
         stream.feed(chunk)

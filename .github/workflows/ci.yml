@@ -27,6 +27,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Install just
         uses: taiki-e/install-action@just
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
       - name: Check formatting and lints
         run: just lint
 
