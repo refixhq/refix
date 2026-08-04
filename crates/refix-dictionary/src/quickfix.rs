@@ -12,6 +12,14 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     }
 
     let mut warnings = Vec::new();
+    for section in ["header", "trailer", "components"] {
+        if root.children().any(|node| node.has_tag_name(section)) {
+            warnings.push(Warning::UnsupportedSection {
+                section: section.to_owned(),
+            });
+        }
+    }
+
     let version = parse_version(root)?;
     let fields = parse_fields(root, &mut warnings)?;
     let messages = parse_messages(root, &fields, &mut warnings)?;
@@ -374,6 +382,156 @@ mod tests {
                 error,
                 Error::MissingAttribute { ref element, ref attribute }
                     if element == "field" && attribute == "number"
+            ));
+        }
+    }
+
+    mod messages {
+        use super::*;
+
+        const DICTIONARY: &str = "\
+<fix major='4' minor='4'>
+ <fields>
+  <field number='11' name='ClOrdID' type='STRING'/>
+  <field number='58' name='Text' type='STRING'/>
+ </fields>
+ <messages>
+  <message name='NewOrderSingle' msgtype='D' msgcat='app'>
+   <field name='ClOrdID' required='Y'/>
+   <field name='Text'/>
+   <component name='Parties' required='N'/>
+   <group name='NoAllocs' required='N'/>
+  </message>
+ </messages>
+</fix>";
+
+        #[test]
+        fn parses_message_definitions() {
+            let messages = parse(DICTIONARY).unwrap().dictionary.messages;
+
+            assert_eq!(
+                messages,
+                vec![Message {
+                    name: "NewOrderSingle".to_owned(),
+                    msg_type: "D".to_owned(),
+                    fields: vec![
+                        FieldRef {
+                            tag: 11,
+                            is_required: true,
+                        },
+                        FieldRef {
+                            tag: 58,
+                            is_required: false,
+                        },
+                    ],
+                    category: Category::App,
+                }]
+            );
+        }
+
+        #[test]
+        fn components_and_groups_surface_as_warnings() {
+            let parsed = parse(DICTIONARY).unwrap();
+
+            assert_eq!(
+                parsed.warnings,
+                vec![
+                    Warning::UnsupportedComponent {
+                        message: "NewOrderSingle".to_owned(),
+                        component: "Parties".to_owned(),
+                    },
+                    Warning::UnsupportedGroup {
+                        message: "NewOrderSingle".to_owned(),
+                        group: "NoAllocs".to_owned(),
+                    },
+                ]
+            );
+        }
+
+        #[test]
+        fn unknown_message_child_surfaces_as_a_warning() {
+            let parsed = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='Heartbeat' msgtype='0' msgcat='admin'><bogus/></message>\
+                 </messages></fix>",
+            )
+            .unwrap();
+
+            assert_eq!(
+                parsed.warnings,
+                vec![Warning::UnsupportedElement {
+                    message: "Heartbeat".to_owned(),
+                    element: "bogus".to_owned(),
+                }]
+            );
+        }
+
+        #[test]
+        fn missing_messages_section_yields_no_messages() {
+            let parsed = parse("<fix major='4' minor='4'/>").unwrap();
+            assert!(parsed.dictionary.messages.is_empty());
+        }
+
+        #[test]
+        fn field_ref_to_undefined_field_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='Heartbeat' msgtype='0' msgcat='admin'>\
+                 <field name='TestReqID'/></message></messages></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::UnknownField { ref message, ref field }
+                    if message == "Heartbeat" && field == "TestReqID"
+            ));
+        }
+
+        #[test]
+        fn invalid_required_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'>\
+                 <fields><field number='112' name='TestReqID' type='STRING'/></fields>\
+                 <messages><message name='Heartbeat' msgtype='0' msgcat='admin'>\
+                 <field name='TestReqID' required='X'/></message></messages></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::InvalidAttribute { ref attribute, ref value, .. }
+                    if attribute == "required" && value == "X"
+            ));
+        }
+
+        #[test]
+        fn missing_msgcat_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='Heartbeat' msgtype='0'/></messages></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::MissingAttribute { ref element, ref attribute }
+                    if element == "message" && attribute == "msgcat"
+            ));
+        }
+
+        #[test]
+        fn invalid_msgcat_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='Heartbeat' msgtype='0' msgcat='session'/></messages></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::InvalidAttribute { ref attribute, ref value, .. }
+                    if attribute == "msgcat" && value == "session"
             ));
         }
     }

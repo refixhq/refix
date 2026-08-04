@@ -2,7 +2,7 @@
 //! must succeed, and anything not yet modelled surfaces as warnings.
 
 use refix_dictionary::quickfix::{self, Warning};
-use refix_dictionary::{DataType, Field, Protocol, Version};
+use refix_dictionary::{Category, DataType, Field, FieldRef, Message, Protocol, Version};
 
 const FIX44: &str = include_str!("data/quickfix/FIX44.xml");
 
@@ -31,12 +31,28 @@ fn parses_the_full_fix44_dictionary() {
         }
     );
 
-    // 245 fields carry enum values, none of which are modelled yet.
-    assert_eq!(parsed.warnings.len(), 245);
+    let messages = &parsed.dictionary.messages;
+    assert_eq!(messages.len(), 93);
+    assert_eq!(
+        messages[0],
+        Message {
+            name: "Heartbeat".to_owned(),
+            msg_type: "0".to_owned(),
+            fields: vec![FieldRef {
+                tag: 112,
+                is_required: false,
+            }],
+            category: Category::Admin,
+        }
+    );
+
+    // 3 unmodelled sections, 245 fields carrying enum values, 390 component
+    // references and 1 group across the messages.
+    assert_eq!(parsed.warnings.len(), 639);
     assert_eq!(
         parsed.warnings[0],
-        Warning::UnsupportedEnumValues {
-            field: "AdvSide".to_owned(),
+        Warning::UnsupportedSection {
+            section: "header".to_owned(),
         }
     );
 }
