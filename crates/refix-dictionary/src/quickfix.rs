@@ -1,5 +1,6 @@
-use crate::{DataType, Dictionary, Field, Protocol, Version};
+use crate::{Category, DataType, Dictionary, Field, FieldRef, Message, Protocol, Version};
 use roxmltree::Node;
+use std::collections::HashMap;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
@@ -13,10 +14,11 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     let mut warnings = Vec::new();
     let version = parse_version(root)?;
     let fields = parse_fields(root, &mut warnings)?;
+    let messages = parse_messages(root, &fields, &mut warnings)?;
 
     let dictionary = Dictionary {
         version,
-        messages: vec![],
+        messages,
         fields,
     };
 
@@ -76,6 +78,109 @@ fn parse_data_type(name: String) -> DataType {
     }
 }
 
+fn parse_messages(
+    root: Node,
+    fields: &[Field],
+    warnings: &mut Vec<Warning>,
+) -> Result<Vec<Message>, Error> {
+    let Some(section) = root.children().find(|node| node.has_tag_name("messages")) else {
+        return Ok(Vec::new());
+    };
+
+    let tags_by_name: HashMap<&str, u32> = fields
+        .iter()
+        .map(|field| (field.name.as_str(), field.tag))
+        .collect();
+
+    section
+        .children()
+        .filter(|node| node.has_tag_name("message"))
+        .map(|node| parse_message(node, &tags_by_name, warnings))
+        .collect()
+}
+
+fn parse_message(
+    node: Node,
+    tags_by_name: &HashMap<&str, u32>,
+    warnings: &mut Vec<Warning>,
+) -> Result<Message, Error> {
+    let name = string_attribute(node, "name")?;
+    let mut fields = Vec::new();
+    let category = parse_category(node)?;
+
+    for child in node.children().filter(Node::is_element) {
+        match child.tag_name().name() {
+            "field" => fields.push(parse_field_ref(child, &name, tags_by_name)?),
+            "component" => warnings.push(Warning::UnsupportedComponent {
+                message: name.clone(),
+                component: string_attribute(child, "name")?,
+            }),
+            "group" => warnings.push(Warning::UnsupportedGroup {
+                message: name.clone(),
+                group: string_attribute(child, "name")?,
+            }),
+            other => warnings.push(Warning::UnsupportedElement {
+                message: name.clone(),
+                element: other.to_owned(),
+            }),
+        }
+    }
+
+    Ok(Message {
+        name,
+        msg_type: string_attribute(node, "msgtype")?,
+        fields,
+        category,
+    })
+}
+
+fn parse_field_ref(
+    node: Node,
+    message: &str,
+    tags_by_name: &HashMap<&str, u32>,
+) -> Result<FieldRef, Error> {
+    let name = string_attribute(node, "name")?;
+    let Some(&tag) = tags_by_name.get(name.as_str()) else {
+        return Err(Error::UnknownField {
+            message: message.to_owned(),
+            field: name,
+        });
+    };
+
+    Ok(FieldRef {
+        tag,
+        is_required: required_attribute(node)?,
+    })
+}
+
+fn parse_category(node: Node) -> Result<Category, Error> {
+    match node.attribute("msgcat") {
+        Some("admin") => Ok(Category::Admin),
+        Some("app") => Ok(Category::App),
+        Some(other) => Err(Error::InvalidAttribute {
+            element: node.tag_name().name().to_owned(),
+            attribute: "msgcat".to_owned(),
+            value: other.to_owned(),
+        }),
+        None => Err(Error::MissingAttribute {
+            element: node.tag_name().name().to_owned(),
+            attribute: "msgcat".to_owned(),
+        }),
+    }
+}
+
+fn required_attribute(node: Node) -> Result<bool, Error> {
+    match node.attribute("required") {
+        Some("Y") => Ok(true),
+        Some("N") | None => Ok(false),
+        Some(other) => Err(Error::InvalidAttribute {
+            element: node.tag_name().name().to_owned(),
+            attribute: "required".to_owned(),
+            value: other.to_owned(),
+        }),
+    }
+}
+
 fn string_attribute(node: Node, name: &str) -> Result<String, Error> {
     node.attribute(name)
         .map(str::to_owned)
@@ -119,6 +224,10 @@ pub struct Parsed {
 #[derive(Debug, Eq, PartialEq)]
 pub enum Warning {
     UnsupportedEnumValues { field: String },
+    UnsupportedComponent { message: String, component: String },
+    UnsupportedGroup { message: String, group: String },
+    UnsupportedElement { message: String, element: String },
+    UnsupportedSection { section: String },
 }
 
 #[derive(Debug)]
@@ -131,6 +240,15 @@ pub enum Error {
         attribute: String,
     },
     InvalidNumber {
+        element: String,
+        attribute: String,
+        value: String,
+    },
+    UnknownField {
+        message: String,
+        field: String,
+    },
+    InvalidAttribute {
         element: String,
         attribute: String,
         value: String,
