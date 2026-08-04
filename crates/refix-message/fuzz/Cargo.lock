@@ -92,6 +92,7 @@ dependencies = [
 name = "refix-message-fuzz"
 version = "0.0.0"
 dependencies = [
+ "bytes",
  "libfuzzer-sys",
  "refix-message",
 ]
