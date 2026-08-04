@@ -53,3 +53,9 @@ typecheck:
 # Build a release wheel
 wheel:
     cd {{ py }} && uv run maturin build --release
+
+# Run a fuzz target (requires nightly and cargo-fuzz)
+fuzz target seeds time="60":
+    mkdir -p crates/refix-message/fuzz/corpus/{{ target }}
+    cd crates/refix-message && cargo +nightly fuzz run {{ target }} \
+        fuzz/corpus/{{ target }} fuzz/{{ seeds }} -- -dict=fuzz/dict.txt -max_total_time={{ time }}
