@@ -36,7 +36,7 @@ fn to_py_err(error: TokenizeError) -> PyErr {
     }
 }
 
-fn reason_str(reason: GarbledReason) -> &'static str {
+pub(crate) fn reason_str(reason: GarbledReason) -> &'static str {
     match reason {
         GarbledReason::MissingBeginString => "missing_begin_string",
         GarbledReason::MalformedBeginString => "malformed_begin_string",

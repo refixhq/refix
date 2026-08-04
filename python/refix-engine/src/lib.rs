@@ -12,6 +12,7 @@ fn version() -> &'static str {
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add_class::<stream::Garble>()?;
     m.add_class::<stream::MessageStream>()?;
     m.add_class::<message::RawMessage>()?;
     m.add_class::<tokenizer::Tokenizer>()?;
