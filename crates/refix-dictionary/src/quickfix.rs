@@ -1,6 +1,6 @@
 use crate::{Category, DataType, Dictionary, Field, FieldRef, Message, Protocol, Version};
 use roxmltree::Node;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::num::ParseIntError;
 use std::str::FromStr;
 
@@ -56,11 +56,22 @@ fn parse_fields(root: Node, warnings: &mut Vec<Warning>) -> Result<Vec<Field>, E
         return Ok(Vec::new());
     };
 
-    section
+    let fields: Vec<Field> = section
         .children()
         .filter(|node| node.has_tag_name("field"))
         .map(|node| parse_field(node, warnings))
-        .collect()
+        .collect::<Result<_, _>>()?;
+
+    let mut seen = HashSet::new();
+    for field in &fields {
+        if !seen.insert(field.name.as_str()) {
+            return Err(Error::DuplicateField {
+                field: field.name.clone(),
+            });
+        }
+    }
+
+    Ok(fields)
 }
 
 fn parse_field(node: Node, warnings: &mut Vec<Warning>) -> Result<Field, Error> {
@@ -256,6 +267,9 @@ pub enum Error {
         message: String,
         field: String,
     },
+    DuplicateField {
+        field: String,
+    },
     InvalidAttribute {
         element: String,
         attribute: String,
@@ -370,6 +384,19 @@ mod tests {
         fn missing_fields_section_yields_no_fields() {
             let parsed = parse("<fix major='4' minor='4'/>").unwrap();
             assert!(parsed.dictionary.fields.is_empty());
+        }
+
+        #[test]
+        fn duplicate_field_definition_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><fields>\
+                 <field number='11' name='ClOrdID' type='STRING'/>\
+                 <field number='12' name='ClOrdID' type='STRING'/>\
+                 </fields></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(error, Error::DuplicateField { ref field } if field == "ClOrdID"));
         }
 
         #[test]
