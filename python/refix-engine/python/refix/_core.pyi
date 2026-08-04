@@ -17,6 +17,10 @@ class Tokenizer:
     def tokenize(self, data: bytes) -> RawMessage: ...
 
 
+class MessageStream:
+    def __init__(self, *, extra_length_tags: Sequence[int] = ...) -> None: ...
+
+
 MALFORMED_TAG: int
 
 
