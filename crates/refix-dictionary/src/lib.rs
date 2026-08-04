@@ -3,6 +3,6 @@
 //! read the model and never touch the external formats directly.
 
 mod dictionary;
-mod quickfix;
+pub mod quickfix;
 
 pub use dictionary::*;
