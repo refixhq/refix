@@ -22,4 +22,5 @@ categories = ["encoding", "parsing", "finance"]
 bytes = "1.12.1"
 pyo3 = "0.29.0"
 refix-message = { version = "0.2.0", path = "crates/refix-message" }
+roxmltree = "0.21.0"
 serde = "1.0.229"
