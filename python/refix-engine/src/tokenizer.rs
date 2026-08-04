@@ -14,8 +14,9 @@ pub(crate) struct Tokenizer(CoreTokenizer);
 #[pymethods]
 impl Tokenizer {
     #[new]
-    fn new() -> Self {
-        Self(CoreTokenizer::default())
+    #[pyo3(signature = (*, extra_length_tags = Vec::new()))]
+    fn new(extra_length_tags: Vec<u32>) -> Self {
+        Self(CoreTokenizer::with_extra_length_tags(extra_length_tags))
     }
 
     fn tokenize(&self, data: &[u8]) -> PyResult<crate::message::RawMessage> {

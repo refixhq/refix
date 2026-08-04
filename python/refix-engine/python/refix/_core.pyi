@@ -1,4 +1,5 @@
 import builtins
+from collections.abc import Sequence
 
 
 class RawMessage:
@@ -11,6 +12,8 @@ class RawMessage:
 
 
 class Tokenizer:
+    def __init__(self, *, extra_length_tags: Sequence[int] = ...) -> None: ...
+
     def tokenize(self, data: bytes) -> RawMessage: ...
 
 

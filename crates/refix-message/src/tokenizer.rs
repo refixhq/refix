@@ -22,7 +22,7 @@ impl Tokenizer {
     ///
     /// The supplied values are additive, they never replace the standard set.
     /// Tag 0 is reserved as the malformed-field sentinel and is ignored.
-    pub fn with_length_tags(extras: impl IntoIterator<Item = u32>) -> Self {
+    pub fn with_extra_length_tags(extras: impl IntoIterator<Item = u32>) -> Self {
         let mut length_tags: Vec<u32> = length_tags::STANDARD
             .iter()
             .copied()
@@ -489,7 +489,7 @@ mod tests {
         #[test]
         fn dialect_extra_delimits_data() {
             let frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|58=ok|");
-            let message = Tokenizer::with_length_tags([5001])
+            let message = Tokenizer::with_extra_length_tags([5001])
                 .tokenize(Bytes::from(frame))
                 .unwrap();
             assert_tiles(&message);
@@ -502,7 +502,7 @@ mod tests {
         #[test]
         fn standard_set_survives_extras() {
             let frame = construct_valid_frame("FIX.4.4", "35=0|95=3|96=a|b|");
-            let message = Tokenizer::with_length_tags([5001])
+            let message = Tokenizer::with_extra_length_tags([5001])
                 .tokenize(Bytes::from(frame))
                 .unwrap();
             assert_tiles(&message);
@@ -512,7 +512,7 @@ mod tests {
         #[test]
         fn extra_below_the_standard_minimum() {
             let frame = construct_valid_frame("FIX.4.4", "35=0|42=3|58=a|b|11=ok|");
-            let message = Tokenizer::with_length_tags([42])
+            let message = Tokenizer::with_extra_length_tags([42])
                 .tokenize(Bytes::from(frame))
                 .unwrap();
             assert_tiles(&message);
@@ -524,7 +524,7 @@ mod tests {
 
         #[test]
         fn tag_zero_extra_is_ignored() {
-            let tokenizer = Tokenizer::with_length_tags([0]);
+            let tokenizer = Tokenizer::with_extra_length_tags([0]);
             assert!(!tokenizer.is_length_tag(MALFORMED_TAG));
         }
     }
