@@ -10,6 +10,7 @@ cargo-fuzz = true
 [workspace]
 
 [dependencies]
+bytes = "1"
 libfuzzer-sys = "0.4"
 
 [dependencies.refix-message]
@@ -25,6 +26,13 @@ bench = false
 [[bin]]
 name = "chunking_equivalence"
 path = "fuzz_targets/chunking_equivalence.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tokenize_tiling"
+path = "fuzz_targets/tokenize_tiling.rs"
 test = false
 doc = false
 bench = false
