@@ -1,6 +1,7 @@
 use crate::{Category, DataType, Dictionary, Field, FieldRef, Message, Protocol, Version};
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
@@ -249,6 +250,34 @@ pub enum Warning {
     UnsupportedSection { section: String },
 }
 
+impl fmt::Display for Warning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Warning::UnsupportedEnumValues { field } => {
+                write!(f, "enum values on field '{field}' are not supported yet")
+            }
+            Warning::UnsupportedComponent { message, component } => {
+                write!(
+                    f,
+                    "component '{component}' in message '{message}' is not supported yet"
+                )
+            }
+            Warning::UnsupportedGroup { message, group } => {
+                write!(
+                    f,
+                    "group '{group}' in message '{message}' is not supported yet"
+                )
+            }
+            Warning::UnsupportedElement { message, element } => {
+                write!(f, "unexpected element <{element}> in message '{message}'")
+            }
+            Warning::UnsupportedSection { section } => {
+                write!(f, "section <{section}> is not supported yet")
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     Xml(roxmltree::Error),
@@ -275,6 +304,61 @@ pub enum Error {
         attribute: String,
         value: String,
     },
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::Xml(error) => write!(f, "malformed xml: {error}"),
+            Error::UnexpectedRoot(root) => {
+                write!(f, "unexpected root element <{root}>, expected <fix>")
+            }
+            Error::UnknownProtocol(protocol) => {
+                write!(
+                    f,
+                    "unknown protocol type '{protocol}', expected FIX or FIXT"
+                )
+            }
+            Error::MissingAttribute { element, attribute } => {
+                write!(f, "missing attribute '{attribute}' on <{element}>")
+            }
+            Error::InvalidNumber {
+                element,
+                attribute,
+                value,
+            } => {
+                write!(
+                    f,
+                    "invalid number '{value}' in attribute '{attribute}' of <{element}>"
+                )
+            }
+            Error::UnknownField { message, field } => {
+                write!(f, "message '{message}' references unknown field '{field}'")
+            }
+            Error::DuplicateField { field } => {
+                write!(f, "field '{field}' is defined more than once")
+            }
+            Error::InvalidAttribute {
+                element,
+                attribute,
+                value,
+            } => {
+                write!(
+                    f,
+                    "invalid value '{value}' in attribute '{attribute}' of <{element}>"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::Xml(error) => Some(error),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -614,6 +698,27 @@ mod tests {
         fn oversized_major() {
             let error = parse("<fix major='999' minor='4'/>").unwrap_err();
             assert!(matches!(error, Error::InvalidNumber { ref value, .. } if value == "999"));
+        }
+
+        #[test]
+        fn errors_display_with_context() {
+            let error = parse("<fix major='four' minor='4'/>").unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "invalid number 'four' in attribute 'major' of <fix>"
+            );
+        }
+
+        #[test]
+        fn warnings_display_with_context() {
+            let warning = Warning::UnsupportedComponent {
+                message: "NewOrderSingle".to_owned(),
+                component: "Parties".to_owned(),
+            };
+            assert_eq!(
+                warning.to_string(),
+                "component 'Parties' in message 'NewOrderSingle' is not supported yet"
+            );
         }
 
         #[test]
