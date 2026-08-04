@@ -186,3 +186,35 @@ class TestSentinelRuns:
             (refix.MALFORMED_TAG, b"more"),
             (58, b"ok"),
         ]
+
+
+class TestLengthTags:
+    """Length-delimited data fields, whose values may contain SOH."""
+
+    def test_standard_length_tag_delimits_data(self):
+        message = tokenize_body("35=0|95=3|96=a|b|58=ok|")
+        assert body_entries(message) == [
+            (35, b"0"),
+            (95, b"3"),
+            (96, b"a\x01b"),
+            (58, b"ok"),
+        ]
+
+    def test_dialect_extra_delimits_data(self):
+        frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|58=ok|")
+
+        message = refix.Tokenizer(extra_length_tags=[5001]).tokenize(frame)
+
+        assert body_entries(message) == [
+            (35, b"0"),
+            (5001, b"3"),
+            (5002, b"a\x01b"),
+            (58, b"ok"),
+        ]
+
+    def test_standard_set_survives_extras(self):
+        frame = construct_valid_frame("FIX.4.4", "35=0|95=3|96=a|b|")
+
+        message = refix.Tokenizer(extra_length_tags=[5001]).tokenize(frame)
+
+        assert body_entries(message) == [(35, b"0"), (95, b"3"), (96, b"a\x01b")]
