@@ -1,26 +1,23 @@
-//! The committed QuickFIX dictionary files are well-formed XML with the
-//! expected top-level shape, so frontend work starts from known-good input.
+//! The frontend handles the full, real QuickFIX dictionary files: parsing
+//! must succeed, and anything not yet modelled surfaces as warnings.
+
+use refix_dictionary::quickfix;
+use refix_dictionary::{Protocol, Version};
 
 const FIX44: &str = include_str!("data/quickfix/FIX44.xml");
 
 #[test]
-fn fix44_is_well_formed_xml() {
-    let document = roxmltree::Document::parse(FIX44).unwrap();
-    let root = document.root_element();
+fn parses_the_full_fix44_dictionary() {
+    let parsed = quickfix::parse(FIX44).unwrap();
 
-    assert_eq!(root.tag_name().name(), "fix");
-    assert_eq!(root.attribute("major"), Some("4"));
-    assert_eq!(root.attribute("minor"), Some("4"));
-
-    let messages = root
-        .children()
-        .find(|node| node.has_tag_name("messages"))
-        .unwrap();
     assert_eq!(
-        messages
-            .children()
-            .filter(|node| node.has_tag_name("message"))
-            .count(),
-        93
+        parsed.dictionary.version,
+        Version {
+            protocol: Protocol::Fix,
+            major: 4,
+            minor: 4,
+            service_pack: 0,
+        }
     );
+    assert!(parsed.warnings.is_empty());
 }
