@@ -45,7 +45,7 @@ impl Tokenizer {
         Ok(RawMessage::new(bytes, fields))
     }
 
-    fn tokenize_fields(&self, bytes: &[u8]) -> Vec<RawField> {
+    pub(crate) fn tokenize_fields(&self, bytes: &[u8]) -> Vec<RawField> {
         let mut fields = Vec::with_capacity(bytes.len() / 8);
         let mut pos = 0;
         let mut data_len: Option<usize> = None;
