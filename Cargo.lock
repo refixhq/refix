@@ -109,14 +109,14 @@ dependencies = [
 
 [[package]]
 name = "refix"
-version = "0.0.2"
+version = "0.1.0"
 dependencies = [
  "refix-message",
 ]
 
 [[package]]
 name = "refix-engine"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "pyo3",
@@ -125,7 +125,7 @@ dependencies = [
 
 [[package]]
 name = "refix-message"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytes",
 ]
