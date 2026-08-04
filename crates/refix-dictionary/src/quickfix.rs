@@ -88,3 +88,112 @@ pub enum Error {
         value: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn version_of(xml: &str) -> Version {
+        parse(xml).unwrap().dictionary.version
+    }
+
+    mod version {
+        use super::*;
+
+        #[test]
+        fn full_version_attributes() {
+            let version = version_of("<fix type='FIX' major='4' minor='4' servicepack='2'/>");
+            assert_eq!(
+                version,
+                Version {
+                    protocol: Protocol::Fix,
+                    major: 4,
+                    minor: 4,
+                    service_pack: 2,
+                }
+            );
+        }
+
+        #[test]
+        fn fixt_protocol() {
+            let version = version_of("<fix type='FIXT' major='1' minor='1' servicepack='0'/>");
+            assert_eq!(version.protocol, Protocol::Fixt);
+        }
+
+        #[test]
+        fn missing_type_defaults_to_fix() {
+            let version = version_of("<fix major='4' minor='2' servicepack='0'/>");
+            assert_eq!(version.protocol, Protocol::Fix);
+        }
+
+        #[test]
+        fn missing_servicepack_defaults_to_zero() {
+            let version = version_of("<fix type='FIX' major='4' minor='4'/>");
+            assert_eq!(version.service_pack, 0);
+        }
+    }
+
+    mod errors {
+        use super::*;
+
+        #[test]
+        fn malformed_xml() {
+            let error = parse("<fix major='4'").unwrap_err();
+            assert!(matches!(error, Error::Xml(_)));
+        }
+
+        #[test]
+        fn unexpected_root() {
+            let error = parse("<quickfix/>").unwrap_err();
+            assert!(matches!(error, Error::UnexpectedRoot(ref root) if root == "quickfix"));
+        }
+
+        #[test]
+        fn unknown_protocol() {
+            let error = parse("<fix type='FIXML' major='4' minor='4'/>").unwrap_err();
+            assert!(matches!(error, Error::UnknownProtocol(ref protocol) if protocol == "FIXML"));
+        }
+
+        #[test]
+        fn missing_major() {
+            let error = parse("<fix minor='4'/>").unwrap_err();
+            assert!(matches!(
+                error,
+                Error::MissingAttribute { ref element, ref attribute }
+                    if element == "fix" && attribute == "major"
+            ));
+        }
+
+        #[test]
+        fn non_numeric_major() {
+            let error = parse("<fix major='four' minor='4'/>").unwrap_err();
+            assert!(matches!(
+                error,
+                Error::InvalidNumber { ref element, ref attribute, ref value }
+                    if element == "fix" && attribute == "major" && value == "four"
+            ));
+        }
+
+        #[test]
+        fn negative_major() {
+            let error = parse("<fix major='-4' minor='4'/>").unwrap_err();
+            assert!(matches!(error, Error::InvalidNumber { ref value, .. } if value == "-4"));
+        }
+
+        #[test]
+        fn oversized_major() {
+            let error = parse("<fix major='999' minor='4'/>").unwrap_err();
+            assert!(matches!(error, Error::InvalidNumber { ref value, .. } if value == "999"));
+        }
+
+        #[test]
+        fn garbage_servicepack_is_an_error() {
+            let error = parse("<fix major='4' minor='4' servicepack='abc'/>").unwrap_err();
+            assert!(matches!(
+                error,
+                Error::InvalidNumber { ref attribute, ref value, .. }
+                    if attribute == "servicepack" && value == "abc"
+            ));
+        }
+    }
+}
