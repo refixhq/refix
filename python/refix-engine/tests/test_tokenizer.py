@@ -1,7 +1,7 @@
 import pickle
+from typing import ClassVar
 
 import pytest
-
 import refix
 from refix.errors import (
     GarbledError,
@@ -111,7 +111,10 @@ class TestErrors:
             refix.Tokenizer().tokenize(frame + frame)
 
         assert excinfo.value.frame_len == len(frame)
-        assert str(excinfo.value) == f"one message of {len(frame)} bytes, then trailing input"
+        assert (
+            str(excinfo.value)
+            == f"one message of {len(frame)} bytes, then trailing input"
+        )
 
 
 class TestGarbledFrames:
@@ -120,7 +123,7 @@ class TestGarbledFrames:
     `FRAME_TOO_LARGE` is the exception: it surfaces as `TooLargeToIndexError`.
     """
 
-    FRAMES = [
+    FRAMES: ClassVar[list[tuple[str, GarbledReason]]] = [
         ("9=5|35=0|10=163|", GarbledReason.MISSING_BEGIN_STRING),
         ("8=FIX.4.4" + "A" * 40, GarbledReason.MALFORMED_BEGIN_STRING),
         ("8=FIX.4.4|35=0|10=163|", GarbledReason.MISSING_BODY_LENGTH),

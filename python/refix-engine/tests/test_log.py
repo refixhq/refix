@@ -5,7 +5,9 @@ import refix
 from test_tokenizer import construct_valid_frame
 
 
-def messages_of(outcomes: list[refix.RawMessage | refix.Garble]) -> list[refix.RawMessage]:
+def messages_of(
+    outcomes: list[refix.RawMessage | refix.Garble],
+) -> list[refix.RawMessage]:
     return [outcome for outcome in outcomes if isinstance(outcome, refix.RawMessage)]
 
 
@@ -68,7 +70,5 @@ class TestReadLog:
         outcomes = list(refix.read_log(BytesIO(log)))
 
         assert len(outcomes) == count
-        assert all(
-            message.bytes == frame for message in messages_of(outcomes)
-        )
+        assert all(message.bytes == frame for message in messages_of(outcomes))
         assert len(messages_of(outcomes)) == count
