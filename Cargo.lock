@@ -121,6 +121,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "refix-codegen"
+version = "0.1.0"
+dependencies = [
+ "refix-dictionary",
+ "refix-message",
+]
+
+[[package]]
 name = "refix-dictionary"
 version = "0.1.0"
 dependencies = [
