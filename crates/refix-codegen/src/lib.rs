@@ -6,4 +6,4 @@ mod case_converter;
 mod emitter;
 
 pub use case_converter::snake_case;
-pub use emitter::generate;
+pub use emitter::{Error, generate};
