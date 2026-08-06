@@ -1,3 +1,4 @@
+use crate::value::InvalidValue;
 use bytes::Bytes;
 
 /// Tag recorded for a run of bytes that could not be tokenised into a field.
@@ -46,6 +47,24 @@ impl RawMessage {
         self.find(tag, Slot::START).map(|(_, value)| value)
     }
 
+    /// First occurrence of `tag` as UTF-8 text; `Ok(None)` when absent.
+    pub fn get_str(&self, tag: u32) -> Result<Option<&str>, InvalidValue> {
+        let Some(value) = self.get(tag) else {
+            return Ok(None);
+        };
+        let value = std::str::from_utf8(value).map_err(|_| InvalidValue { tag })?;
+        Ok(Some(value))
+    }
+
+    /// First occurrence of `tag` parsed as an integer; `Ok(None)` when absent.
+    pub fn get_int(&self, tag: u32) -> Result<Option<i64>, InvalidValue> {
+        let Some(value) = self.get_str(tag)? else {
+            return Ok(None);
+        };
+        let value = value.parse().map_err(|_| InvalidValue { tag })?;
+        Ok(Some(value))
+    }
+
     /// Every field as `(tag, value)`, in wire order, duplicates included.
     ///
     /// Includes an entry with [`MALFORMED_TAG`] for any byte run that could
@@ -85,18 +104,18 @@ mod tests {
     use super::*;
     use crate::framing::SOH;
 
-    fn message_of(fields: &[(u32, &str)]) -> RawMessage {
+    fn message_of<V: AsRef<[u8]>>(fields: &[(u32, V)]) -> RawMessage {
         let mut bytes = Vec::new();
         let mut index = Vec::new();
-        for &(tag, value) in fields {
+        for (tag, value) in fields {
             bytes.extend_from_slice(tag.to_string().as_bytes());
             bytes.push(b'=');
             let value_start = bytes.len() as u32;
-            bytes.extend_from_slice(value.as_bytes());
+            bytes.extend_from_slice(value.as_ref());
             let value_end = bytes.len() as u32;
             bytes.push(SOH);
             index.push(RawField {
-                tag,
+                tag: *tag,
                 value_start,
                 value_end,
             });
@@ -114,5 +133,65 @@ mod tests {
     fn get_absent_tag() {
         let message = message_of(&[(35, "0")]);
         assert_eq!(message.get(58), None);
+    }
+
+    #[test]
+    fn get_str_returns_text() {
+        let message = message_of(&[(58, "hello")]);
+        assert_eq!(message.get_str(58), Ok(Some("hello")));
+    }
+
+    #[test]
+    fn get_str_absent_tag() {
+        let message = message_of(&[(35, "0")]);
+        assert_eq!(message.get_str(58), Ok(None));
+    }
+
+    #[test]
+    fn get_str_empty_value() {
+        let message = message_of(&[(58, "")]);
+        assert_eq!(message.get_str(58), Ok(Some("")));
+    }
+
+    #[test]
+    fn get_str_rejects_invalid_utf8() {
+        let message = message_of(&[(58, b"caf\xE9".as_slice())]);
+        assert_eq!(message.get_str(58), Err(InvalidValue { tag: 58 }));
+    }
+
+    #[test]
+    fn get_int_parses_digits() {
+        let message = message_of(&[(38, "200")]);
+        assert_eq!(message.get_int(38), Ok(Some(200)));
+    }
+
+    #[test]
+    fn get_int_parses_a_negative_value() {
+        let message = message_of(&[(38, "-5")]);
+        assert_eq!(message.get_int(38), Ok(Some(-5)));
+    }
+
+    #[test]
+    fn get_int_absent_tag() {
+        let message = message_of(&[(35, "0")]);
+        assert_eq!(message.get_int(38), Ok(None));
+    }
+
+    #[test]
+    fn get_int_rejects_garbage() {
+        let message = message_of(&[(38, "12x3")]);
+        assert_eq!(message.get_int(38), Err(InvalidValue { tag: 38 }));
+    }
+
+    #[test]
+    fn get_int_rejects_an_empty_value() {
+        let message = message_of(&[(38, "")]);
+        assert_eq!(message.get_int(38), Err(InvalidValue { tag: 38 }));
+    }
+
+    #[test]
+    fn get_int_rejects_invalid_utf8() {
+        let message = message_of(&[(38, b"\xE9".as_slice())]);
+        assert_eq!(message.get_int(38), Err(InvalidValue { tag: 38 }));
     }
 }

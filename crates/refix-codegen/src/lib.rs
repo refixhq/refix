@@ -3,5 +3,7 @@
 //! kept fresh by tests that regenerate and compare.
 
 mod case_converter;
+mod emitter;
 
 pub use case_converter::snake_case;
+pub use emitter::{Error, generate};
