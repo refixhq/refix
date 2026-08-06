@@ -54,7 +54,12 @@ fn emit_message_impl(
         "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),
         "    pub fn raw(&self) -> &RawMessage {\n        &self.0\n    }\n".to_owned(),
     ];
-    members.extend(fields.into_iter().map(emit_accessor));
+    members.extend(
+        fields
+            .into_iter()
+            .map(emit_accessor)
+            .collect::<Result<Vec<_>, _>>()?,
+    );
 
     Ok(format!(
         "impl {} {{\n{}}}\n",
@@ -63,10 +68,10 @@ fn emit_message_impl(
     ))
 }
 
-fn emit_accessor(field: &Field) -> String {
-    let name = snake_case(&field.name);
+fn emit_accessor(field: &Field) -> Result<String, Error> {
+    let name = method_name(&field.name)?;
     let tag = field.tag;
-    match &field.data_type {
+    let accessor = match &field.data_type {
         DataType::String => format!(
             "    pub fn {name}(&self) -> Result<Option<&str>, InvalidValue> {{\n        self.0.get_str({tag})\n    }}\n"
         ),
@@ -76,10 +81,35 @@ fn emit_accessor(field: &Field) -> String {
         DataType::Other(_) => format!(
             "    pub fn {name}_raw(&self) -> Option<&[u8]> {{\n        self.0.get({tag})\n    }}\n"
         ),
+    };
+
+    Ok(accessor)
+}
+
+fn method_name(field_name: &str) -> Result<String, Error> {
+    let name = snake_case(field_name);
+    if matches!(name.as_str(), "self" | "super" | "crate") {
+        return Err(Error::UnrepresentableName {
+            field: field_name.to_owned(),
+        });
     }
+    if RESERVED_WORDS.contains(&name.as_str()) {
+        return Ok(format!("r#{name}"));
+    }
+    Ok(name)
 }
 
 #[derive(Debug)]
 pub enum Error {
     UnknownTag { message: String, tag: u32 },
+    UnrepresentableName { field: String },
 }
+
+/// Rust's strict and reserved keywords.
+const RESERVED_WORDS: &[&str] = &[
+    "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "do", "dyn",
+    "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl", "in", "let",
+    "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref", "return",
+    "static", "struct", "trait", "true", "try", "type", "typeof", "unsafe", "unsized", "use",
+    "virtual", "where", "while", "yield",
+];
