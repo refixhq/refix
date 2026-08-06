@@ -11,6 +11,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+clap = { workspace = true }
 refix-dictionary = { workspace = true }
 
 [dev-dependencies]
