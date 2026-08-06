@@ -20,6 +20,7 @@ categories = ["encoding", "parsing", "finance"]
 
 [workspace.dependencies]
 bytes = "1.12.1"
+clap = { version = "4.6.5", features = ["derive"] }
 pyo3 = "0.29.0"
 refix-dictionary = { version = "0.1.0", path = "crates/refix-dictionary" }
 refix-message = { version = "0.2.0", path = "crates/refix-message" }
