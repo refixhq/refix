@@ -1,3 +1,4 @@
+use crate::value::InvalidValue;
 use bytes::Bytes;
 
 /// Tag recorded for a run of bytes that could not be tokenised into a field.
@@ -44,6 +45,24 @@ impl RawMessage {
     /// Value of the first occurrence of `tag`, scanning from the start.
     pub fn get(&self, tag: u32) -> Option<&[u8]> {
         self.find(tag, Slot::START).map(|(_, value)| value)
+    }
+
+    /// First occurrence of `tag` as UTF-8 text; `Ok(None)` when absent.
+    pub fn get_str(&self, tag: u32) -> Result<Option<&str>, InvalidValue> {
+        let Some(value) = self.get(tag) else {
+            return Ok(None);
+        };
+        let value = std::str::from_utf8(value).map_err(|_| InvalidValue { tag })?;
+        Ok(Some(value))
+    }
+
+    /// First occurrence of `tag` parsed as an integer; `Ok(None)` when absent.
+    pub fn get_int(&self, tag: u32) -> Result<Option<i64>, InvalidValue> {
+        let Some(value) = self.get_str(tag)? else {
+            return Ok(None);
+        };
+        let value = value.parse().map_err(|_| InvalidValue { tag })?;
+        Ok(Some(value))
     }
 
     /// Every field as `(tag, value)`, in wire order, duplicates included.

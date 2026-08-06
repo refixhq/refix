@@ -64,19 +64,18 @@ fn emit_message_impl(
 }
 
 fn emit_accessor(field: &Field) -> String {
-    format!(
-        "    pub fn {name}(&self) -> {rust_type} {{\n        self.0.get({tag})\n    }}\n",
-        name = snake_case(&field.name),
-        rust_type = data_type_to_rust_type(&field.data_type),
-        tag = field.tag
-    )
-}
-
-fn data_type_to_rust_type(data_type: &DataType) -> String {
-    match data_type {
-        DataType::String => "Result<Option<&str>, InvalidValue>".to_owned(),
-        DataType::Int => "Result<Option<i64>, InvalidValue>".to_owned(),
-        DataType::Other(_) => "Option<&[u8]>".to_owned(),
+    let name = snake_case(&field.name);
+    let tag = field.tag;
+    match &field.data_type {
+        DataType::String => format!(
+            "    pub fn {name}(&self) -> Result<Option<&str>, InvalidValue> {{\n        self.0.get_str({tag})\n    }}\n"
+        ),
+        DataType::Int => format!(
+            "    pub fn {name}(&self) -> Result<Option<i64>, InvalidValue> {{\n        self.0.get_int({tag})\n    }}\n"
+        ),
+        DataType::Other(_) => format!(
+            "    pub fn {name}_raw(&self) -> Option<&[u8]> {{\n        self.0.get({tag})\n    }}\n"
+        ),
     }
 }
 
