@@ -69,7 +69,7 @@ fn emit_message_impl(
 }
 
 fn emit_accessor(field: &Field) -> Result<String, Error> {
-    let name = method_name(&field.name)?;
+    let name = method_name(field)?;
     let tag = field.tag;
     let accessor = match &field.data_type {
         DataType::String => format!(
@@ -79,18 +79,21 @@ fn emit_accessor(field: &Field) -> Result<String, Error> {
             "    pub fn {name}(&self) -> Result<Option<i64>, InvalidValue> {{\n        self.0.get_int({tag})\n    }}\n"
         ),
         DataType::Other(_) => format!(
-            "    pub fn {name}_raw(&self) -> Option<&[u8]> {{\n        self.0.get({tag})\n    }}\n"
+            "    pub fn {name}(&self) -> Option<&[u8]> {{\n        self.0.get({tag})\n    }}\n"
         ),
     };
 
     Ok(accessor)
 }
 
-fn method_name(field_name: &str) -> Result<String, Error> {
-    let name = snake_case(field_name);
+fn method_name(field: &Field) -> Result<String, Error> {
+    let mut name = snake_case(&field.name);
+    if let DataType::Other(_) = field.data_type {
+        name.push_str("_raw");
+    }
     if matches!(name.as_str(), "self" | "super" | "crate") {
         return Err(Error::UnrepresentableName {
-            field: field_name.to_owned(),
+            field: field.name.clone(),
         });
     }
     if RESERVED_WORDS.contains(&name.as_str()) {
