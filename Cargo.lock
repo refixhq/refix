@@ -232,6 +232,7 @@ dependencies = [
 name = "refix-codegen"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "clap",
  "refix-dictionary",
  "refix-message",

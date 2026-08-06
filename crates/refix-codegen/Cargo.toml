@@ -15,4 +15,5 @@ clap = { workspace = true }
 refix-dictionary = { workspace = true }
 
 [dev-dependencies]
+bytes = { workspace = true }
 refix-message = { workspace = true }
