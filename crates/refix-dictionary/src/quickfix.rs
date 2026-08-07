@@ -463,10 +463,51 @@ mod tests {
                         name: "OrdType".to_owned(),
                         tag: 40,
                         data_type: DataType::Other("CHAR".to_owned()),
-                        values: vec![],
+                        values: vec![
+                            EnumValue {
+                                value: "1".to_owned(),
+                                description: "MARKET".to_owned(),
+                            },
+                            EnumValue {
+                                value: "2".to_owned(),
+                                description: "LIMIT".to_owned(),
+                            },
+                        ],
                     },
                 ]
             );
+        }
+
+        #[test]
+        fn value_without_enum_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><fields>\
+                 <field number='40' name='OrdType' type='CHAR'>\
+                 <value description='MARKET'/>\
+                 </field></fields></fix>",
+            )
+            .unwrap_err();
+            assert!(matches!(
+                error,
+                Error::MissingAttribute { ref element, ref attribute }
+                    if element == "value" && attribute == "enum"
+            ));
+        }
+
+        #[test]
+        fn value_without_description_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><fields>\
+                 <field number='40' name='OrdType' type='CHAR'>\
+                 <value enum='1'/>\
+                 </field></fields></fix>",
+            )
+            .unwrap_err();
+            assert!(matches!(
+                error,
+                Error::MissingAttribute { ref element, ref attribute }
+                    if element == "value" && attribute == "description"
+            ));
         }
 
         #[test]
