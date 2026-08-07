@@ -1,4 +1,6 @@
-use crate::{Category, DataType, Dictionary, Field, FieldRef, Message, Protocol, Version};
+use crate::{
+    Category, DataType, Dictionary, EnumValue, Field, FieldRef, Message, Protocol, Version,
+};
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -23,7 +25,7 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     }
 
     let version = parse_version(root)?;
-    let fields = parse_fields(root, &mut warnings)?;
+    let fields = parse_fields(root)?;
     let messages = parse_messages(root, &fields, &mut warnings)?;
 
     let dictionary = Dictionary {
@@ -53,7 +55,7 @@ fn parse_version(root: Node) -> Result<Version, Error> {
     })
 }
 
-fn parse_fields(root: Node, warnings: &mut Vec<Warning>) -> Result<Vec<Field>, Error> {
+fn parse_fields(root: Node) -> Result<Vec<Field>, Error> {
     let Some(section) = root.children().find(|node| node.has_tag_name("fields")) else {
         return Ok(Vec::new());
     };
@@ -61,7 +63,7 @@ fn parse_fields(root: Node, warnings: &mut Vec<Warning>) -> Result<Vec<Field>, E
     let fields: Vec<Field> = section
         .children()
         .filter(|node| node.has_tag_name("field"))
-        .map(|node| parse_field(node, warnings))
+        .map(|node| parse_field(node))
         .collect::<Result<_, _>>()?;
 
     let mut seen = HashSet::new();
@@ -76,18 +78,24 @@ fn parse_fields(root: Node, warnings: &mut Vec<Warning>) -> Result<Vec<Field>, E
     Ok(fields)
 }
 
-fn parse_field(node: Node, warnings: &mut Vec<Warning>) -> Result<Field, Error> {
+fn parse_field(node: Node) -> Result<Field, Error> {
     let name = string_attribute(node, "name")?;
-    if node.children().any(|child| child.has_tag_name("value")) {
-        warnings.push(Warning::UnsupportedEnumValues {
-            field: name.clone(),
-        });
-    }
+    let values = node
+        .children()
+        .filter(|node| node.has_tag_name("value"))
+        .map(|value| {
+            Ok(EnumValue {
+                value: string_attribute(value, "enum")?,
+                description: string_attribute(value, "description")?,
+            })
+        })
+        .collect::<Result<_, _>>()?;
 
     Ok(Field {
         name,
         tag: int_attribute(node, "number")?,
         data_type: parse_data_type(string_attribute(node, "type")?),
+        values,
     })
 }
 
@@ -249,7 +257,6 @@ pub struct Parsed {
 /// A construct the parser recognised but the model does not hold yet.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Warning {
-    UnsupportedEnumValues { field: String },
     UnsupportedComponent { message: String, component: String },
     UnsupportedGroup { message: String, group: String },
     UnsupportedElement { message: String, element: String },
@@ -259,9 +266,6 @@ pub enum Warning {
 impl fmt::Display for Warning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Warning::UnsupportedEnumValues { field } => {
-                write!(f, "enum values on field '{field}' are not supported yet")
-            }
             Warning::UnsupportedComponent { message, component } => {
                 write!(
                     f,
@@ -441,36 +445,69 @@ mod tests {
                         name: "ClOrdID".to_owned(),
                         tag: 11,
                         data_type: DataType::String,
+                        values: vec![],
                     },
                     Field {
                         name: "PriceType".to_owned(),
                         tag: 423,
                         data_type: DataType::Int,
+                        values: vec![],
                     },
                     Field {
                         name: "OrderQty".to_owned(),
                         tag: 38,
                         data_type: DataType::Other("QTY".to_owned()),
+                        values: vec![],
                     },
                     Field {
                         name: "OrdType".to_owned(),
                         tag: 40,
                         data_type: DataType::Other("CHAR".to_owned()),
+                        values: vec![
+                            EnumValue {
+                                value: "1".to_owned(),
+                                description: "MARKET".to_owned(),
+                            },
+                            EnumValue {
+                                value: "2".to_owned(),
+                                description: "LIMIT".to_owned(),
+                            },
+                        ],
                     },
                 ]
             );
         }
 
         #[test]
-        fn enum_values_surface_as_a_warning() {
-            let parsed = parse(DICTIONARY).unwrap();
+        fn value_without_enum_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><fields>\
+                 <field number='40' name='OrdType' type='CHAR'>\
+                 <value description='MARKET'/>\
+                 </field></fields></fix>",
+            )
+            .unwrap_err();
+            assert!(matches!(
+                error,
+                Error::MissingAttribute { ref element, ref attribute }
+                    if element == "value" && attribute == "enum"
+            ));
+        }
 
-            assert_eq!(
-                parsed.warnings,
-                vec![Warning::UnsupportedEnumValues {
-                    field: "OrdType".to_owned(),
-                }]
-            );
+        #[test]
+        fn value_without_description_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><fields>\
+                 <field number='40' name='OrdType' type='CHAR'>\
+                 <value enum='1'/>\
+                 </field></fields></fix>",
+            )
+            .unwrap_err();
+            assert!(matches!(
+                error,
+                Error::MissingAttribute { ref element, ref attribute }
+                    if element == "value" && attribute == "description"
+            ));
         }
 
         #[test]

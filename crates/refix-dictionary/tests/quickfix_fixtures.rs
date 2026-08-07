@@ -2,7 +2,9 @@
 //! must succeed, and anything not yet modelled surfaces as warnings.
 
 use refix_dictionary::quickfix::{self, Warning};
-use refix_dictionary::{Category, DataType, Field, FieldRef, Message, Protocol, Version};
+use refix_dictionary::{
+    Category, DataType, EnumValue, Field, FieldRef, Message, Protocol, Version,
+};
 
 const FIX44: &str = include_str!("data/quickfix/FIX44.xml");
 
@@ -28,6 +30,18 @@ fn parses_the_full_fix44_dictionary() {
             name: "Account".to_owned(),
             tag: 1,
             data_type: DataType::String,
+            values: vec![],
+        }
+    );
+
+    let side = fields.iter().find(|field| field.name == "Side").unwrap();
+    assert_eq!(side.tag, 54);
+    assert_eq!(side.values.len(), 16);
+    assert_eq!(
+        side.values[0],
+        EnumValue {
+            value: "1".to_owned(),
+            description: "BUY".to_owned(),
         }
     );
 
@@ -46,9 +60,9 @@ fn parses_the_full_fix44_dictionary() {
         }
     );
 
-    // 3 unmodelled sections, 245 fields carrying enum values, 390 component
-    // references and 1 group across the messages.
-    assert_eq!(parsed.warnings.len(), 639);
+    // 3 unmodelled sections, 390 component references and 1 group across
+    // the messages.
+    assert_eq!(parsed.warnings.len(), 394);
     assert_eq!(
         parsed.warnings[0],
         Warning::UnsupportedSection {
