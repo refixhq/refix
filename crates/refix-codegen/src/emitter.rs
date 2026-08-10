@@ -40,7 +40,6 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<String, Error> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use naming::method_name;
     use refix_dictionary::{Category, DataType, FieldRef, Message, Protocol, Version};
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
@@ -176,39 +175,5 @@ impl NewOrderSingle {
                 tag: 112,
             }
         );
-    }
-
-    #[test]
-    fn method_names_are_snake_case() {
-        let name = method_name(&field("ClOrdID", 11, DataType::String));
-        assert_eq!(name.unwrap(), "cl_ord_id");
-    }
-
-    #[test]
-    fn keyword_method_names_are_escaped() {
-        let name = method_name(&field("Yield", 236, DataType::String));
-        assert_eq!(name.unwrap(), "r#yield");
-    }
-
-    #[test]
-    fn suffixed_raw_names_are_not_escaped() {
-        let name = method_name(&field("Yield", 236, DataType::Other("PRICE".to_owned())));
-        assert_eq!(name.unwrap(), "yield_raw");
-    }
-
-    #[test]
-    fn an_unescapable_name_is_an_error() {
-        assert_eq!(
-            method_name(&field("Self", 9000, DataType::String)).unwrap_err(),
-            Error::UnrepresentableName {
-                field: "Self".to_owned(),
-            }
-        );
-    }
-
-    #[test]
-    fn a_suffix_makes_an_unescapable_name_legal() {
-        let name = method_name(&field("Self", 9000, DataType::Other("DATA".to_owned())));
-        assert_eq!(name.unwrap(), "self_raw");
     }
 }

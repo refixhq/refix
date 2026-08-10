@@ -5,7 +5,7 @@ use crate::{pascal_case, snake_case};
 
 pub(super) fn method_name(field: &Field) -> Result<String, Error> {
     let mut name = snake_case(&field.name);
-    if let DataType::Other(_) = field.data_type {
+    if field.values.is_empty() && matches!(field.data_type, DataType::Other(_)) {
         name.push_str("_raw");
     }
     if matches!(name.as_str(), "self" | "super" | "crate") {
@@ -43,22 +43,62 @@ const RESERVED_WORDS: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::variant_name;
+    use super::{method_name, variant_name};
     use crate::emitter::Error;
     use refix_dictionary::{DataType, EnumValue, Field};
 
-    fn variant_of(description: &str) -> Result<String, Error> {
-        let field = Field {
-            name: "OrdType".to_owned(),
-            tag: 40,
-            data_type: DataType::Other("CHAR".to_owned()),
+    fn field(name: &str, tag: u32, data_type: DataType) -> Field {
+        Field {
+            name: name.to_owned(),
+            tag,
+            data_type,
             values: vec![],
-        };
+        }
+    }
+
+    fn variant_of(description: &str) -> Result<String, Error> {
         let value = EnumValue {
             value: "1".to_owned(),
             description: description.to_owned(),
         };
-        variant_name(&field, &value)
+        variant_name(
+            &field("OrdType", 40, DataType::Other("CHAR".to_owned())),
+            &value,
+        )
+    }
+
+    #[test]
+    fn method_names_are_snake_case() {
+        let name = method_name(&field("ClOrdID", 11, DataType::String));
+        assert_eq!(name.unwrap(), "cl_ord_id");
+    }
+
+    #[test]
+    fn keyword_method_names_are_escaped() {
+        let name = method_name(&field("Yield", 236, DataType::String));
+        assert_eq!(name.unwrap(), "r#yield");
+    }
+
+    #[test]
+    fn suffixed_raw_names_are_not_escaped() {
+        let name = method_name(&field("Yield", 236, DataType::Other("PRICE".to_owned())));
+        assert_eq!(name.unwrap(), "yield_raw");
+    }
+
+    #[test]
+    fn an_unescapable_name_is_an_error() {
+        assert_eq!(
+            method_name(&field("Self", 9000, DataType::String)).unwrap_err(),
+            Error::UnrepresentableName {
+                field: "Self".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_suffix_makes_an_unescapable_name_legal() {
+        let name = method_name(&field("Self", 9000, DataType::Other("DATA".to_owned())));
+        assert_eq!(name.unwrap(), "self_raw");
     }
 
     #[test]
@@ -106,5 +146,15 @@ mod tests {
     fn capitalized_keywords_are_fine() {
         assert_eq!(variant_of("TRUE").unwrap(), "True");
         assert_eq!(variant_of("SUPER").unwrap(), "Super");
+    }
+
+    #[test]
+    fn an_enum_field_takes_the_plain_name() {
+        let mut enum_field = field("OrdType", 40, DataType::Other("CHAR".to_owned()));
+        enum_field.values = vec![EnumValue {
+            value: "1".to_owned(),
+            description: "MARKET".to_owned(),
+        }];
+        assert_eq!(method_name(&enum_field).unwrap(), "ord_type");
     }
 }
