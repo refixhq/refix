@@ -9,7 +9,7 @@ use refix_message::{InvalidValue, Tokenizer};
 #[path = "data/toy_generated.rs"]
 mod toy;
 
-use toy::NewOrderSingle;
+use toy::{NewOrderSingle, OrdType};
 
 const TOY_XML: &str = include_str!("data/toy.xml");
 const TOY_GENERATED: &str = include_str!("data/toy_generated.rs");
@@ -35,7 +35,7 @@ fn frame(body: &str) -> Bytes {
 #[test]
 fn typed_reads_over_a_tokenized_frame() {
     let raw = Tokenizer::default()
-        .tokenize(frame("35=D|11=ORDER-1|38=200|44=101.5|"))
+        .tokenize(frame("35=D|11=ORDER-1|38=200|44=101.5|40=1|"))
         .unwrap();
 
     let order = NewOrderSingle::from_raw(raw);
@@ -45,6 +45,7 @@ fn typed_reads_over_a_tokenized_frame() {
     assert_eq!(order.cl_ord_id(), Ok(Some("ORDER-1")));
     assert_eq!(order.order_qty(), Ok(Some(200)));
     assert_eq!(order.price_raw(), Some(b"101.5".as_slice()));
+    assert_eq!(order.ord_type(), Some(OrdType::Market));
 }
 
 #[test]
@@ -57,6 +58,16 @@ fn an_absent_field_reads_as_none() {
 
     assert_eq!(order.order_qty(), Ok(None));
     assert_eq!(order.price_raw(), None);
+    assert_eq!(order.ord_type(), None);
+}
+
+#[test]
+fn an_unknown_enum_value_is_representable() {
+    let raw = Tokenizer::default().tokenize(frame("35=D|40=X|")).unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(order.ord_type(), Some(OrdType::Unknown(b"X".as_slice())));
 }
 
 #[test]
