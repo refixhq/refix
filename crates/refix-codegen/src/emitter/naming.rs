@@ -40,3 +40,71 @@ const RESERVED_WORDS: &[&str] = &[
     "static", "struct", "trait", "true", "try", "type", "typeof", "unsafe", "unsized", "use",
     "virtual", "where", "while", "yield",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::variant_name;
+    use crate::emitter::Error;
+    use refix_dictionary::{DataType, EnumValue, Field};
+
+    fn variant_of(description: &str) -> Result<String, Error> {
+        let field = Field {
+            name: "OrdType".to_owned(),
+            tag: 40,
+            data_type: DataType::Other("CHAR".to_owned()),
+            values: vec![],
+        };
+        let value = EnumValue {
+            value: "1".to_owned(),
+            description: description.to_owned(),
+        };
+        variant_name(&field, &value)
+    }
+
+    #[test]
+    fn converts_a_description_to_pascal_case() {
+        assert_eq!(variant_of("GOOD_TILL_CANCEL").unwrap(), "GoodTillCancel");
+    }
+
+    #[test]
+    fn a_digit_leading_description_is_an_error() {
+        assert_eq!(
+            variant_of("5DAY").unwrap_err(),
+            Error::UnrepresentableValue {
+                field: "OrdType".to_owned(),
+                description: "5DAY".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn an_empty_description_is_an_error() {
+        assert!(variant_of("").is_err());
+    }
+
+    #[test]
+    fn punctuation_in_a_description_is_an_error() {
+        assert!(variant_of("W/AVG").is_err());
+    }
+
+    #[test]
+    fn a_non_ascii_description_is_an_error() {
+        assert!(variant_of("CAF\u{c9}").is_err());
+    }
+
+    #[test]
+    fn self_is_an_error() {
+        assert!(variant_of("SELF").is_err());
+    }
+
+    #[test]
+    fn a_description_containing_self_is_fine() {
+        assert_eq!(variant_of("SELF_TRADE").unwrap(), "SelfTrade");
+    }
+
+    #[test]
+    fn capitalized_keywords_are_fine() {
+        assert_eq!(variant_of("TRUE").unwrap(), "True");
+        assert_eq!(variant_of("SUPER").unwrap(), "Super");
+    }
+}
