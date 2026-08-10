@@ -5,5 +5,5 @@
 mod case_converter;
 mod emitter;
 
-pub use case_converter::snake_case;
+pub use case_converter::{pascal_case, snake_case};
 pub use emitter::{Error, generate};
