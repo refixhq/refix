@@ -4,6 +4,7 @@
       <field name="ClOrdID" required="Y"/>
       <field name="OrderQty" required="N"/>
       <field name="Price" required="N"/>
+      <field name="OrdType" required="N"/>
       <group name="NoPartyIDs" required="N">
         <field name="PartyID" required="N"/>
       </group>
@@ -13,5 +14,9 @@
     <field number="11" name="ClOrdID" type="STRING"/>
     <field number="38" name="OrderQty" type="INT"/>
     <field number="44" name="Price" type="PRICE"/>
+    <field number="40" name="OrdType" type="CHAR">
+      <value enum="1" description="MARKET"/>
+      <value enum="2" description="LIMIT"/>
+    </field>
   </fields>
 </fix>

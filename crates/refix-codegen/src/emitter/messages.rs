@@ -58,6 +58,14 @@ fn emit_message_impl(
 fn emit_accessor(field: &Field) -> Result<String, Error> {
     let name = method_name(field)?;
     let tag = field.tag;
+
+    if !field.values.is_empty() {
+        let type_name = &field.name;
+        return Ok(format!(
+            "    pub fn {name}(&self) -> Option<{type_name}<'_>> {{\n        self.0.get({tag}).map({type_name}::from_bytes)\n    }}\n"
+        ));
+    }
+
     let accessor = match &field.data_type {
         DataType::String => format!(
             "    pub fn {name}(&self) -> Result<Option<&str>, InvalidValue> {{\n        self.0.get_str({tag})\n    }}\n"
