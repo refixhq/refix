@@ -1,6 +1,12 @@
-use crate::snake_case;
-use refix_dictionary::{DataType, Dictionary, Field, Message};
+mod error;
+mod messages;
+mod naming;
+
+use refix_dictionary::{Dictionary, Field};
 use std::collections::HashMap;
+
+pub use error::Error;
+use messages::emit_message;
 
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<String, Error> {
     let fields_by_tag: HashMap<u32, &Field> = dictionary
@@ -19,123 +25,11 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<String, Error> 
     ))
 }
 
-fn emit_message(message: &Message, fields_by_tag: &HashMap<u32, &Field>) -> Result<String, Error> {
-    let message_struct = emit_message_struct(message);
-    let message_impl = emit_message_impl(message, fields_by_tag)?;
-    Ok(format!("{message_struct}\n{message_impl}"))
-}
-
-fn emit_message_struct(message: &Message) -> String {
-    format!("pub struct {}(RawMessage);\n", message.name)
-}
-
-fn emit_message_impl(
-    message: &Message,
-    fields_by_tag: &HashMap<u32, &Field>,
-) -> Result<String, Error> {
-    let fields = message
-        .fields
-        .iter()
-        .map(|field_ref| {
-            fields_by_tag
-                .get(&field_ref.tag)
-                .copied()
-                .ok_or(Error::UnknownTag {
-                    message: message.name.clone(),
-                    tag: field_ref.tag,
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut members = vec![
-        format!(
-            "    pub const MSG_TYPE: &[u8] = b\"{}\";\n",
-            message.msg_type
-        ),
-        "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),
-        "    pub fn raw(&self) -> &RawMessage {\n        &self.0\n    }\n".to_owned(),
-    ];
-    members.extend(
-        fields
-            .into_iter()
-            .map(emit_accessor)
-            .collect::<Result<Vec<_>, _>>()?,
-    );
-
-    Ok(format!(
-        "impl {} {{\n{}}}\n",
-        message.name,
-        members.join("\n")
-    ))
-}
-
-fn emit_accessor(field: &Field) -> Result<String, Error> {
-    let name = method_name(field)?;
-    let tag = field.tag;
-    let accessor = match &field.data_type {
-        DataType::String => format!(
-            "    pub fn {name}(&self) -> Result<Option<&str>, InvalidValue> {{\n        self.0.get_str({tag})\n    }}\n"
-        ),
-        DataType::Int => format!(
-            "    pub fn {name}(&self) -> Result<Option<i64>, InvalidValue> {{\n        self.0.get_int({tag})\n    }}\n"
-        ),
-        DataType::Other(_) => format!(
-            "    pub fn {name}(&self) -> Option<&[u8]> {{\n        self.0.get({tag})\n    }}\n"
-        ),
-    };
-
-    Ok(accessor)
-}
-
-fn method_name(field: &Field) -> Result<String, Error> {
-    let mut name = snake_case(&field.name);
-    if let DataType::Other(_) = field.data_type {
-        name.push_str("_raw");
-    }
-    if matches!(name.as_str(), "self" | "super" | "crate") {
-        return Err(Error::UnrepresentableName {
-            field: field.name.clone(),
-        });
-    }
-    if RESERVED_WORDS.contains(&name.as_str()) {
-        return Ok(format!("r#{name}"));
-    }
-    Ok(name)
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum Error {
-    UnknownTag { message: String, tag: u32 },
-    UnrepresentableName { field: String },
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::UnknownTag { message, tag } => {
-                write!(f, "message '{message}' references unknown tag {tag}")
-            }
-            Error::UnrepresentableName { field } => {
-                write!(f, "field '{field}' cannot be a rust method name")
-            }
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-/// Rust's strict and reserved keywords.
-const RESERVED_WORDS: &[&str] = &[
-    "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "do", "dyn",
-    "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl", "in", "let",
-    "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref", "return",
-    "static", "struct", "trait", "true", "try", "type", "typeof", "unsafe", "unsized", "use",
-    "virtual", "where", "while", "yield",
-];
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use refix_dictionary::{Category, FieldRef, Protocol, Version};
+    use naming::method_name;
+    use refix_dictionary::{Category, DataType, FieldRef, Message, Protocol, Version};
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
         Field {
