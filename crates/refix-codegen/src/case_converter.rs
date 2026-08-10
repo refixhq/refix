@@ -27,9 +27,31 @@ pub fn snake_case(name: &str) -> String {
     converted
 }
 
+/// Converts a UPPER_CASE_SNAKE enum value description to a PascalCase
+/// identifier.
+///
+/// Underscores are the word boundaries, so acronyms flatten
+/// (`IOI_QTY` -> `IoiQty`).
+/// Empty segments from doubled underscores are skipped.
+pub fn pascal_case(name: &str) -> String {
+    let mut converted = String::with_capacity(name.len());
+
+    for segment in name.split('_').filter(|segment| !segment.is_empty()) {
+        let mut chars = segment.chars();
+        if let Some(first) = chars.next() {
+            converted.push(first.to_ascii_uppercase());
+        }
+        for rest in chars {
+            converted.push(rest.to_ascii_lowercase());
+        }
+    }
+
+    converted
+}
+
 #[cfg(test)]
 mod tests {
-    use super::snake_case;
+    use super::{pascal_case, snake_case};
 
     #[test]
     fn lowercases_a_single_word() {
@@ -69,5 +91,40 @@ mod tests {
     #[test]
     fn attaches_digits_to_the_preceding_word() {
         assert_eq!(snake_case("Nested2PartyID"), "nested2_party_id");
+    }
+
+    #[test]
+    fn capitalizes_a_single_word() {
+        assert_eq!(pascal_case("BUY"), "Buy");
+    }
+
+    #[test]
+    fn joins_words_at_underscores() {
+        assert_eq!(pascal_case("GOOD_TILL_CANCEL"), "GoodTillCancel");
+    }
+
+    #[test]
+    fn flattens_acronym_words() {
+        assert_eq!(pascal_case("IOI_QTY"), "IoiQty");
+    }
+
+    #[test]
+    fn keeps_digits_within_words() {
+        assert_eq!(pascal_case("FILL_OR_KILL_4"), "FillOrKill4");
+    }
+
+    #[test]
+    fn passes_digit_only_words_through() {
+        assert_eq!(pascal_case("FIX_4_4"), "Fix44");
+    }
+
+    #[test]
+    fn skips_empty_segments() {
+        assert_eq!(pascal_case("AT__THE_OPENING"), "AtTheOpening");
+    }
+
+    #[test]
+    fn normalizes_lowercase_input() {
+        assert_eq!(pascal_case("buy_minus"), "BuyMinus");
     }
 }
