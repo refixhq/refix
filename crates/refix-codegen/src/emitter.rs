@@ -41,7 +41,9 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<String, Error> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use refix_dictionary::{Category, DataType, EnumValue, FieldRef, Message, Protocol, Version};
+    use refix_dictionary::{
+        Category, DataType, EnumValue, FieldRef, Member, Message, Protocol, Version,
+    };
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
         Field {
@@ -61,6 +63,7 @@ mod tests {
                 service_pack: 0,
             },
             messages,
+            components: vec![], // TODO: implement components
             fields,
         }
     }
@@ -82,23 +85,23 @@ mod tests {
             vec![Message {
                 name: "NewOrderSingle".to_owned(),
                 msg_type: "D".to_owned(),
-                fields: vec![
-                    FieldRef {
+                members: vec![
+                    Member::Field(FieldRef {
                         tag: 11,
                         is_required: true,
-                    },
-                    FieldRef {
+                    }),
+                    Member::Field(FieldRef {
                         tag: 38,
                         is_required: false,
-                    },
-                    FieldRef {
+                    }),
+                    Member::Field(FieldRef {
                         tag: 44,
                         is_required: false,
-                    },
-                    FieldRef {
+                    }),
+                    Member::Field(FieldRef {
                         tag: 40,
                         is_required: false,
-                    },
+                    }),
                 ],
                 category: Category::App,
             }],
@@ -171,13 +174,13 @@ impl NewOrderSingle {
                 Message {
                     name: "Heartbeat".to_owned(),
                     msg_type: "0".to_owned(),
-                    fields: vec![],
+                    members: vec![],
                     category: Category::Admin,
                 },
                 Message {
                     name: "TestRequest".to_owned(),
                     msg_type: "1".to_owned(),
-                    fields: vec![],
+                    members: vec![],
                     category: Category::Admin,
                 },
             ],
@@ -197,10 +200,10 @@ impl NewOrderSingle {
             vec![Message {
                 name: "Heartbeat".to_owned(),
                 msg_type: "0".to_owned(),
-                fields: vec![FieldRef {
+                members: vec![Member::Field(FieldRef {
                     tag: 112,
                     is_required: false,
-                }],
+                })],
                 category: Category::Admin,
             }],
             vec![],

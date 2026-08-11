@@ -1,5 +1,6 @@
 use crate::{
-    Category, DataType, Dictionary, EnumValue, Field, FieldRef, Message, Protocol, Version,
+    Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Member,
+    Message, Protocol, Version,
 };
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
@@ -16,7 +17,7 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     }
 
     let mut warnings = Vec::new();
-    for section in ["header", "trailer", "components"] {
+    for section in ["header", "trailer"] {
         if root.children().any(|node| node.has_tag_name(section)) {
             warnings.push(Warning::UnsupportedSection {
                 section: section.to_owned(),
@@ -26,11 +27,19 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
 
     let version = parse_version(root)?;
     let fields = parse_fields(root)?;
-    let messages = parse_messages(root, &fields, &mut warnings)?;
+    let tags_by_name: HashMap<&str, u32> = fields
+        .iter()
+        .map(|field| (field.name.as_str(), field.tag))
+        .collect();
+
+    let components = parse_components(root, &tags_by_name, &mut warnings)?;
+    let messages = parse_messages(root, &tags_by_name, &mut warnings)?;
+    validate_component_refs(&messages, &components)?;
 
     let dictionary = Dictionary {
         version,
         messages,
+        components,
         fields,
     };
 
@@ -99,6 +108,45 @@ fn parse_field(node: Node) -> Result<Field, Error> {
     })
 }
 
+fn parse_components(
+    root: Node,
+    tags_by_name: &HashMap<&str, u32>,
+    warnings: &mut Vec<Warning>,
+) -> Result<Vec<Component>, Error> {
+    let Some(section) = root.children().find(|node| node.has_tag_name("components")) else {
+        return Ok(Vec::new());
+    };
+
+    let components: Vec<Component> = section
+        .children()
+        .filter(|node| node.has_tag_name("component"))
+        .map(|node| parse_component(node, tags_by_name, warnings))
+        .collect::<Result<_, _>>()?;
+
+    let mut seen = HashSet::new();
+    for component in &components {
+        if !seen.insert(component.name.as_str()) {
+            return Err(Error::DuplicateComponent {
+                component: component.name.clone(),
+            });
+        }
+    }
+
+    Ok(components)
+}
+
+fn parse_component(
+    node: Node,
+    tags_by_name: &HashMap<&str, u32>,
+    warnings: &mut Vec<Warning>,
+) -> Result<Component, Error> {
+    let name = string_attribute(node, "name")?;
+    let context = MemberContext::Component(name.clone());
+    let members = parse_members(node, context, tags_by_name, warnings)?;
+
+    Ok(Component { name, members })
+}
+
 fn parse_data_type(name: String) -> DataType {
     match name.as_str() {
         "STRING" => DataType::String,
@@ -109,22 +157,17 @@ fn parse_data_type(name: String) -> DataType {
 
 fn parse_messages(
     root: Node,
-    fields: &[Field],
+    tags_by_name: &HashMap<&str, u32>,
     warnings: &mut Vec<Warning>,
 ) -> Result<Vec<Message>, Error> {
     let Some(section) = root.children().find(|node| node.has_tag_name("messages")) else {
         return Ok(Vec::new());
     };
 
-    let tags_by_name: HashMap<&str, u32> = fields
-        .iter()
-        .map(|field| (field.name.as_str(), field.tag))
-        .collect();
-
     section
         .children()
         .filter(|node| node.has_tag_name("message"))
-        .map(|node| parse_message(node, &tags_by_name, warnings))
+        .map(|node| parse_message(node, tags_by_name, warnings))
         .collect()
 }
 
@@ -134,50 +177,76 @@ fn parse_message(
     warnings: &mut Vec<Warning>,
 ) -> Result<Message, Error> {
     let name = string_attribute(node, "name")?;
-    let mut fields = Vec::new();
     let category = parse_category(node)?;
+    let members = parse_members(
+        node,
+        MemberContext::Message(name.clone()),
+        tags_by_name,
+        warnings,
+    )?;
+
+    Ok(Message {
+        name,
+        msg_type: string_attribute(node, "msgtype")?,
+        members,
+        category,
+    })
+}
+
+fn parse_members(
+    node: Node,
+    context: MemberContext,
+    tags_by_name: &HashMap<&str, u32>,
+    warnings: &mut Vec<Warning>,
+) -> Result<Vec<Member>, Error> {
+    let mut members = Vec::new();
 
     for child in node.children().filter(Node::is_element) {
         match child.tag_name().name() {
-            "field" => fields.push(parse_field_ref(child, &name, tags_by_name)?),
-            "component" => warnings.push(Warning::UnsupportedComponent {
-                message: name.clone(),
-                component: string_attribute(child, "name")?,
-            }),
+            "field" => members.push(Member::Field(parse_field_ref(
+                child,
+                context.clone(),
+                tags_by_name,
+            )?)),
+            "component" => members.push(Member::Component(parse_component_ref(child)?)),
             "group" => warnings.push(Warning::UnsupportedGroup {
-                message: name.clone(),
+                context: context.clone(),
                 group: string_attribute(child, "name")?,
             }),
             other => warnings.push(Warning::UnsupportedElement {
-                message: name.clone(),
+                context: context.clone(),
                 element: other.to_owned(),
             }),
         }
     }
 
-    Ok(Message {
-        name,
-        msg_type: string_attribute(node, "msgtype")?,
-        fields,
-        category,
-    })
+    Ok(members)
 }
 
 fn parse_field_ref(
     node: Node,
-    message: &str,
+    context: MemberContext,
     tags_by_name: &HashMap<&str, u32>,
 ) -> Result<FieldRef, Error> {
     let name = string_attribute(node, "name")?;
     let Some(&tag) = tags_by_name.get(name.as_str()) else {
         return Err(Error::UnknownField {
-            message: message.to_owned(),
+            context,
             field: name,
         });
     };
 
     Ok(FieldRef {
         tag,
+        is_required: required_attribute(node)?,
+    })
+}
+
+fn parse_component_ref(node: Node) -> Result<ComponentRef, Error> {
+    let name = string_attribute(node, "name")?;
+
+    Ok(ComponentRef {
+        name,
         is_required: required_attribute(node)?,
     })
 }
@@ -244,6 +313,108 @@ fn int_attribute_or<T: FromStr<Err = ParseIntError>>(
     }
 }
 
+fn validate_component_refs(messages: &[Message], components: &[Component]) -> Result<(), Error> {
+    let defined: HashSet<&str> = components
+        .iter()
+        .map(|component| component.name.as_str())
+        .collect();
+
+    for message in messages {
+        check_refs(
+            &message.members,
+            &MemberContext::Message(message.name.clone()),
+            &defined,
+        )?;
+    }
+    for component in components {
+        check_refs(
+            &component.members,
+            &MemberContext::Component(component.name.clone()),
+            &defined,
+        )?;
+    }
+
+    check_cycles(components)
+}
+
+fn check_refs(
+    members: &[Member],
+    context: &MemberContext,
+    defined: &HashSet<&str>,
+) -> Result<(), Error> {
+    for member in members {
+        if let Member::Component(component_ref) = member
+            && !defined.contains(component_ref.name.as_str())
+        {
+            return Err(Error::UnknownComponent {
+                context: context.clone(),
+                component: component_ref.name.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn check_cycles(components: &[Component]) -> Result<(), Error> {
+    let by_name: HashMap<&str, &Component> = components
+        .iter()
+        .map(|component| (component.name.as_str(), component))
+        .collect();
+    let mut finished = HashSet::new();
+
+    for component in components {
+        visit_component(component, &by_name, &mut Vec::new(), &mut finished)?;
+    }
+    Ok(())
+}
+
+fn visit_component<'a>(
+    component: &'a Component,
+    by_name: &HashMap<&str, &'a Component>,
+    stack: &mut Vec<&'a str>,
+    finished: &mut HashSet<&'a str>,
+) -> Result<(), Error> {
+    if finished.contains(component.name.as_str()) {
+        return Ok(());
+    }
+    if stack.contains(&component.name.as_str()) {
+        return Err(Error::CircularComponent {
+            component: component.name.clone(),
+        });
+    }
+
+    stack.push(component.name.as_str());
+    for member in &component.members {
+        if let Member::Component(component_ref) = member {
+            visit_component(
+                by_name[component_ref.name.as_str()],
+                by_name,
+                stack,
+                finished,
+            )?;
+        }
+    }
+    stack.pop();
+    finished.insert(component.name.as_str());
+
+    Ok(())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MemberContext {
+    Message(String),
+    Component(String),
+}
+
+impl fmt::Display for MemberContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Message(name) => write!(f, "message '{name}'"),
+            Self::Component(name) => write!(f, "component '{name}'"),
+        }
+    }
+}
+
 /// The result of a successful parse.
 ///
 /// This contains the parsed dictionary as well as any
@@ -257,29 +428,27 @@ pub struct Parsed {
 /// A construct the parser recognised but the model does not hold yet.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Warning {
-    UnsupportedComponent { message: String, component: String },
-    UnsupportedGroup { message: String, group: String },
-    UnsupportedElement { message: String, element: String },
-    UnsupportedSection { section: String },
+    UnsupportedGroup {
+        context: MemberContext,
+        group: String,
+    },
+    UnsupportedElement {
+        context: MemberContext,
+        element: String,
+    },
+    UnsupportedSection {
+        section: String,
+    },
 }
 
 impl fmt::Display for Warning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Warning::UnsupportedComponent { message, component } => {
-                write!(
-                    f,
-                    "component '{component}' in message '{message}' is not supported yet"
-                )
+            Warning::UnsupportedGroup { context, group } => {
+                write!(f, "group '{group}' in {context} is not supported yet")
             }
-            Warning::UnsupportedGroup { message, group } => {
-                write!(
-                    f,
-                    "group '{group}' in message '{message}' is not supported yet"
-                )
-            }
-            Warning::UnsupportedElement { message, element } => {
-                write!(f, "unexpected element <{element}> in message '{message}'")
+            Warning::UnsupportedElement { context, element } => {
+                write!(f, "unexpected element <{element}> in {context}")
             }
             Warning::UnsupportedSection { section } => {
                 write!(f, "section <{section}> is not supported yet")
@@ -306,11 +475,21 @@ pub enum Error {
         value: String,
     },
     UnknownField {
-        message: String,
+        context: MemberContext,
         field: String,
     },
     DuplicateField {
         field: String,
+    },
+    UnknownComponent {
+        context: MemberContext,
+        component: String,
+    },
+    CircularComponent {
+        component: String,
+    },
+    DuplicateComponent {
+        component: String,
     },
     InvalidAttribute {
         element: String,
@@ -345,11 +524,20 @@ impl fmt::Display for Error {
                     "invalid number '{value}' in attribute '{attribute}' of <{element}>"
                 )
             }
-            Error::UnknownField { message, field } => {
-                write!(f, "message '{message}' references unknown field '{field}'")
+            Error::UnknownField { context, field } => {
+                write!(f, "{context} references unknown field '{field}'")
             }
             Error::DuplicateField { field } => {
                 write!(f, "field '{field}' is defined more than once")
+            }
+            Error::UnknownComponent { context, component } => {
+                write!(f, "{context} references unknown component '{component}'")
+            }
+            Error::CircularComponent { component } => {
+                write!(f, "component '{component}' is part of a reference cycle")
+            }
+            Error::DuplicateComponent { component } => {
+                write!(f, "component '{component}' is defined more than once")
             }
             Error::InvalidAttribute {
                 element,
@@ -534,12 +722,186 @@ mod tests {
             let error = parse(
                 "<fix major='4' minor='4'><fields><field name='ClOrdID' type='STRING'/></fields></fix>",
             )
-            .unwrap_err();
+                .unwrap_err();
             assert!(matches!(
                 error,
                 Error::MissingAttribute { ref element, ref attribute }
                     if element == "field" && attribute == "number"
             ));
+        }
+    }
+
+    mod components {
+        use super::*;
+
+        const DICTIONARY: &str = "\
+<fix major='4' minor='4'>
+ <fields>
+  <field number='12' name='Commission' type='AMT'/>
+  <field number='13' name='CommType' type='CHAR'/>
+ </fields>
+ <components>
+  <component name='CommissionData'>
+   <field name='Commission' required='Y'/>
+   <field name='CommType'/>
+   <group name='NoNested' required='N'/>
+  </component>
+  <component name='SpreadOrBenchmarkCurveData'>
+   <component name='CommissionData' required='Y'/>
+  </component>
+ </components>
+</fix>";
+
+        #[test]
+        fn parses_component_definitions() {
+            let components = parse(DICTIONARY).unwrap().dictionary.components;
+
+            assert_eq!(
+                components,
+                vec![
+                    Component {
+                        name: "CommissionData".to_owned(),
+                        members: vec![
+                            Member::Field(FieldRef {
+                                tag: 12,
+                                is_required: true,
+                            }),
+                            Member::Field(FieldRef {
+                                tag: 13,
+                                is_required: false,
+                            }),
+                        ],
+                    },
+                    Component {
+                        name: "SpreadOrBenchmarkCurveData".to_owned(),
+                        members: vec![Member::Component(ComponentRef {
+                            name: "CommissionData".to_owned(),
+                            is_required: true,
+                        })],
+                    },
+                ]
+            );
+        }
+
+        #[test]
+        fn groups_in_components_surface_as_warnings() {
+            let parsed = parse(DICTIONARY).unwrap();
+
+            assert_eq!(
+                parsed.warnings,
+                vec![Warning::UnsupportedGroup {
+                    context: MemberContext::Component("CommissionData".to_owned()),
+                    group: "NoNested".to_owned(),
+                }]
+            );
+        }
+
+        #[test]
+        fn missing_components_section_yields_no_components() {
+            let parsed = parse("<fix major='4' minor='4'/>").unwrap();
+            assert!(parsed.dictionary.components.is_empty());
+        }
+
+        #[test]
+        fn duplicate_component_definition_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Parties'/>\
+                 <component name='Parties'/>\
+                 </components></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::DuplicateComponent { ref component } if component == "Parties"
+            ));
+        }
+
+        #[test]
+        fn component_ref_to_undefined_component_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Stipulations'>\
+                 <component name='UnderlyingInstrument'/>\
+                 </component></components></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::UnknownComponent { ref context, ref component }
+                    if *context == MemberContext::Component("Stipulations".to_owned())
+                        && component == "UnderlyingInstrument"
+            ));
+        }
+
+        #[test]
+        fn message_ref_to_undefined_component_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='NewOrderSingle' msgtype='D' msgcat='app'>\
+                 <component name='Instrument'/>\
+                 </message></messages></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::UnknownComponent { ref context, ref component }
+                    if *context == MemberContext::Message("NewOrderSingle".to_owned())
+                        && component == "Instrument"
+            ));
+        }
+
+        #[test]
+        fn a_self_referencing_component_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Parties'>\
+                 <component name='Parties'/>\
+                 </component></components></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::CircularComponent { ref component } if component == "Parties"
+            ));
+        }
+
+        #[test]
+        fn mutually_referencing_components_are_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Instrument'>\
+                 <component name='UnderlyingInstrument'/>\
+                 </component>\
+                 <component name='UnderlyingInstrument'>\
+                 <component name='Instrument'/>\
+                 </component></components></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(error, Error::CircularComponent { .. }));
+        }
+
+        #[test]
+        fn a_diamond_of_references_is_not_a_cycle() {
+            let parsed = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Top'>\
+                 <component name='Left'/>\
+                 <component name='Right'/>\
+                 </component>\
+                 <component name='Left'><component name='Bottom'/></component>\
+                 <component name='Right'><component name='Bottom'/></component>\
+                 <component name='Bottom'/>\
+                 </components></fix>",
+            )
+            .unwrap();
+
+            assert_eq!(parsed.dictionary.components.len(), 4);
         }
     }
 
@@ -552,6 +914,11 @@ mod tests {
   <field number='11' name='ClOrdID' type='STRING'/>
   <field number='58' name='Text' type='STRING'/>
  </fields>
+ <components>
+  <component name='Parties'>
+   <field name='Text'/>
+  </component>
+ </components>
  <messages>
   <message name='NewOrderSingle' msgtype='D' msgcat='app'>
    <field name='ClOrdID' required='Y'/>
@@ -571,15 +938,19 @@ mod tests {
                 vec![Message {
                     name: "NewOrderSingle".to_owned(),
                     msg_type: "D".to_owned(),
-                    fields: vec![
-                        FieldRef {
+                    members: vec![
+                        Member::Field(FieldRef {
                             tag: 11,
                             is_required: true,
-                        },
-                        FieldRef {
+                        }),
+                        Member::Field(FieldRef {
                             tag: 58,
                             is_required: false,
-                        },
+                        }),
+                        Member::Component(ComponentRef {
+                            name: "Parties".to_owned(),
+                            is_required: false,
+                        }),
                     ],
                     category: Category::App,
                 }]
@@ -587,21 +958,15 @@ mod tests {
         }
 
         #[test]
-        fn components_and_groups_surface_as_warnings() {
+        fn groups_surface_as_warnings() {
             let parsed = parse(DICTIONARY).unwrap();
 
             assert_eq!(
                 parsed.warnings,
-                vec![
-                    Warning::UnsupportedComponent {
-                        message: "NewOrderSingle".to_owned(),
-                        component: "Parties".to_owned(),
-                    },
-                    Warning::UnsupportedGroup {
-                        message: "NewOrderSingle".to_owned(),
-                        group: "NoAllocs".to_owned(),
-                    },
-                ]
+                vec![Warning::UnsupportedGroup {
+                    context: MemberContext::Message("NewOrderSingle".to_owned()),
+                    group: "NoAllocs".to_owned(),
+                },]
             );
         }
 
@@ -617,7 +982,7 @@ mod tests {
             assert_eq!(
                 parsed.warnings,
                 vec![Warning::UnsupportedElement {
-                    message: "Heartbeat".to_owned(),
+                    context: MemberContext::Message("Heartbeat".to_owned()),
                     element: "bogus".to_owned(),
                 }]
             );
@@ -640,8 +1005,8 @@ mod tests {
 
             assert!(matches!(
                 error,
-                Error::UnknownField { ref message, ref field }
-                    if message == "Heartbeat" && field == "TestReqID"
+                Error::UnknownField { context, ref field }
+                    if context == MemberContext::Message("Heartbeat".to_owned()) && field == "TestReqID"
             ));
         }
 
@@ -752,18 +1117,6 @@ mod tests {
             assert_eq!(
                 error.to_string(),
                 "invalid number 'four' in attribute 'major' of <fix>"
-            );
-        }
-
-        #[test]
-        fn warnings_display_with_context() {
-            let warning = Warning::UnsupportedComponent {
-                message: "NewOrderSingle".to_owned(),
-                component: "Parties".to_owned(),
-            };
-            assert_eq!(
-                warning.to_string(),
-                "component 'Parties' in message 'NewOrderSingle' is not supported yet"
             );
         }
 

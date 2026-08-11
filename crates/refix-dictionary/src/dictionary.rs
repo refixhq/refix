@@ -1,12 +1,13 @@
 /// A FIX data dictionary.
 ///
-/// This contains the field and message definitions of one FIX version
+/// This contains the field, message and component definitions of one FIX version
 /// or venue dialect.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Dictionary {
     pub version: Version,
     pub messages: Vec<Message>,
     pub fields: Vec<Field>,
+    pub components: Vec<Component>,
 }
 
 /// The definition of a FIX message type.
@@ -16,8 +17,8 @@ pub struct Message {
     pub name: String,
     /// The wire value of `MsgType(35)`, verbatim, e.g. `"D"`.
     pub msg_type: String,
-    /// The message's fields in source order.
-    pub fields: Vec<FieldRef>,
+    /// The message's members in source order.
+    pub members: Vec<Member>,
     /// The category of this message.
     pub category: Category,
 }
@@ -31,11 +32,37 @@ pub struct Field {
     pub values: Vec<EnumValue>,
 }
 
-/// A field as used by one message (Orchestra's `fieldRef`).
+/// A component definition, as listed in the dictionary's components section.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Component {
+    /// The name of the component.
+    pub name: String,
+    /// The component's members in source order.
+    pub members: Vec<Member>,
+}
+
+/// A member of a message or component.
+///
+/// This can either be a field reference or a component reference.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Member {
+    Field(FieldRef),
+    Component(ComponentRef),
+}
+
+/// A field as used by one message or component (Orchestra's `fieldRef`).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldRef {
     /// Tag of the referenced [`Field`] definition.
     pub tag: u32,
+    pub is_required: bool,
+}
+
+/// A component as used by one message or component.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComponentRef {
+    /// Name of the referenced [`Component`] definition.
+    pub name: String,
     pub is_required: bool,
 }
 
