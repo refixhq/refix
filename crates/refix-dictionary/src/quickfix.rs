@@ -1,5 +1,6 @@
 use crate::{
-    Category, DataType, Dictionary, EnumValue, Field, FieldRef, Member, Message, Protocol, Version,
+    Category, Component, DataType, Dictionary, EnumValue, Field, FieldRef, Member, Message,
+    Protocol, Version,
 };
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
@@ -26,12 +27,13 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
 
     let version = parse_version(root)?;
     let fields = parse_fields(root)?;
+    let components = parse_components(root)?;
     let messages = parse_messages(root, &fields, &mut warnings)?;
 
     let dictionary = Dictionary {
         version,
         messages,
-        components: vec![], // TODO: implement parsing for components
+        components,
         fields,
     };
 
@@ -97,6 +99,38 @@ fn parse_field(node: Node) -> Result<Field, Error> {
         tag: int_attribute(node, "number")?,
         data_type: parse_data_type(string_attribute(node, "type")?),
         values,
+    })
+}
+
+fn parse_components(root: Node) -> Result<Vec<Component>, Error> {
+    let Some(section) = root.children().find(|node| node.has_tag_name("components")) else {
+        return Ok(Vec::new());
+    };
+
+    let components: Vec<Component> = section
+        .children()
+        .filter(|node| node.has_tag_name("component"))
+        .map(|node| parse_component(node))
+        .collect::<Result<_, _>>()?;
+
+    let mut seen = HashSet::new();
+    for component in &components {
+        if !seen.insert(component.name.as_str()) {
+            return Err(Error::DuplicateComponent {
+                component: component.name.clone(),
+            });
+        }
+    }
+
+    Ok(components)
+}
+
+fn parse_component(node: Node) -> Result<Component, Error> {
+    let name = string_attribute(node, "name")?;
+
+    Ok(Component {
+        name,
+        members: vec![],
     })
 }
 
@@ -313,6 +347,9 @@ pub enum Error {
     DuplicateField {
         field: String,
     },
+    DuplicateComponent {
+        component: String,
+    },
     InvalidAttribute {
         element: String,
         attribute: String,
@@ -351,6 +388,9 @@ impl fmt::Display for Error {
             }
             Error::DuplicateField { field } => {
                 write!(f, "field '{field}' is defined more than once")
+            }
+            Error::DuplicateComponent { component } => {
+                write!(f, "component '{component}' is defined more than once")
             }
             Error::InvalidAttribute {
                 element,
