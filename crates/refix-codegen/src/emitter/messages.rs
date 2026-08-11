@@ -1,4 +1,4 @@
-use refix_dictionary::{DataType, Field, Message};
+use refix_dictionary::{DataType, Field, Member, Message};
 use std::collections::HashMap;
 
 use super::{Error, naming::method_name};
@@ -21,8 +21,12 @@ fn emit_message_impl(
     fields_by_tag: &HashMap<u32, &Field>,
 ) -> Result<String, Error> {
     let fields = message
-        .fields
+        .members
         .iter()
+        .filter_map(|member| match member {
+            Member::Field(field_ref) => Some(field_ref),
+            Member::Component(_) => None,
+        })
         .map(|field_ref| {
             fields_by_tag
                 .get(&field_ref.tag)

@@ -3,7 +3,7 @@
 
 use refix_dictionary::quickfix::{self, Warning};
 use refix_dictionary::{
-    Category, DataType, EnumValue, Field, FieldRef, Message, Protocol, Version,
+    Category, DataType, EnumValue, Field, FieldRef, Member, Message, Protocol, Version,
 };
 
 const FIX44: &str = include_str!("data/quickfix/FIX44.xml");
@@ -52,10 +52,10 @@ fn parses_the_full_fix44_dictionary() {
         Message {
             name: "Heartbeat".to_owned(),
             msg_type: "0".to_owned(),
-            fields: vec![FieldRef {
+            members: vec![Member::Field(FieldRef {
                 tag: 112,
                 is_required: false,
-            }],
+            })],
             category: Category::Admin,
         }
     );

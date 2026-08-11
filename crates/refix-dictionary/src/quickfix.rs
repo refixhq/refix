@@ -1,5 +1,5 @@
 use crate::{
-    Category, DataType, Dictionary, EnumValue, Field, FieldRef, Message, Protocol, Version,
+    Category, DataType, Dictionary, EnumValue, Field, FieldRef, Member, Message, Protocol, Version,
 };
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
@@ -31,6 +31,7 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     let dictionary = Dictionary {
         version,
         messages,
+        components: vec![], // TODO: implement parsing for components
         fields,
     };
 
@@ -134,12 +135,12 @@ fn parse_message(
     warnings: &mut Vec<Warning>,
 ) -> Result<Message, Error> {
     let name = string_attribute(node, "name")?;
-    let mut fields = Vec::new();
+    let mut members = Vec::new();
     let category = parse_category(node)?;
 
     for child in node.children().filter(Node::is_element) {
         match child.tag_name().name() {
-            "field" => fields.push(parse_field_ref(child, &name, tags_by_name)?),
+            "field" => members.push(Member::Field(parse_field_ref(child, &name, tags_by_name)?)),
             "component" => warnings.push(Warning::UnsupportedComponent {
                 message: name.clone(),
                 component: string_attribute(child, "name")?,
@@ -158,7 +159,7 @@ fn parse_message(
     Ok(Message {
         name,
         msg_type: string_attribute(node, "msgtype")?,
-        fields,
+        members,
         category,
     })
 }
@@ -571,15 +572,15 @@ mod tests {
                 vec![Message {
                     name: "NewOrderSingle".to_owned(),
                     msg_type: "D".to_owned(),
-                    fields: vec![
-                        FieldRef {
+                    members: vec![
+                        Member::Field(FieldRef {
                             tag: 11,
                             is_required: true,
-                        },
-                        FieldRef {
+                        }),
+                        Member::Field(FieldRef {
                             tag: 58,
                             is_required: false,
-                        },
+                        }),
                     ],
                     category: Category::App,
                 }]
