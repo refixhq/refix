@@ -27,8 +27,13 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
 
     let version = parse_version(root)?;
     let fields = parse_fields(root)?;
-    let components = parse_components(root)?;
-    let messages = parse_messages(root, &fields, &mut warnings)?;
+    let tags_by_name: HashMap<&str, u32> = fields
+        .iter()
+        .map(|field| (field.name.as_str(), field.tag))
+        .collect();
+
+    let components = parse_components(root, &tags_by_name, &mut warnings)?;
+    let messages = parse_messages(root, &tags_by_name, &mut warnings)?;
 
     let dictionary = Dictionary {
         version,
@@ -102,7 +107,11 @@ fn parse_field(node: Node) -> Result<Field, Error> {
     })
 }
 
-fn parse_components(root: Node) -> Result<Vec<Component>, Error> {
+fn parse_components(
+    root: Node,
+    tags_by_name: &HashMap<&str, u32>,
+    warnings: &mut Vec<Warning>,
+) -> Result<Vec<Component>, Error> {
     let Some(section) = root.children().find(|node| node.has_tag_name("components")) else {
         return Ok(Vec::new());
     };
@@ -110,7 +119,7 @@ fn parse_components(root: Node) -> Result<Vec<Component>, Error> {
     let components: Vec<Component> = section
         .children()
         .filter(|node| node.has_tag_name("component"))
-        .map(|node| parse_component(node))
+        .map(|node| parse_component(node, tags_by_name, warnings))
         .collect::<Result<_, _>>()?;
 
     let mut seen = HashSet::new();
@@ -125,13 +134,16 @@ fn parse_components(root: Node) -> Result<Vec<Component>, Error> {
     Ok(components)
 }
 
-fn parse_component(node: Node) -> Result<Component, Error> {
+fn parse_component(
+    node: Node,
+    tags_by_name: &HashMap<&str, u32>,
+    warnings: &mut Vec<Warning>,
+) -> Result<Component, Error> {
     let name = string_attribute(node, "name")?;
+    let context = MemberContext::Component(name.clone());
+    let members = parse_members(node, context, tags_by_name, warnings)?;
 
-    Ok(Component {
-        name,
-        members: vec![],
-    })
+    Ok(Component { name, members })
 }
 
 fn parse_data_type(name: String) -> DataType {
@@ -144,22 +156,17 @@ fn parse_data_type(name: String) -> DataType {
 
 fn parse_messages(
     root: Node,
-    fields: &[Field],
+    tags_by_name: &HashMap<&str, u32>,
     warnings: &mut Vec<Warning>,
 ) -> Result<Vec<Message>, Error> {
     let Some(section) = root.children().find(|node| node.has_tag_name("messages")) else {
         return Ok(Vec::new());
     };
 
-    let tags_by_name: HashMap<&str, u32> = fields
-        .iter()
-        .map(|field| (field.name.as_str(), field.tag))
-        .collect();
-
     section
         .children()
         .filter(|node| node.has_tag_name("message"))
-        .map(|node| parse_message(node, &tags_by_name, warnings))
+        .map(|node| parse_message(node, tags_by_name, warnings))
         .collect()
 }
 
@@ -169,26 +176,13 @@ fn parse_message(
     warnings: &mut Vec<Warning>,
 ) -> Result<Message, Error> {
     let name = string_attribute(node, "name")?;
-    let mut members = Vec::new();
     let category = parse_category(node)?;
-
-    for child in node.children().filter(Node::is_element) {
-        match child.tag_name().name() {
-            "field" => members.push(Member::Field(parse_field_ref(child, &name, tags_by_name)?)),
-            "component" => warnings.push(Warning::UnsupportedComponent {
-                message: name.clone(),
-                component: string_attribute(child, "name")?,
-            }),
-            "group" => warnings.push(Warning::UnsupportedGroup {
-                message: name.clone(),
-                group: string_attribute(child, "name")?,
-            }),
-            other => warnings.push(Warning::UnsupportedElement {
-                message: name.clone(),
-                element: other.to_owned(),
-            }),
-        }
-    }
+    let members = parse_members(
+        node,
+        MemberContext::Message(name.clone()),
+        tags_by_name,
+        warnings,
+    )?;
 
     Ok(Message {
         name,
@@ -198,15 +192,48 @@ fn parse_message(
     })
 }
 
+fn parse_members(
+    node: Node,
+    context: MemberContext,
+    tags_by_name: &HashMap<&str, u32>,
+    warnings: &mut Vec<Warning>,
+) -> Result<Vec<Member>, Error> {
+    let mut members = Vec::new();
+
+    for child in node.children().filter(Node::is_element) {
+        match child.tag_name().name() {
+            "field" => members.push(Member::Field(parse_field_ref(
+                child,
+                context.clone(),
+                tags_by_name,
+            )?)),
+            "component" => warnings.push(Warning::UnsupportedComponent {
+                context: context.clone(),
+                component: string_attribute(child, "name")?,
+            }),
+            "group" => warnings.push(Warning::UnsupportedGroup {
+                context: context.clone(),
+                group: string_attribute(child, "name")?,
+            }),
+            other => warnings.push(Warning::UnsupportedElement {
+                context: context.clone(),
+                element: other.to_owned(),
+            }),
+        }
+    }
+
+    Ok(members)
+}
+
 fn parse_field_ref(
     node: Node,
-    message: &str,
+    context: MemberContext,
     tags_by_name: &HashMap<&str, u32>,
 ) -> Result<FieldRef, Error> {
     let name = string_attribute(node, "name")?;
     let Some(&tag) = tags_by_name.get(name.as_str()) else {
         return Err(Error::UnknownField {
-            message: message.to_owned(),
+            context,
             field: name,
         });
     };
@@ -279,6 +306,21 @@ fn int_attribute_or<T: FromStr<Err = ParseIntError>>(
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MemberContext {
+    Message(String),
+    Component(String),
+}
+
+impl fmt::Display for MemberContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Message(name) => write!(f, "message '{name}'"),
+            Self::Component(name) => write!(f, "component '{name}'"),
+        }
+    }
+}
+
 /// The result of a successful parse.
 ///
 /// This contains the parsed dictionary as well as any
@@ -292,29 +334,37 @@ pub struct Parsed {
 /// A construct the parser recognised but the model does not hold yet.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Warning {
-    UnsupportedComponent { message: String, component: String },
-    UnsupportedGroup { message: String, group: String },
-    UnsupportedElement { message: String, element: String },
-    UnsupportedSection { section: String },
+    UnsupportedComponent {
+        context: MemberContext,
+        component: String,
+    },
+    UnsupportedGroup {
+        context: MemberContext,
+        group: String,
+    },
+    UnsupportedElement {
+        context: MemberContext,
+        element: String,
+    },
+    UnsupportedSection {
+        section: String,
+    },
 }
 
 impl fmt::Display for Warning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Warning::UnsupportedComponent { message, component } => {
+            Warning::UnsupportedComponent { context, component } => {
                 write!(
                     f,
-                    "component '{component}' in message '{message}' is not supported yet"
+                    "component '{component}' in {context} is not supported yet"
                 )
             }
-            Warning::UnsupportedGroup { message, group } => {
-                write!(
-                    f,
-                    "group '{group}' in message '{message}' is not supported yet"
-                )
+            Warning::UnsupportedGroup { context, group } => {
+                write!(f, "group '{group}' in {context} is not supported yet")
             }
-            Warning::UnsupportedElement { message, element } => {
-                write!(f, "unexpected element <{element}> in message '{message}'")
+            Warning::UnsupportedElement { context, element } => {
+                write!(f, "unexpected element <{element}> in {context}")
             }
             Warning::UnsupportedSection { section } => {
                 write!(f, "section <{section}> is not supported yet")
@@ -341,7 +391,7 @@ pub enum Error {
         value: String,
     },
     UnknownField {
-        message: String,
+        context: MemberContext,
         field: String,
     },
     DuplicateField {
@@ -383,8 +433,8 @@ impl fmt::Display for Error {
                     "invalid number '{value}' in attribute '{attribute}' of <{element}>"
                 )
             }
-            Error::UnknownField { message, field } => {
-                write!(f, "message '{message}' references unknown field '{field}'")
+            Error::UnknownField { context, field } => {
+                write!(f, "{context} references unknown field '{field}'")
             }
             Error::DuplicateField { field } => {
                 write!(f, "field '{field}' is defined more than once")
@@ -635,11 +685,11 @@ mod tests {
                 parsed.warnings,
                 vec![
                     Warning::UnsupportedComponent {
-                        message: "NewOrderSingle".to_owned(),
+                        context: MemberContext::Message("NewOrderSingle".to_owned()),
                         component: "Parties".to_owned(),
                     },
                     Warning::UnsupportedGroup {
-                        message: "NewOrderSingle".to_owned(),
+                        context: MemberContext::Message("NewOrderSingle".to_owned()),
                         group: "NoAllocs".to_owned(),
                     },
                 ]
@@ -658,7 +708,7 @@ mod tests {
             assert_eq!(
                 parsed.warnings,
                 vec![Warning::UnsupportedElement {
-                    message: "Heartbeat".to_owned(),
+                    context: MemberContext::Message("Heartbeat".to_owned()),
                     element: "bogus".to_owned(),
                 }]
             );
@@ -681,8 +731,8 @@ mod tests {
 
             assert!(matches!(
                 error,
-                Error::UnknownField { ref message, ref field }
-                    if message == "Heartbeat" && field == "TestReqID"
+                Error::UnknownField { context, ref field }
+                    if context == MemberContext::Message("Heartbeat".to_owned()) && field == "TestReqID"
             ));
         }
 
@@ -799,7 +849,7 @@ mod tests {
         #[test]
         fn warnings_display_with_context() {
             let warning = Warning::UnsupportedComponent {
-                message: "NewOrderSingle".to_owned(),
+                context: MemberContext::Message("NewOrderSingle".to_owned()),
                 component: "Parties".to_owned(),
             };
             assert_eq!(
