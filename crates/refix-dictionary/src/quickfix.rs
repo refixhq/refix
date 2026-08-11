@@ -34,6 +34,7 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
 
     let components = parse_components(root, &tags_by_name, &mut warnings)?;
     let messages = parse_messages(root, &tags_by_name, &mut warnings)?;
+    validate_component_refs(&messages, &components)?;
 
     let dictionary = Dictionary {
         version,
@@ -312,6 +313,93 @@ fn int_attribute_or<T: FromStr<Err = ParseIntError>>(
     }
 }
 
+fn validate_component_refs(messages: &[Message], components: &[Component]) -> Result<(), Error> {
+    let defined: HashSet<&str> = components
+        .iter()
+        .map(|component| component.name.as_str())
+        .collect();
+
+    for message in messages {
+        check_refs(
+            &message.members,
+            &MemberContext::Message(message.name.clone()),
+            &defined,
+        )?;
+    }
+    for component in components {
+        check_refs(
+            &component.members,
+            &MemberContext::Component(component.name.clone()),
+            &defined,
+        )?;
+    }
+
+    check_cycles(components)
+}
+
+fn check_refs(
+    members: &[Member],
+    context: &MemberContext,
+    defined: &HashSet<&str>,
+) -> Result<(), Error> {
+    for member in members {
+        if let Member::Component(component_ref) = member
+            && !defined.contains(component_ref.name.as_str())
+        {
+            return Err(Error::UnknownComponent {
+                context: context.clone(),
+                component: component_ref.name.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn check_cycles(components: &[Component]) -> Result<(), Error> {
+    let by_name: HashMap<&str, &Component> = components
+        .iter()
+        .map(|component| (component.name.as_str(), component))
+        .collect();
+    let mut finished = HashSet::new();
+
+    for component in components {
+        visit_component(component, &by_name, &mut Vec::new(), &mut finished)?;
+    }
+    Ok(())
+}
+
+fn visit_component<'a>(
+    component: &'a Component,
+    by_name: &HashMap<&str, &'a Component>,
+    stack: &mut Vec<&'a str>,
+    finished: &mut HashSet<&'a str>,
+) -> Result<(), Error> {
+    if finished.contains(component.name.as_str()) {
+        return Ok(());
+    }
+    if stack.contains(&component.name.as_str()) {
+        return Err(Error::CircularComponent {
+            component: component.name.clone(),
+        });
+    }
+
+    stack.push(component.name.as_str());
+    for member in &component.members {
+        if let Member::Component(component_ref) = member {
+            visit_component(
+                by_name[component_ref.name.as_str()],
+                by_name,
+                stack,
+                finished,
+            )?;
+        }
+    }
+    stack.pop();
+    finished.insert(component.name.as_str());
+
+    Ok(())
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MemberContext {
     Message(String),
@@ -393,6 +481,13 @@ pub enum Error {
     DuplicateField {
         field: String,
     },
+    UnknownComponent {
+        context: MemberContext,
+        component: String,
+    },
+    CircularComponent {
+        component: String,
+    },
     DuplicateComponent {
         component: String,
     },
@@ -434,6 +529,12 @@ impl fmt::Display for Error {
             }
             Error::DuplicateField { field } => {
                 write!(f, "field '{field}' is defined more than once")
+            }
+            Error::UnknownComponent { context, component } => {
+                write!(f, "{context} references unknown component '{component}'")
+            }
+            Error::CircularComponent { component } => {
+                write!(f, "component '{component}' is part of a reference cycle")
             }
             Error::DuplicateComponent { component } => {
                 write!(f, "component '{component}' is defined more than once")
@@ -621,7 +722,7 @@ mod tests {
             let error = parse(
                 "<fix major='4' minor='4'><fields><field name='ClOrdID' type='STRING'/></fields></fix>",
             )
-            .unwrap_err();
+                .unwrap_err();
             assert!(matches!(
                 error,
                 Error::MissingAttribute { ref element, ref attribute }
