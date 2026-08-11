@@ -731,6 +731,180 @@ mod tests {
         }
     }
 
+    mod components {
+        use super::*;
+
+        const DICTIONARY: &str = "\
+<fix major='4' minor='4'>
+ <fields>
+  <field number='12' name='Commission' type='AMT'/>
+  <field number='13' name='CommType' type='CHAR'/>
+ </fields>
+ <components>
+  <component name='CommissionData'>
+   <field name='Commission' required='Y'/>
+   <field name='CommType'/>
+   <group name='NoNested' required='N'/>
+  </component>
+  <component name='SpreadOrBenchmarkCurveData'>
+   <component name='CommissionData' required='Y'/>
+  </component>
+ </components>
+</fix>";
+
+        #[test]
+        fn parses_component_definitions() {
+            let components = parse(DICTIONARY).unwrap().dictionary.components;
+
+            assert_eq!(
+                components,
+                vec![
+                    Component {
+                        name: "CommissionData".to_owned(),
+                        members: vec![
+                            Member::Field(FieldRef {
+                                tag: 12,
+                                is_required: true,
+                            }),
+                            Member::Field(FieldRef {
+                                tag: 13,
+                                is_required: false,
+                            }),
+                        ],
+                    },
+                    Component {
+                        name: "SpreadOrBenchmarkCurveData".to_owned(),
+                        members: vec![Member::Component(ComponentRef {
+                            name: "CommissionData".to_owned(),
+                            is_required: true,
+                        })],
+                    },
+                ]
+            );
+        }
+
+        #[test]
+        fn groups_in_components_surface_as_warnings() {
+            let parsed = parse(DICTIONARY).unwrap();
+
+            assert_eq!(
+                parsed.warnings,
+                vec![Warning::UnsupportedGroup {
+                    context: MemberContext::Component("CommissionData".to_owned()),
+                    group: "NoNested".to_owned(),
+                }]
+            );
+        }
+
+        #[test]
+        fn missing_components_section_yields_no_components() {
+            let parsed = parse("<fix major='4' minor='4'/>").unwrap();
+            assert!(parsed.dictionary.components.is_empty());
+        }
+
+        #[test]
+        fn duplicate_component_definition_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Parties'/>\
+                 <component name='Parties'/>\
+                 </components></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::DuplicateComponent { ref component } if component == "Parties"
+            ));
+        }
+
+        #[test]
+        fn component_ref_to_undefined_component_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Stipulations'>\
+                 <component name='UnderlyingInstrument'/>\
+                 </component></components></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::UnknownComponent { ref context, ref component }
+                    if *context == MemberContext::Component("Stipulations".to_owned())
+                        && component == "UnderlyingInstrument"
+            ));
+        }
+
+        #[test]
+        fn message_ref_to_undefined_component_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='NewOrderSingle' msgtype='D' msgcat='app'>\
+                 <component name='Instrument'/>\
+                 </message></messages></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::UnknownComponent { ref context, ref component }
+                    if *context == MemberContext::Message("NewOrderSingle".to_owned())
+                        && component == "Instrument"
+            ));
+        }
+
+        #[test]
+        fn a_self_referencing_component_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Parties'>\
+                 <component name='Parties'/>\
+                 </component></components></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::CircularComponent { ref component } if component == "Parties"
+            ));
+        }
+
+        #[test]
+        fn mutually_referencing_components_are_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Instrument'>\
+                 <component name='UnderlyingInstrument'/>\
+                 </component>\
+                 <component name='UnderlyingInstrument'>\
+                 <component name='Instrument'/>\
+                 </component></components></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(error, Error::CircularComponent { .. }));
+        }
+
+        #[test]
+        fn a_diamond_of_references_is_not_a_cycle() {
+            let parsed = parse(
+                "<fix major='4' minor='4'><components>\
+                 <component name='Top'>\
+                 <component name='Left'/>\
+                 <component name='Right'/>\
+                 </component>\
+                 <component name='Left'><component name='Bottom'/></component>\
+                 <component name='Right'><component name='Bottom'/></component>\
+                 <component name='Bottom'/>\
+                 </components></fix>",
+            )
+            .unwrap();
+
+            assert_eq!(parsed.dictionary.components.len(), 4);
+        }
+    }
+
     mod messages {
         use super::*;
 
@@ -740,6 +914,11 @@ mod tests {
   <field number='11' name='ClOrdID' type='STRING'/>
   <field number='58' name='Text' type='STRING'/>
  </fields>
+ <components>
+  <component name='Parties'>
+   <field name='Text'/>
+  </component>
+ </components>
  <messages>
   <message name='NewOrderSingle' msgtype='D' msgcat='app'>
    <field name='ClOrdID' required='Y'/>
