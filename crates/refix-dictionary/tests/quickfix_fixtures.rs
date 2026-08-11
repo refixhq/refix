@@ -60,9 +60,8 @@ fn parses_the_full_fix44_dictionary() {
         }
     );
 
-    // 3 unmodelled sections, 390 component references and 1 group across
-    // the messages.
-    assert_eq!(parsed.warnings.len(), 394);
+    // 2 unmodelled sections (header and trailer), 92 group warnings
+    assert_eq!(parsed.warnings.len(), 94);
     assert_eq!(
         parsed.warnings[0],
         Warning::UnsupportedSection {

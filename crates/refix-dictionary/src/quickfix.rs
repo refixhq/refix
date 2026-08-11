@@ -1,6 +1,6 @@
 use crate::{
-    Category, Component, DataType, Dictionary, EnumValue, Field, FieldRef, Member, Message,
-    Protocol, Version,
+    Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Member,
+    Message, Protocol, Version,
 };
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
@@ -17,7 +17,7 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     }
 
     let mut warnings = Vec::new();
-    for section in ["header", "trailer", "components"] {
+    for section in ["header", "trailer"] {
         if root.children().any(|node| node.has_tag_name(section)) {
             warnings.push(Warning::UnsupportedSection {
                 section: section.to_owned(),
@@ -207,10 +207,7 @@ fn parse_members(
                 context.clone(),
                 tags_by_name,
             )?)),
-            "component" => warnings.push(Warning::UnsupportedComponent {
-                context: context.clone(),
-                component: string_attribute(child, "name")?,
-            }),
+            "component" => members.push(Member::Component(parse_component_ref(child)?)),
             "group" => warnings.push(Warning::UnsupportedGroup {
                 context: context.clone(),
                 group: string_attribute(child, "name")?,
@@ -240,6 +237,15 @@ fn parse_field_ref(
 
     Ok(FieldRef {
         tag,
+        is_required: required_attribute(node)?,
+    })
+}
+
+fn parse_component_ref(node: Node) -> Result<ComponentRef, Error> {
+    let name = string_attribute(node, "name")?;
+
+    Ok(ComponentRef {
+        name,
         is_required: required_attribute(node)?,
     })
 }
@@ -334,10 +340,6 @@ pub struct Parsed {
 /// A construct the parser recognised but the model does not hold yet.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Warning {
-    UnsupportedComponent {
-        context: MemberContext,
-        component: String,
-    },
     UnsupportedGroup {
         context: MemberContext,
         group: String,
@@ -354,12 +356,6 @@ pub enum Warning {
 impl fmt::Display for Warning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Warning::UnsupportedComponent { context, component } => {
-                write!(
-                    f,
-                    "component '{component}' in {context} is not supported yet"
-                )
-            }
             Warning::UnsupportedGroup { context, group } => {
                 write!(f, "group '{group}' in {context} is not supported yet")
             }
@@ -671,6 +667,10 @@ mod tests {
                             tag: 58,
                             is_required: false,
                         }),
+                        Member::Component(ComponentRef {
+                            name: "Parties".to_owned(),
+                            is_required: false,
+                        }),
                     ],
                     category: Category::App,
                 }]
@@ -678,21 +678,15 @@ mod tests {
         }
 
         #[test]
-        fn components_and_groups_surface_as_warnings() {
+        fn groups_surface_as_warnings() {
             let parsed = parse(DICTIONARY).unwrap();
 
             assert_eq!(
                 parsed.warnings,
-                vec![
-                    Warning::UnsupportedComponent {
-                        context: MemberContext::Message("NewOrderSingle".to_owned()),
-                        component: "Parties".to_owned(),
-                    },
-                    Warning::UnsupportedGroup {
-                        context: MemberContext::Message("NewOrderSingle".to_owned()),
-                        group: "NoAllocs".to_owned(),
-                    },
-                ]
+                vec![Warning::UnsupportedGroup {
+                    context: MemberContext::Message("NewOrderSingle".to_owned()),
+                    group: "NoAllocs".to_owned(),
+                },]
             );
         }
 
@@ -843,18 +837,6 @@ mod tests {
             assert_eq!(
                 error.to_string(),
                 "invalid number 'four' in attribute 'major' of <fix>"
-            );
-        }
-
-        #[test]
-        fn warnings_display_with_context() {
-            let warning = Warning::UnsupportedComponent {
-                context: MemberContext::Message("NewOrderSingle".to_owned()),
-                component: "Parties".to_owned(),
-            };
-            assert_eq!(
-                warning.to_string(),
-                "component 'Parties' in message 'NewOrderSingle' is not supported yet"
             );
         }
 
