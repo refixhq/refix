@@ -1,6 +1,6 @@
 use crate::{
     Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Member,
-    Message, Protocol, Version,
+    MemberContext, Message, Protocol, Version,
 };
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
@@ -398,21 +398,6 @@ fn visit_component<'a>(
     finished.insert(component.name.as_str());
 
     Ok(())
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MemberContext {
-    Message(String),
-    Component(String),
-}
-
-impl fmt::Display for MemberContext {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Message(name) => write!(f, "message '{name}'"),
-            Self::Component(name) => write!(f, "component '{name}'"),
-        }
-    }
 }
 
 /// The result of a successful parse.

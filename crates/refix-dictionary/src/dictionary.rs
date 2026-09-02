@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// A FIX data dictionary.
 ///
 /// This contains the field, message and component definitions of one FIX version
@@ -64,6 +66,24 @@ pub struct ComponentRef {
     /// Name of the referenced [`Component`] definition.
     pub name: String,
     pub is_required: bool,
+}
+
+/// The owner of a member list: the message or component a member appears in.
+///
+/// Diagnostics use this to name the place a problem was found.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MemberContext {
+    Message(String),
+    Component(String),
+}
+
+impl fmt::Display for MemberContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Message(name) => write!(f, "message '{name}'"),
+            Self::Component(name) => write!(f, "component '{name}'"),
+        }
+    }
 }
 
 /// An enum variant's value.
