@@ -2,7 +2,9 @@
 //! into it. Consumers (codegen, the runtime dialect descriptor, validation)
 //! read the model and never touch the external formats directly.
 
+pub mod dictionary;
 pub mod quickfix;
 mod spec;
 
+pub use dictionary::Dictionary;
 pub use spec::*;
