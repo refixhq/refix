@@ -1,6 +1,6 @@
 use crate::{
-    Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Member,
-    MemberContext, Message, Protocol, Version,
+    Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Member, MemberContext,
+    Message, Protocol, Spec, Version,
 };
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
@@ -8,7 +8,7 @@ use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
-/// Parses a QuickFIX-format XML data dictionary into a [`Dictionary`].
+/// Parses a QuickFIX-format XML data dictionary into a [`Spec`].
 pub fn parse(xml: &str) -> Result<Parsed, Error> {
     let document = roxmltree::Document::parse(xml).map_err(Error::Xml)?;
     let root = document.root_element();
@@ -36,17 +36,14 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     let messages = parse_messages(root, &tags_by_name, &mut warnings)?;
     validate_component_refs(&messages, &components)?;
 
-    let dictionary = Dictionary {
+    let spec = Spec {
         version,
         messages,
         components,
         fields,
     };
 
-    Ok(Parsed {
-        dictionary,
-        warnings,
-    })
+    Ok(Parsed { spec, warnings })
 }
 
 fn parse_version(root: Node) -> Result<Version, Error> {
@@ -402,11 +399,11 @@ fn visit_component<'a>(
 
 /// The result of a successful parse.
 ///
-/// This contains the parsed dictionary as well as any
+/// This contains the parsed spec as well as any
 /// [`Warning`] that was produced along the way.
 #[derive(Debug)]
 pub struct Parsed {
-    pub dictionary: Dictionary,
+    pub spec: Spec,
     pub warnings: Vec<Warning>,
 }
 
@@ -552,7 +549,7 @@ mod tests {
     use super::*;
 
     fn version_of(xml: &str) -> Version {
-        parse(xml).unwrap().dictionary.version
+        parse(xml).unwrap().spec.version
     }
 
     mod version {
@@ -609,7 +606,7 @@ mod tests {
 
         #[test]
         fn parses_field_definitions() {
-            let fields = parse(DICTIONARY).unwrap().dictionary.fields;
+            let fields = parse(DICTIONARY).unwrap().spec.fields;
 
             assert_eq!(
                 fields,
@@ -686,7 +683,7 @@ mod tests {
         #[test]
         fn missing_fields_section_yields_no_fields() {
             let parsed = parse("<fix major='4' minor='4'/>").unwrap();
-            assert!(parsed.dictionary.fields.is_empty());
+            assert!(parsed.spec.fields.is_empty());
         }
 
         #[test]
@@ -739,7 +736,7 @@ mod tests {
 
         #[test]
         fn parses_component_definitions() {
-            let components = parse(DICTIONARY).unwrap().dictionary.components;
+            let components = parse(DICTIONARY).unwrap().spec.components;
 
             assert_eq!(
                 components,
@@ -784,7 +781,7 @@ mod tests {
         #[test]
         fn missing_components_section_yields_no_components() {
             let parsed = parse("<fix major='4' minor='4'/>").unwrap();
-            assert!(parsed.dictionary.components.is_empty());
+            assert!(parsed.spec.components.is_empty());
         }
 
         #[test]
@@ -886,7 +883,7 @@ mod tests {
             )
             .unwrap();
 
-            assert_eq!(parsed.dictionary.components.len(), 4);
+            assert_eq!(parsed.spec.components.len(), 4);
         }
     }
 
@@ -916,7 +913,7 @@ mod tests {
 
         #[test]
         fn parses_message_definitions() {
-            let messages = parse(DICTIONARY).unwrap().dictionary.messages;
+            let messages = parse(DICTIONARY).unwrap().spec.messages;
 
             assert_eq!(
                 messages,
@@ -976,7 +973,7 @@ mod tests {
         #[test]
         fn missing_messages_section_yields_no_messages() {
             let parsed = parse("<fix major='4' minor='4'/>").unwrap();
-            assert!(parsed.dictionary.messages.is_empty());
+            assert!(parsed.spec.messages.is_empty());
         }
 
         #[test]

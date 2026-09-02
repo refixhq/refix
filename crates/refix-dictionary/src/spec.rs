@@ -1,11 +1,12 @@
 use std::fmt;
 
-/// A FIX data dictionary.
+/// A FIX data dictionary as authored: the field, message and component
+/// definitions of one FIX version or venue dialect.
 ///
-/// This contains the field, message and component definitions of one FIX version
-/// or venue dialect.
+/// A spec is plain data and makes no consistency guarantees. It is what
+/// frontends parse into and what dialect authors construct by hand.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Dictionary {
+pub struct Spec {
     pub version: Version,
     pub messages: Vec<Message>,
     pub fields: Vec<Field>,

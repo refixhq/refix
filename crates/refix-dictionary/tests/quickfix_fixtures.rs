@@ -13,7 +13,7 @@ fn parses_the_full_fix44_dictionary() {
     let parsed = quickfix::parse(FIX44).unwrap();
 
     assert_eq!(
-        parsed.dictionary.version,
+        parsed.spec.version,
         Version {
             protocol: Protocol::Fix,
             major: 4,
@@ -22,7 +22,7 @@ fn parses_the_full_fix44_dictionary() {
         }
     );
 
-    let fields = &parsed.dictionary.fields;
+    let fields = &parsed.spec.fields;
     assert_eq!(fields.len(), 912);
     assert_eq!(
         fields[0],
@@ -45,7 +45,7 @@ fn parses_the_full_fix44_dictionary() {
         }
     );
 
-    let messages = &parsed.dictionary.messages;
+    let messages = &parsed.spec.messages;
     assert_eq!(messages.len(), 93);
     assert_eq!(
         messages[0],
