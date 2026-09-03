@@ -17,7 +17,7 @@ const TOY_GENERATED: &str = include_str!("data/toy_generated.rs");
 #[test]
 fn the_checked_in_module_is_fresh() {
     let parsed = quickfix::parse(TOY_XML).unwrap();
-    let generated = generate(&parsed.spec, "toy.xml").unwrap();
+    let generated = generate(&parsed.spec.resolve().unwrap(), "toy.xml").unwrap();
     assert_eq!(generated, TOY_GENERATED);
 }
 
