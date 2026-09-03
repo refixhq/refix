@@ -26,7 +26,7 @@ struct ResolvedMessage {
 /// dictionary stays free of self-references.
 #[derive(Clone, Copy, Debug)]
 struct ResolvedMember {
-    field: usize,
+    field_index: usize,
     is_required: bool,
 }
 
@@ -97,7 +97,7 @@ impl<'a> Message<'a> {
     pub fn members(&self) -> impl Iterator<Item = Member<'a>> {
         let fields = self.fields;
         self.members.iter().map(move |member| Member {
-            field: &fields[member.field],
+            field: &fields[member.field_index],
             is_required: member.is_required,
         })
     }
@@ -267,7 +267,7 @@ fn resolve_field_ref(
     context: &MemberContext,
     fields_by_tag: &HashMap<u32, usize>,
 ) -> Result<ResolvedMember, Error> {
-    let Some(&field) = fields_by_tag.get(&field_ref.tag) else {
+    let Some(&field_index) = fields_by_tag.get(&field_ref.tag) else {
         return Err(Error::UnknownField {
             context: context.clone(),
             tag: field_ref.tag,
@@ -275,7 +275,7 @@ fn resolve_field_ref(
     };
 
     Ok(ResolvedMember {
-        field,
+        field_index,
         is_required: field_ref.is_required,
     })
 }
@@ -286,7 +286,7 @@ fn extend_with_expansion(
     is_required: bool,
 ) {
     members.extend(expansion.iter().map(|member| ResolvedMember {
-        field: member.field,
+        field_index: member.field_index,
         is_required: is_required && member.is_required,
     }));
 }
@@ -298,7 +298,7 @@ fn check_unique_tags(
 ) -> Result<(), Error> {
     let mut seen = HashSet::new();
     for member in members {
-        let tag = fields[member.field].tag;
+        let tag = fields[member.field_index].tag;
         if !seen.insert(tag) {
             return Err(Error::DuplicateField {
                 context: context.clone(),
