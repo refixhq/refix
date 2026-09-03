@@ -1,60 +1,36 @@
-use refix_dictionary::{DataType, Field, Member, Message};
-use std::collections::HashMap;
+use refix_dictionary::{DataType, Field, dictionary};
 
 use super::{Error, naming::method_name};
 
-pub(super) fn emit_message(
-    message: &Message,
-    fields_by_tag: &HashMap<u32, &Field>,
-) -> Result<String, Error> {
+pub(super) fn emit_message(message: dictionary::Message<'_>) -> Result<String, Error> {
     let message_struct = emit_message_struct(message);
-    let message_impl = emit_message_impl(message, fields_by_tag)?;
+    let message_impl = emit_message_impl(message)?;
     Ok(format!("{message_struct}\n{message_impl}"))
 }
 
-fn emit_message_struct(message: &Message) -> String {
-    format!("pub struct {}(RawMessage);\n", message.name)
+fn emit_message_struct(message: dictionary::Message<'_>) -> String {
+    format!("pub struct {}(RawMessage);\n", message.name())
 }
 
-fn emit_message_impl(
-    message: &Message,
-    fields_by_tag: &HashMap<u32, &Field>,
-) -> Result<String, Error> {
-    let fields = message
-        .members
-        .iter()
-        .filter_map(|member| match member {
-            Member::Field(field_ref) => Some(field_ref),
-            Member::Component(_) => None,
-        })
-        .map(|field_ref| {
-            fields_by_tag
-                .get(&field_ref.tag)
-                .copied()
-                .ok_or(Error::UnknownTag {
-                    message: message.name.clone(),
-                    tag: field_ref.tag,
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+fn emit_message_impl(message: dictionary::Message<'_>) -> Result<String, Error> {
     let mut members = vec![
         format!(
             "    pub const MSG_TYPE: &[u8] = b\"{}\";\n",
-            message.msg_type
+            message.msg_type()
         ),
         "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),
         "    pub fn raw(&self) -> &RawMessage {\n        &self.0\n    }\n".to_owned(),
     ];
     members.extend(
-        fields
-            .into_iter()
-            .map(emit_accessor)
+        message
+            .members()
+            .map(|member| emit_accessor(member.field))
             .collect::<Result<Vec<_>, _>>()?,
     );
 
     Ok(format!(
         "impl {} {{\n{}}}\n",
-        message.name,
+        message.name(),
         members.join("\n")
     ))
 }
