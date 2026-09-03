@@ -1,6 +1,6 @@
 use crate::{
-    Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Member, MemberContext,
-    Message, Protocol, Spec, Version,
+    Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Member,
+    MemberContext, Message, Protocol, Spec, Version, dictionary,
 };
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
@@ -8,7 +8,7 @@ use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
-/// Parses a QuickFIX-format XML data dictionary into a [`Spec`].
+/// Parses a QuickFIX-format XML data dictionary into a [`Dictionary`].
 pub fn parse(xml: &str) -> Result<Parsed, Error> {
     let document = roxmltree::Document::parse(xml).map_err(Error::Xml)?;
     let root = document.root_element();
@@ -34,7 +34,6 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
 
     let components = parse_components(root, &tags_by_name, &mut warnings)?;
     let messages = parse_messages(root, &tags_by_name, &mut warnings)?;
-    validate_component_refs(&messages, &components)?;
 
     let spec = Spec {
         version,
@@ -42,8 +41,12 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
         components,
         fields,
     };
+    let dictionary = spec.resolve().map_err(Error::Invalid)?;
 
-    Ok(Parsed { spec, warnings })
+    Ok(Parsed {
+        dictionary,
+        warnings,
+    })
 }
 
 fn parse_version(root: Node) -> Result<Version, Error> {
@@ -119,15 +122,6 @@ fn parse_components(
         .filter(|node| node.has_tag_name("component"))
         .map(|node| parse_component(node, tags_by_name, warnings))
         .collect::<Result<_, _>>()?;
-
-    let mut seen = HashSet::new();
-    for component in &components {
-        if !seen.insert(component.name.as_str()) {
-            return Err(Error::DuplicateComponent {
-                component: component.name.clone(),
-            });
-        }
-    }
 
     Ok(components)
 }
@@ -310,100 +304,13 @@ fn int_attribute_or<T: FromStr<Err = ParseIntError>>(
     }
 }
 
-fn validate_component_refs(messages: &[Message], components: &[Component]) -> Result<(), Error> {
-    let defined: HashSet<&str> = components
-        .iter()
-        .map(|component| component.name.as_str())
-        .collect();
-
-    for message in messages {
-        check_refs(
-            &message.members,
-            &MemberContext::Message(message.name.clone()),
-            &defined,
-        )?;
-    }
-    for component in components {
-        check_refs(
-            &component.members,
-            &MemberContext::Component(component.name.clone()),
-            &defined,
-        )?;
-    }
-
-    check_cycles(components)
-}
-
-fn check_refs(
-    members: &[Member],
-    context: &MemberContext,
-    defined: &HashSet<&str>,
-) -> Result<(), Error> {
-    for member in members {
-        if let Member::Component(component_ref) = member
-            && !defined.contains(component_ref.name.as_str())
-        {
-            return Err(Error::UnknownComponent {
-                context: context.clone(),
-                component: component_ref.name.clone(),
-            });
-        }
-    }
-    Ok(())
-}
-
-fn check_cycles(components: &[Component]) -> Result<(), Error> {
-    let by_name: HashMap<&str, &Component> = components
-        .iter()
-        .map(|component| (component.name.as_str(), component))
-        .collect();
-    let mut finished = HashSet::new();
-
-    for component in components {
-        visit_component(component, &by_name, &mut Vec::new(), &mut finished)?;
-    }
-    Ok(())
-}
-
-fn visit_component<'a>(
-    component: &'a Component,
-    by_name: &HashMap<&str, &'a Component>,
-    stack: &mut Vec<&'a str>,
-    finished: &mut HashSet<&'a str>,
-) -> Result<(), Error> {
-    if finished.contains(component.name.as_str()) {
-        return Ok(());
-    }
-    if stack.contains(&component.name.as_str()) {
-        return Err(Error::CircularComponent {
-            component: component.name.clone(),
-        });
-    }
-
-    stack.push(component.name.as_str());
-    for member in &component.members {
-        if let Member::Component(component_ref) = member {
-            visit_component(
-                by_name[component_ref.name.as_str()],
-                by_name,
-                stack,
-                finished,
-            )?;
-        }
-    }
-    stack.pop();
-    finished.insert(component.name.as_str());
-
-    Ok(())
-}
-
 /// The result of a successful parse.
 ///
-/// This contains the parsed spec as well as any
+/// This contains the resolved dictionary as well as any
 /// [`Warning`] that was produced along the way.
 #[derive(Debug)]
 pub struct Parsed {
-    pub spec: Spec,
+    pub dictionary: Dictionary,
     pub warnings: Vec<Warning>,
 }
 
@@ -463,21 +370,12 @@ pub enum Error {
     DuplicateField {
         field: String,
     },
-    UnknownComponent {
-        context: MemberContext,
-        component: String,
-    },
-    CircularComponent {
-        component: String,
-    },
-    DuplicateComponent {
-        component: String,
-    },
     InvalidAttribute {
         element: String,
         attribute: String,
         value: String,
     },
+    Invalid(dictionary::Error),
 }
 
 impl fmt::Display for Error {
@@ -512,15 +410,6 @@ impl fmt::Display for Error {
             Error::DuplicateField { field } => {
                 write!(f, "field '{field}' is defined more than once")
             }
-            Error::UnknownComponent { context, component } => {
-                write!(f, "{context} references unknown component '{component}'")
-            }
-            Error::CircularComponent { component } => {
-                write!(f, "component '{component}' is part of a reference cycle")
-            }
-            Error::DuplicateComponent { component } => {
-                write!(f, "component '{component}' is defined more than once")
-            }
             Error::InvalidAttribute {
                 element,
                 attribute,
@@ -531,6 +420,9 @@ impl fmt::Display for Error {
                     "invalid value '{value}' in attribute '{attribute}' of <{element}>"
                 )
             }
+            Error::Invalid(error) => {
+                write!(f, "invalid dictionary: {error}")
+            }
         }
     }
 }
@@ -539,6 +431,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::Xml(error) => Some(error),
+            Error::Invalid(error) => Some(error),
             _ => None,
         }
     }
@@ -549,7 +442,7 @@ mod tests {
     use super::*;
 
     fn version_of(xml: &str) -> Version {
-        parse(xml).unwrap().spec.version
+        parse(xml).unwrap().dictionary.version()
     }
 
     mod version {
@@ -606,7 +499,7 @@ mod tests {
 
         #[test]
         fn parses_field_definitions() {
-            let fields = parse(DICTIONARY).unwrap().spec.fields;
+            let fields = parse(DICTIONARY).unwrap().dictionary.spec().fields.clone();
 
             assert_eq!(
                 fields,
@@ -683,7 +576,7 @@ mod tests {
         #[test]
         fn missing_fields_section_yields_no_fields() {
             let parsed = parse("<fix major='4' minor='4'/>").unwrap();
-            assert!(parsed.spec.fields.is_empty());
+            assert!(parsed.dictionary.fields().is_empty());
         }
 
         #[test]
@@ -736,7 +629,12 @@ mod tests {
 
         #[test]
         fn parses_component_definitions() {
-            let components = parse(DICTIONARY).unwrap().spec.components;
+            let components = parse(DICTIONARY)
+                .unwrap()
+                .dictionary
+                .spec()
+                .components
+                .clone();
 
             assert_eq!(
                 components,
@@ -781,109 +679,7 @@ mod tests {
         #[test]
         fn missing_components_section_yields_no_components() {
             let parsed = parse("<fix major='4' minor='4'/>").unwrap();
-            assert!(parsed.spec.components.is_empty());
-        }
-
-        #[test]
-        fn duplicate_component_definition_is_an_error() {
-            let error = parse(
-                "<fix major='4' minor='4'><components>\
-                 <component name='Parties'/>\
-                 <component name='Parties'/>\
-                 </components></fix>",
-            )
-            .unwrap_err();
-
-            assert!(matches!(
-                error,
-                Error::DuplicateComponent { ref component } if component == "Parties"
-            ));
-        }
-
-        #[test]
-        fn component_ref_to_undefined_component_is_an_error() {
-            let error = parse(
-                "<fix major='4' minor='4'><components>\
-                 <component name='Stipulations'>\
-                 <component name='UnderlyingInstrument'/>\
-                 </component></components></fix>",
-            )
-            .unwrap_err();
-
-            assert!(matches!(
-                error,
-                Error::UnknownComponent { ref context, ref component }
-                    if *context == MemberContext::Component("Stipulations".to_owned())
-                        && component == "UnderlyingInstrument"
-            ));
-        }
-
-        #[test]
-        fn message_ref_to_undefined_component_is_an_error() {
-            let error = parse(
-                "<fix major='4' minor='4'><messages>\
-                 <message name='NewOrderSingle' msgtype='D' msgcat='app'>\
-                 <component name='Instrument'/>\
-                 </message></messages></fix>",
-            )
-            .unwrap_err();
-
-            assert!(matches!(
-                error,
-                Error::UnknownComponent { ref context, ref component }
-                    if *context == MemberContext::Message("NewOrderSingle".to_owned())
-                        && component == "Instrument"
-            ));
-        }
-
-        #[test]
-        fn a_self_referencing_component_is_an_error() {
-            let error = parse(
-                "<fix major='4' minor='4'><components>\
-                 <component name='Parties'>\
-                 <component name='Parties'/>\
-                 </component></components></fix>",
-            )
-            .unwrap_err();
-
-            assert!(matches!(
-                error,
-                Error::CircularComponent { ref component } if component == "Parties"
-            ));
-        }
-
-        #[test]
-        fn mutually_referencing_components_are_an_error() {
-            let error = parse(
-                "<fix major='4' minor='4'><components>\
-                 <component name='Instrument'>\
-                 <component name='UnderlyingInstrument'/>\
-                 </component>\
-                 <component name='UnderlyingInstrument'>\
-                 <component name='Instrument'/>\
-                 </component></components></fix>",
-            )
-            .unwrap_err();
-
-            assert!(matches!(error, Error::CircularComponent { .. }));
-        }
-
-        #[test]
-        fn a_diamond_of_references_is_not_a_cycle() {
-            let parsed = parse(
-                "<fix major='4' minor='4'><components>\
-                 <component name='Top'>\
-                 <component name='Left'/>\
-                 <component name='Right'/>\
-                 </component>\
-                 <component name='Left'><component name='Bottom'/></component>\
-                 <component name='Right'><component name='Bottom'/></component>\
-                 <component name='Bottom'/>\
-                 </components></fix>",
-            )
-            .unwrap();
-
-            assert_eq!(parsed.spec.components.len(), 4);
+            assert!(parsed.dictionary.spec().components.is_empty());
         }
     }
 
@@ -895,10 +691,11 @@ mod tests {
  <fields>
   <field number='11' name='ClOrdID' type='STRING'/>
   <field number='58' name='Text' type='STRING'/>
+  <field number='448' name='PartyID' type='STRING'/>
  </fields>
  <components>
   <component name='Parties'>
-   <field name='Text'/>
+   <field name='PartyID'/>
   </component>
  </components>
  <messages>
@@ -913,7 +710,12 @@ mod tests {
 
         #[test]
         fn parses_message_definitions() {
-            let messages = parse(DICTIONARY).unwrap().spec.messages;
+            let messages = parse(DICTIONARY)
+                .unwrap()
+                .dictionary
+                .spec()
+                .messages
+                .clone();
 
             assert_eq!(
                 messages,
@@ -973,7 +775,7 @@ mod tests {
         #[test]
         fn missing_messages_section_yields_no_messages() {
             let parsed = parse("<fix major='4' minor='4'/>").unwrap();
-            assert!(parsed.spec.messages.is_empty());
+            assert!(parsed.dictionary.spec().messages.is_empty());
         }
 
         #[test]
@@ -1042,6 +844,23 @@ mod tests {
 
     mod errors {
         use super::*;
+
+        #[test]
+        fn an_inconsistent_spec_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='NewOrderSingle' msgtype='D' msgcat='app'>\
+                 <component name='Parties'/>\
+                 </message></messages></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(error, Error::Invalid(_)));
+            assert_eq!(
+                error.to_string(),
+                "invalid dictionary: message 'NewOrderSingle' references unknown component 'Parties'"
+            );
+        }
 
         #[test]
         fn malformed_xml() {
