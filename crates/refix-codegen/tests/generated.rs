@@ -4,7 +4,7 @@
 use bytes::Bytes;
 use refix_codegen::generate;
 use refix_dictionary::quickfix;
-use refix_message::{InvalidValue, Tokenizer};
+use refix_message::{InvalidValue, Tag, Tokenizer};
 
 #[path = "data/toy_generated.rs"]
 mod toy;
@@ -41,7 +41,7 @@ fn typed_reads_over_a_tokenized_frame() {
     let order = NewOrderSingle::from_raw(raw);
 
     assert_eq!(NewOrderSingle::MSG_TYPE, b"D");
-    assert_eq!(order.raw().get(35), Some(b"D".as_slice()));
+    assert_eq!(order.raw().get(Tag(35)), Some(b"D".as_slice()));
     assert_eq!(order.cl_ord_id(), Ok(Some("ORDER-1")));
     assert_eq!(order.order_qty(), Ok(Some(200)));
     assert_eq!(order.price_raw(), Some(b"101.5".as_slice()));
@@ -78,5 +78,5 @@ fn a_malformed_value_reads_as_an_error() {
 
     let order = NewOrderSingle::from_raw(raw);
 
-    assert_eq!(order.order_qty(), Err(InvalidValue { tag: 38 }));
+    assert_eq!(order.order_qty(), Err(InvalidValue { tag: Tag(38) }));
 }

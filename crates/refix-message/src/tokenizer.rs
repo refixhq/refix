@@ -1,18 +1,18 @@
 use crate::framing::{GarbledReason, Outcome, SOH, Scanner};
 use crate::message::RawField;
-use crate::{MALFORMED_TAG, RawMessage, length_tags};
+use crate::{RawMessage, Tag, length_tags};
 use bytes::Bytes;
 
 /// Splits a framed FIX message into its fields.
 #[derive(Clone, Debug)]
 pub struct Tokenizer {
-    length_tags: Vec<u32>,
+    length_tags: Vec<Tag>,
 }
 
 impl Default for Tokenizer {
     fn default() -> Self {
         Self {
-            length_tags: length_tags::STANDARD.to_vec(),
+            length_tags: length_tags::STANDARD.iter().copied().map(Tag).collect(),
         }
     }
 }
@@ -22,11 +22,12 @@ impl Tokenizer {
     ///
     /// The supplied values are additive, they never replace the standard set.
     /// Tag 0 is reserved as the malformed-field sentinel and is ignored.
-    pub fn with_extra_length_tags(extras: impl IntoIterator<Item = u32>) -> Self {
-        let mut length_tags: Vec<u32> = length_tags::STANDARD
+    pub fn with_extra_length_tags(extras: impl IntoIterator<Item = Tag>) -> Self {
+        let mut length_tags: Vec<Tag> = length_tags::STANDARD
             .iter()
             .copied()
-            .chain(extras.into_iter().filter(|&tag| tag != MALFORMED_TAG))
+            .map(Tag)
+            .chain(extras.into_iter().filter(|&tag| tag != Tag::MALFORMED))
             .collect();
         length_tags.sort_unstable();
         length_tags.dedup();
@@ -37,7 +38,7 @@ impl Tokenizer {
     ///
     /// The bytes must contain a single well-framed message.
     /// Frame-level issues surface as [`TokenizeError`], while malformed
-    /// fields inside a valid frame are indexed under [`MALFORMED_TAG`].
+    /// fields inside a valid frame are indexed under [`Tag::MALFORMED`].
     pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
         check_frame(&bytes)?;
         let fields = self.tokenize_fields(&bytes);
@@ -69,7 +70,7 @@ impl Tokenizer {
         parse_u32(value).map(|len| len as usize)
     }
 
-    fn is_length_tag(&self, tag: u32) -> bool {
+    fn is_length_tag(&self, tag: Tag) -> bool {
         self.length_tags.first().is_some_and(|&min| tag >= min)
             && self.length_tags.binary_search(&tag).is_ok()
     }
@@ -92,7 +93,9 @@ fn next_field(bytes: &[u8], pos: usize, data_len: Option<usize>) -> Option<(RawF
     match find_tag_end(bytes, pos) {
         None => None,
         Some(TagEnd::Equals(delimiter_pos)) => {
-            let tag = parse_u32(&bytes[pos..delimiter_pos]).unwrap_or(MALFORMED_TAG);
+            let tag = parse_u32(&bytes[pos..delimiter_pos])
+                .map(Tag)
+                .unwrap_or(Tag::MALFORMED);
             let value_start = delimiter_pos + 1;
             let value_end = data_len
                 .and_then(|len| data_value_end(bytes, value_start, len))
@@ -108,7 +111,7 @@ fn next_field(bytes: &[u8], pos: usize, data_len: Option<usize>) -> Option<(RawF
         }
         Some(TagEnd::Soh(delimiter_pos)) => {
             let field = RawField {
-                tag: MALFORMED_TAG,
+                tag: Tag::MALFORMED,
                 value_start: pos as u32,
                 value_end: delimiter_pos as u32,
             };
@@ -195,7 +198,7 @@ fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
 #[cfg(test)]
 mod tests {
     use crate::test_utils::{construct_valid_frame, to_wire};
-    use crate::{RawMessage, TokenizeError, Tokenizer};
+    use crate::{RawMessage, Tag, TokenizeError, Tokenizer};
     use bytes::Bytes;
 
     /// Tokenises a `|`-delimited body wrapped in a valid FIX.4.4 frame,
@@ -210,8 +213,8 @@ mod tests {
 
     /// Every field of the frame, in wire order.
     #[track_caller]
-    fn assert_entries(message: &RawMessage, expected: &[(u32, &str)]) {
-        let expected: Vec<(u32, String)> = expected
+    fn assert_entries(message: &RawMessage, expected: &[(Tag, &str)]) {
+        let expected: Vec<(Tag, String)> = expected
             .iter()
             .map(|&(tag, value)| (tag, value.to_owned()))
             .collect();
@@ -221,24 +224,28 @@ mod tests {
     /// The fields between the preamble (8, 9) and the trailer (10), so bodies
     /// can be asserted without hand-computing BodyLength and CheckSum.
     #[track_caller]
-    fn assert_body_entries(message: &RawMessage, expected: &[(u32, &str)]) {
+    fn assert_body_entries(message: &RawMessage, expected: &[(Tag, &str)]) {
         let entries = entries_of(message);
-        let tags: Vec<u32> = entries.iter().map(|&(tag, _)| tag).collect();
+        let tags: Vec<Tag> = entries.iter().map(|&(tag, _)| tag).collect();
         assert_eq!(
             tags[..2],
-            [8, 9],
+            [Tag(8), Tag(9)],
             "frame must open with BeginString, BodyLength"
         );
-        assert_eq!(*tags.last().unwrap(), 10, "frame must close with CheckSum");
+        assert_eq!(
+            *tags.last().unwrap(),
+            Tag(10),
+            "frame must close with CheckSum"
+        );
 
-        let body: Vec<(u32, &str)> = entries[2..entries.len() - 1]
+        let body: Vec<(Tag, &str)> = entries[2..entries.len() - 1]
             .iter()
             .map(|(tag, value)| (*tag, value.as_str()))
             .collect();
         assert_eq!(body, expected);
     }
 
-    fn entries_of(message: &RawMessage) -> Vec<(u32, String)> {
+    fn entries_of(message: &RawMessage) -> Vec<(Tag, String)> {
         message
             .entries()
             .map(|(tag, value)| (tag, String::from_utf8_lossy(value).into_owned()))
@@ -278,14 +285,14 @@ mod tests {
             assert_tiles(&message);
 
             let expected_fields = [
-                (8, "FIX.4.4"),
-                (9, "41"),
-                (35, "0"),
-                (49, "A"),
-                (56, "B"),
-                (34, "1"),
-                (52, "20260730-10:00:00"),
-                (10, "123"),
+                (Tag(8), "FIX.4.4"),
+                (Tag(9), "41"),
+                (Tag(35), "0"),
+                (Tag(49), "A"),
+                (Tag(56), "B"),
+                (Tag(34), "1"),
+                (Tag(52), "20260730-10:00:00"),
+                (Tag(10), "123"),
             ];
 
             assert_entries(&message, &expected_fields);
@@ -294,28 +301,31 @@ mod tests {
         #[test]
         fn empty_value() {
             let message = tokenize_body("35=0|58=|");
-            assert_body_entries(&message, &[(35, "0"), (58, "")]);
+            assert_body_entries(&message, &[(Tag(35), "0"), (Tag(58), "")]);
         }
 
         #[test]
         fn value_containing_equals() {
             let message = tokenize_body("35=0|58=px=1.23|");
-            assert_body_entries(&message, &[(35, "0"), (58, "px=1.23")]);
+            assert_body_entries(&message, &[(Tag(35), "0"), (Tag(58), "px=1.23")]);
         }
 
         #[test]
         fn duplicate_tags_all_indexed() {
             let message = tokenize_body("35=0|58=first|58=second|");
-            assert_body_entries(&message, &[(35, "0"), (58, "first"), (58, "second")]);
+            assert_body_entries(
+                &message,
+                &[(Tag(35), "0"), (Tag(58), "first"), (Tag(58), "second")],
+            );
         }
 
         #[test]
         fn preamble_and_trailer_are_ordinary_fields() {
             let message = tokenize_body("35=0|");
-            assert_eq!(message.get(8), Some(b"FIX.4.4".as_slice()));
-            assert_eq!(message.get(9), Some(b"5".as_slice()));
-            assert_eq!(message.get(35), Some(b"0".as_slice()));
-            assert!(message.get(10).is_some());
+            assert_eq!(message.get(Tag(8)), Some(b"FIX.4.4".as_slice()));
+            assert_eq!(message.get(Tag(9)), Some(b"5".as_slice()));
+            assert_eq!(message.get(Tag(35)), Some(b"0".as_slice()));
+            assert!(message.get(Tag(10)).is_some());
         }
     }
 
@@ -356,45 +366,47 @@ mod tests {
         }
     }
 
-    /// Tests for the MALFORMED_TAG sentinel value.
+    /// Tests for the `Tag::MALFORMED` sentinel value.
     mod sentinel_runs {
         use super::*;
-        use crate::message::MALFORMED_TAG;
 
         #[test]
         fn run_without_equals() {
             let message = tokenize_body("35=0|junk|58=ok|");
-            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "junk"), (58, "ok")]);
+            assert_body_entries(
+                &message,
+                &[(Tag(35), "0"), (Tag::MALFORMED, "junk"), (Tag(58), "ok")],
+            );
         }
 
         #[test]
         fn fields_after_a_fault_remain_readable() {
             let message = tokenize_body("35=0|junk|58=ok|");
-            assert_eq!(message.get(58), Some(b"ok".as_slice()));
+            assert_eq!(message.get(Tag(58)), Some(b"ok".as_slice()));
         }
 
         #[test]
         fn non_numeric_tag() {
             let message = tokenize_body("35=0|abc=x|");
-            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "x")]);
+            assert_body_entries(&message, &[(Tag(35), "0"), (Tag::MALFORMED, "x")]);
         }
 
         #[test]
         fn empty_tag() {
             let message = tokenize_body("35=0|=x|");
-            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "x")]);
+            assert_body_entries(&message, &[(Tag(35), "0"), (Tag::MALFORMED, "x")]);
         }
 
         #[test]
         fn literal_tag_zero_is_a_sentinel() {
             let message = tokenize_body("35=0|0=x|");
-            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "x")]);
+            assert_body_entries(&message, &[(Tag(35), "0"), (Tag::MALFORMED, "x")]);
         }
 
         #[test]
         fn tag_overflowing_u32() {
             let message = tokenize_body("35=0|4294967296=x|");
-            assert_body_entries(&message, &[(35, "0"), (MALFORMED_TAG, "x")]);
+            assert_body_entries(&message, &[(Tag(35), "0"), (Tag::MALFORMED, "x")]);
         }
 
         #[test]
@@ -403,10 +415,10 @@ mod tests {
             assert_body_entries(
                 &message,
                 &[
-                    (35, "0"),
-                    (MALFORMED_TAG, "junk"),
-                    (MALFORMED_TAG, "more"),
-                    (58, "ok"),
+                    (Tag(35), "0"),
+                    (Tag::MALFORMED, "junk"),
+                    (Tag::MALFORMED, "more"),
+                    (Tag(58), "ok"),
                 ],
             );
         }
@@ -415,14 +427,18 @@ mod tests {
     /// Tests for length-delimited data fields, whose values may contain SOH.
     mod data_fields {
         use super::*;
-        use crate::message::MALFORMED_TAG;
 
         #[test]
         fn value_with_embedded_soh() {
             let message = tokenize_body("35=0|95=3|96=a|b|58=ok|");
             assert_body_entries(
                 &message,
-                &[(35, "0"), (95, "3"), (96, "a\x01b"), (58, "ok")],
+                &[
+                    (Tag(35), "0"),
+                    (Tag(95), "3"),
+                    (Tag(96), "a\x01b"),
+                    (Tag(58), "ok"),
+                ],
             );
         }
 
@@ -431,20 +447,36 @@ mod tests {
             let message = tokenize_body("35=0|95=5|96=a|b|c|58=ok|");
             assert_body_entries(
                 &message,
-                &[(35, "0"), (95, "5"), (96, "a\x01b\x01c"), (58, "ok")],
+                &[
+                    (Tag(35), "0"),
+                    (Tag(95), "5"),
+                    (Tag(96), "a\x01b\x01c"),
+                    (Tag(58), "ok"),
+                ],
             );
         }
 
         #[test]
         fn zero_length_value() {
             let message = tokenize_body("35=0|95=0|96=|58=ok|");
-            assert_body_entries(&message, &[(35, "0"), (95, "0"), (96, ""), (58, "ok")]);
+            assert_body_entries(
+                &message,
+                &[
+                    (Tag(35), "0"),
+                    (Tag(95), "0"),
+                    (Tag(96), ""),
+                    (Tag(58), "ok"),
+                ],
+            );
         }
 
         #[test]
         fn data_value_last_in_body() {
             let message = tokenize_body("35=0|95=3|96=a|b|");
-            assert_body_entries(&message, &[(35, "0"), (95, "3"), (96, "a\x01b")]);
+            assert_body_entries(
+                &message,
+                &[(Tag(35), "0"), (Tag(95), "3"), (Tag(96), "a\x01b")],
+            );
         }
 
         #[test]
@@ -452,7 +484,12 @@ mod tests {
             let message = tokenize_body("35=0|95=4294967295|96=ab|58=ok|");
             assert_body_entries(
                 &message,
-                &[(35, "0"), (95, "4294967295"), (96, "ab"), (58, "ok")],
+                &[
+                    (Tag(35), "0"),
+                    (Tag(95), "4294967295"),
+                    (Tag(96), "ab"),
+                    (Tag(58), "ok"),
+                ],
             );
         }
 
@@ -462,11 +499,11 @@ mod tests {
             assert_body_entries(
                 &message,
                 &[
-                    (35, "0"),
-                    (95, "abc"),
-                    (96, "x"),
-                    (MALFORMED_TAG, "y"),
-                    (58, "ok"),
+                    (Tag(35), "0"),
+                    (Tag(95), "abc"),
+                    (Tag(96), "x"),
+                    (Tag::MALFORMED, "y"),
+                    (Tag(58), "ok"),
                 ],
             );
         }
@@ -477,11 +514,11 @@ mod tests {
             assert_body_entries(
                 &message,
                 &[
-                    (35, "0"),
-                    (95, "1"),
-                    (96, "a"),
-                    (MALFORMED_TAG, "b"),
-                    (58, "ok"),
+                    (Tag(35), "0"),
+                    (Tag(95), "1"),
+                    (Tag(96), "a"),
+                    (Tag::MALFORMED, "b"),
+                    (Tag(58), "ok"),
                 ],
             );
         }
@@ -489,43 +526,56 @@ mod tests {
         #[test]
         fn dialect_extra_delimits_data() {
             let frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|58=ok|");
-            let message = Tokenizer::with_extra_length_tags([5001])
+            let message = Tokenizer::with_extra_length_tags([Tag(5001)])
                 .tokenize(Bytes::from(frame))
                 .unwrap();
             assert_tiles(&message);
             assert_body_entries(
                 &message,
-                &[(35, "0"), (5001, "3"), (5002, "a\x01b"), (58, "ok")],
+                &[
+                    (Tag(35), "0"),
+                    (Tag(5001), "3"),
+                    (Tag(5002), "a\x01b"),
+                    (Tag(58), "ok"),
+                ],
             );
         }
 
         #[test]
         fn standard_set_survives_extras() {
             let frame = construct_valid_frame("FIX.4.4", "35=0|95=3|96=a|b|");
-            let message = Tokenizer::with_extra_length_tags([5001])
-                .tokenize(Bytes::from(frame))
-                .unwrap();
-            assert_tiles(&message);
-            assert_body_entries(&message, &[(35, "0"), (95, "3"), (96, "a\x01b")]);
-        }
-
-        #[test]
-        fn extra_below_the_standard_minimum() {
-            let frame = construct_valid_frame("FIX.4.4", "35=0|42=3|58=a|b|11=ok|");
-            let message = Tokenizer::with_extra_length_tags([42])
+            let message = Tokenizer::with_extra_length_tags([Tag(5001)])
                 .tokenize(Bytes::from(frame))
                 .unwrap();
             assert_tiles(&message);
             assert_body_entries(
                 &message,
-                &[(35, "0"), (42, "3"), (58, "a\x01b"), (11, "ok")],
+                &[(Tag(35), "0"), (Tag(95), "3"), (Tag(96), "a\x01b")],
+            );
+        }
+
+        #[test]
+        fn extra_below_the_standard_minimum() {
+            let frame = construct_valid_frame("FIX.4.4", "35=0|42=3|58=a|b|11=ok|");
+            let message = Tokenizer::with_extra_length_tags([Tag(42)])
+                .tokenize(Bytes::from(frame))
+                .unwrap();
+            assert_tiles(&message);
+            assert_body_entries(
+                &message,
+                &[
+                    (Tag(35), "0"),
+                    (Tag(42), "3"),
+                    (Tag(58), "a\x01b"),
+                    (Tag(11), "ok"),
+                ],
             );
         }
 
         #[test]
         fn tag_zero_extra_is_ignored() {
-            let tokenizer = Tokenizer::with_extra_length_tags([0]);
-            assert!(!tokenizer.is_length_tag(MALFORMED_TAG));
+            let tokenizer = Tokenizer::with_extra_length_tags([Tag(0)]);
+            assert!(!tokenizer.is_length_tag(Tag::MALFORMED));
         }
     }
 }

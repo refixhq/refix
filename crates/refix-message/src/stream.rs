@@ -56,8 +56,8 @@ pub enum Outcome {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Tokenizer;
     use crate::test_utils::construct_valid_frame;
+    use crate::{Tag, Tokenizer};
 
     /// Collects outcomes until the stream reports `Incomplete`.
     fn drain(stream: &mut MessageStream) -> Vec<Outcome> {
@@ -140,20 +140,20 @@ mod tests {
             assert_eq!(outcomes.len(), 1, "split at {split}");
             let message = expect_message(&outcomes[0]);
             assert_eq!(message.bytes(), &frame, "split at {split}");
-            assert_eq!(message.get(96), Some(b"a\x01b".as_slice()));
+            assert_eq!(message.get(Tag(96)), Some(b"a\x01b".as_slice()));
         }
     }
 
     #[test]
     fn dialect_extras_flow_through() {
         let frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|");
-        let mut stream = MessageStream::new(Tokenizer::with_extra_length_tags([5001]));
+        let mut stream = MessageStream::new(Tokenizer::with_extra_length_tags([Tag(5001)]));
         stream.feed(&frame);
 
         let outcomes = drain(&mut stream);
 
         assert_eq!(
-            expect_message(&outcomes[0]).get(5002),
+            expect_message(&outcomes[0]).get(Tag(5002)),
             Some(b"a\x01b".as_slice())
         );
     }

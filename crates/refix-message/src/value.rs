@@ -1,7 +1,9 @@
+use crate::Tag;
+
 /// A field value whose bytes can't be read as the field's declared data type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InvalidValue {
-    pub tag: u32,
+    pub tag: Tag,
 }
 
 impl std::fmt::Display for InvalidValue {

@@ -1,6 +1,6 @@
 use pyo3::types::PyBytes;
 use pyo3::{Bound, Python, pyclass, pymethods};
-use refix_message::RawMessage as CoreRawMessage;
+use refix_message::{RawMessage as CoreRawMessage, Tag};
 
 #[pyclass(frozen, module = "refix._core")]
 pub(crate) struct RawMessage(CoreRawMessage);
@@ -19,13 +19,13 @@ impl RawMessage {
     }
 
     fn get<'py>(&self, py: Python<'py>, tag: u32) -> Option<Bound<'py, PyBytes>> {
-        self.0.get(tag).map(|value| PyBytes::new(py, value))
+        self.0.get(Tag(tag)).map(|value| PyBytes::new(py, value))
     }
 
     fn entries<'py>(&self, py: Python<'py>) -> Vec<(u32, Bound<'py, PyBytes>)> {
         self.0
             .entries()
-            .map(|(tag, value)| (tag, PyBytes::new(py, value)))
+            .map(|(tag, value)| (tag.0, PyBytes::new(py, value)))
             .collect()
     }
 }
