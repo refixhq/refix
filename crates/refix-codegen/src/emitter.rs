@@ -35,13 +35,14 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<String, Error> 
 mod tests {
     use super::*;
     use refix_dictionary::{
-        Category, DataType, EnumValue, Field, FieldRef, Member, Message, Protocol, Spec, Version,
+        Category, DataType, EnumValue, Field, FieldRef, Member, Message, Protocol, Spec, Tag,
+        Version,
     };
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
         Field {
             name: name.to_owned(),
-            tag,
+            tag: Tag(tag),
             data_type,
             values: vec![],
         }
@@ -80,19 +81,19 @@ mod tests {
                 msg_type: "D".to_owned(),
                 members: vec![
                     Member::Field(FieldRef {
-                        tag: 11,
+                        tag: Tag(11),
                         is_required: true,
                     }),
                     Member::Field(FieldRef {
-                        tag: 38,
+                        tag: Tag(38),
                         is_required: false,
                     }),
                     Member::Field(FieldRef {
-                        tag: 44,
+                        tag: Tag(44),
                         is_required: false,
                     }),
                     Member::Field(FieldRef {
-                        tag: 40,
+                        tag: Tag(40),
                         is_required: false,
                     }),
                 ],

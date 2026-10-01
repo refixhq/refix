@@ -4,7 +4,7 @@
 use refix_dictionary::quickfix::{self, Warning};
 use refix_dictionary::{
     Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Member, Message,
-    Protocol, Version,
+    Protocol, Tag, Version,
 };
 
 const FIX44: &str = include_str!("data/quickfix/FIX44.xml");
@@ -29,14 +29,14 @@ fn parses_the_full_fix44_dictionary() {
         fields[0],
         Field {
             name: "Account".to_owned(),
-            tag: 1,
+            tag: Tag(1),
             data_type: DataType::String,
             values: vec![],
         }
     );
 
     let side = fields.iter().find(|field| field.name == "Side").unwrap();
-    assert_eq!(side.tag, 54);
+    assert_eq!(side.tag, Tag(54));
     assert_eq!(side.values.len(), 16);
     assert_eq!(
         side.values[0],
@@ -54,7 +54,7 @@ fn parses_the_full_fix44_dictionary() {
             name: "Heartbeat".to_owned(),
             msg_type: "0".to_owned(),
             members: vec![Member::Field(FieldRef {
-                tag: 112,
+                tag: Tag(112),
                 is_required: false,
             })],
             category: Category::Admin,
@@ -71,7 +71,7 @@ fn parses_the_full_fix44_dictionary() {
                 .into_iter()
                 .map(|tag| {
                     Member::Field(FieldRef {
-                        tag,
+                        tag: Tag(tag),
                         is_required: false,
                     })
                 })
@@ -102,7 +102,7 @@ fn parses_the_full_fix44_dictionary() {
     assert!(
         resolved
             .members()
-            .any(|member| member.field.tag == 55 && member.field.name == "Symbol")
+            .any(|member| member.field.tag == Tag(55) && member.field.name == "Symbol")
     );
 
     // 2 unmodelled sections (header and trailer), 92 group warnings

@@ -45,12 +45,12 @@ const RESERVED_WORDS: &[&str] = &[
 mod tests {
     use super::{method_name, variant_name};
     use crate::emitter::Error;
-    use refix_dictionary::{DataType, EnumValue, Field};
+    use refix_dictionary::{DataType, EnumValue, Field, Tag};
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
         Field {
             name: name.to_owned(),
-            tag,
+            tag: Tag(tag),
             data_type,
             values: vec![],
         }
