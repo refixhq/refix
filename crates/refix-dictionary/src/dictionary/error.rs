@@ -1,4 +1,4 @@
-use crate::MemberContext;
+use crate::{MemberContext, Tag};
 use std::fmt;
 
 /// A defect found while resolving a [`crate::Spec`] into a
@@ -6,14 +6,14 @@ use std::fmt;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
     DuplicateTag {
-        tag: u32,
+        tag: Tag,
     },
     DuplicateComponent {
         component: String,
     },
     UnknownField {
         context: MemberContext,
-        tag: u32,
+        tag: Tag,
     },
     UnknownComponent {
         context: MemberContext,
@@ -24,7 +24,7 @@ pub enum Error {
     },
     DuplicateField {
         context: MemberContext,
-        tag: u32,
+        tag: Tag,
     },
 }
 

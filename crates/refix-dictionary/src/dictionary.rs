@@ -7,7 +7,7 @@ mod error;
 
 pub use error::Error;
 
-use crate::{Category, Field, MemberContext, Spec, Version, spec};
+use crate::{Category, Field, MemberContext, Spec, Tag, Version, spec};
 use std::collections::{HashMap, HashSet};
 
 /// A resolved data dictionary, produced by [`Spec::resolve`].
@@ -132,7 +132,7 @@ fn resolve_messages(spec: &Spec) -> Result<Vec<ResolvedMessage>, Error> {
         .collect()
 }
 
-fn index_fields(fields: &[Field]) -> Result<HashMap<u32, usize>, Error> {
+fn index_fields(fields: &[Field]) -> Result<HashMap<Tag, usize>, Error> {
     let mut by_tag = HashMap::new();
     for (index, field) in fields.iter().enumerate() {
         if by_tag.insert(field.tag, index).is_some() {
@@ -159,7 +159,7 @@ fn index_components(components: &[spec::Component]) -> Result<HashMap<&str, usiz
 fn expand_components(
     spec: &Spec,
     by_name: &HashMap<&str, usize>,
-    fields_by_tag: &HashMap<u32, usize>,
+    fields_by_tag: &HashMap<Tag, usize>,
 ) -> Result<Vec<Vec<ResolvedMember>>, Error> {
     let mut expansions = vec![None; spec.components.len()];
     for index in 0..spec.components.len() {
@@ -182,7 +182,7 @@ fn expand_component(
     index: usize,
     spec: &Spec,
     by_name: &HashMap<&str, usize>,
-    fields_by_tag: &HashMap<u32, usize>,
+    fields_by_tag: &HashMap<Tag, usize>,
     stack: &mut Vec<usize>,
     expansions: &mut Vec<Option<Vec<ResolvedMember>>>,
 ) -> Result<(), Error> {
@@ -232,7 +232,7 @@ fn resolve_message(
     spec: &Spec,
     by_name: &HashMap<&str, usize>,
     expansions: &[Vec<ResolvedMember>],
-    fields_by_tag: &HashMap<u32, usize>,
+    fields_by_tag: &HashMap<Tag, usize>,
 ) -> Result<ResolvedMessage, Error> {
     let context = MemberContext::Message(message.name.clone());
     let mut members = Vec::new();
@@ -265,7 +265,7 @@ fn resolve_message(
 fn resolve_field_ref(
     field_ref: &spec::FieldRef,
     context: &MemberContext,
-    fields_by_tag: &HashMap<u32, usize>,
+    fields_by_tag: &HashMap<Tag, usize>,
 ) -> Result<ResolvedMember, Error> {
     let Some(&field_index) = fields_by_tag.get(&field_ref.tag) else {
         return Err(Error::UnknownField {
@@ -317,14 +317,17 @@ mod tests {
     fn field(name: &str, tag: u32) -> Field {
         Field {
             name: name.to_owned(),
-            tag,
+            tag: Tag(tag),
             data_type: DataType::String,
             values: vec![],
         }
     }
 
     fn field_ref(tag: u32, is_required: bool) -> spec::Member {
-        spec::Member::Field(FieldRef { tag, is_required })
+        spec::Member::Field(FieldRef {
+            tag: Tag(tag),
+            is_required,
+        })
     }
 
     fn component_ref(name: &str, is_required: bool) -> spec::Member {
@@ -438,8 +441,8 @@ mod tests {
         let dictionary = spec.resolve().unwrap();
 
         let message = dictionary.messages().next().unwrap();
-        let tags: Vec<u32> = message.members().map(|member| member.field.tag).collect();
-        assert_eq!(tags, vec![11, 12, 13, 58]);
+        let tags: Vec<Tag> = message.members().map(|member| member.field.tag).collect();
+        assert_eq!(tags, vec![Tag(11), Tag(12), Tag(13), Tag(58)]);
     }
 
     #[test]
@@ -533,7 +536,7 @@ mod tests {
             spec.resolve().unwrap_err(),
             Error::UnknownField {
                 context: MemberContext::Message("Heartbeat".to_owned()),
-                tag: 112,
+                tag: Tag(112),
             }
         );
     }
@@ -632,7 +635,7 @@ mod tests {
             spec.resolve().unwrap_err(),
             Error::DuplicateField {
                 context: MemberContext::Component("Top".to_owned()),
-                tag: 58,
+                tag: Tag(58),
             }
         );
     }
@@ -652,7 +655,7 @@ mod tests {
             spec.resolve().unwrap_err(),
             Error::DuplicateField {
                 context: MemberContext::Message("NewOrderSingle".to_owned()),
-                tag: 58,
+                tag: Tag(58),
             }
         );
     }
@@ -681,6 +684,9 @@ mod tests {
             vec![],
         );
 
-        assert_eq!(spec.resolve().unwrap_err(), Error::DuplicateTag { tag: 11 });
+        assert_eq!(
+            spec.resolve().unwrap_err(),
+            Error::DuplicateTag { tag: Tag(11) }
+        );
     }
 }
