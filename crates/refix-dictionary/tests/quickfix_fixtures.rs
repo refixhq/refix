@@ -4,7 +4,7 @@
 use refix_dictionary::quickfix::{self, Warning};
 use refix_dictionary::{
     Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Member, Message,
-    Protocol, Tag, Version,
+    Protocol, Tag, Version, dictionary,
 };
 
 const FIX44: &str = include_str!("data/quickfix/FIX44.xml");
@@ -99,11 +99,10 @@ fn parses_the_full_fix44_dictionary() {
         .unwrap();
     assert_eq!(resolved.members().count(), 149);
     // Symbol(55) arrives through the Instrument component's expansion.
-    assert!(
-        resolved
-            .members()
-            .any(|member| member.field.tag == Tag(55) && member.field.name == "Symbol")
-    );
+    assert!(resolved.members().any(|member| matches!(
+        member,
+        dictionary::Member::Field { field, .. } if field.tag == Tag(55) && field.name == "Symbol"
+    )));
 
     // 2 unmodelled sections (header and trailer), 92 group warnings
     // (91 in components, 1 in messages)

@@ -24,7 +24,9 @@ fn emit_message_impl(message: dictionary::Message<'_>) -> Result<String, Error> 
     members.extend(
         message
             .members()
-            .map(|member| emit_accessor(member.field))
+            .map(|member| match member {
+                dictionary::Member::Field { field, .. } => emit_accessor(field),
+            })
             .collect::<Result<Vec<_>, _>>()?,
     );
 

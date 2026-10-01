@@ -108,22 +108,25 @@ impl<'a> Message<'a> {
     /// The members in source order, components expanded in place.
     pub fn members(&self) -> impl Iterator<Item = Member<'a>> {
         let fields = self.fields;
-        self.members.iter().map(move |member| Member {
+        self.members.iter().map(move |member| Member::Field {
             field: &fields[member.field_index],
             is_required: member.is_required,
         })
     }
 }
 
-/// A field as used by one message, with its reference resolved.
+/// A member of a message, with its references resolved.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Member<'a> {
-    /// The referenced field definition.
-    pub field: &'a Field,
-    /// Whether the field is required, combined across every component
-    /// on the path to it: required only if required at every level.
-    pub is_required: bool,
+pub enum Member<'a> {
+    Field {
+        /// The referenced field definition.
+        field: &'a Field,
+        /// Whether the field is required, combined across every component
+        /// on the path to it: required only if required at every level.
+        is_required: bool,
+    },
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,6 +146,16 @@ mod tests {
             tag: Tag(tag),
             is_required,
         })
+    }
+
+    /// A message's members as (tag, is_required), for messages without groups.
+    fn field_members(message: Message<'_>) -> Vec<(Tag, bool)> {
+        message
+            .members()
+            .map(|member| match member {
+                Member::Field { field, is_required } => (field.tag, is_required),
+            })
+            .collect()
     }
 
     fn component_ref(name: &str, is_required: bool) -> spec::Member {
@@ -207,11 +220,11 @@ mod tests {
         assert_eq!(
             messages[0].members().collect::<Vec<Member>>(),
             vec![
-                Member {
+                Member::Field {
                     field: &dictionary.fields()[0],
                     is_required: true,
                 },
-                Member {
+                Member::Field {
                     field: &dictionary.fields()[1],
                     is_required: false,
                 },
@@ -256,8 +269,15 @@ mod tests {
         let dictionary = spec.resolve().unwrap();
 
         let message = dictionary.messages().next().unwrap();
-        let tags: Vec<Tag> = message.members().map(|member| member.field.tag).collect();
-        assert_eq!(tags, vec![Tag(11), Tag(12), Tag(13), Tag(58)]);
+        assert_eq!(
+            field_members(message),
+            vec![
+                (Tag(11), true),
+                (Tag(12), true),
+                (Tag(13), true),
+                (Tag(58), false)
+            ]
+        );
     }
 
     #[test]
@@ -278,8 +298,10 @@ mod tests {
 
         // An optional component makes everything below it optional.
         let message = dictionary.messages().next().unwrap();
-        let required: Vec<bool> = message.members().map(|member| member.is_required).collect();
-        assert_eq!(required, vec![false, false]);
+        assert_eq!(
+            field_members(message),
+            vec![(Tag(12), false), (Tag(13), false)]
+        );
     }
 
     #[test]
@@ -299,7 +321,7 @@ mod tests {
         let dictionary = spec.resolve().unwrap();
 
         let message = dictionary.messages().next().unwrap();
-        assert!(message.members().next().unwrap().is_required);
+        assert_eq!(field_members(message), vec![(Tag(12), true)]);
     }
 
     #[test]
