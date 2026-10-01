@@ -1,3 +1,4 @@
+use refix_message::Tag;
 use std::fmt;
 
 /// A FIX data dictionary as authored: the field, message and component
@@ -30,7 +31,7 @@ pub struct Message {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Field {
     pub name: String,
-    pub tag: u32,
+    pub tag: Tag,
     pub data_type: DataType,
     pub values: Vec<EnumValue>,
 }
@@ -57,7 +58,7 @@ pub enum Member {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldRef {
     /// Tag of the referenced [`Field`] definition.
-    pub tag: u32,
+    pub tag: Tag,
     pub is_required: bool,
 }
 
