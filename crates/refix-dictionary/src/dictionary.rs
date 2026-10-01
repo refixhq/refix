@@ -5,10 +5,10 @@
 
 mod error;
 
-pub use error::Error;
-
 use crate::{Category, Field, MemberContext, Spec, Tag, Version, spec};
+pub use error::Error;
 use std::collections::{HashMap, HashSet};
+use std::ops::Index;
 
 /// A resolved data dictionary, produced by [`Spec::resolve`].
 #[derive(Clone, Debug)]
@@ -26,8 +26,32 @@ struct ResolvedMessage {
 /// dictionary stays free of self-references.
 #[derive(Clone, Copy, Debug)]
 struct ResolvedMember {
-    field_index: usize,
+    field_index: FieldIndex,
     is_required: bool,
+}
+
+/// A position in the spec's field definitions.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FieldIndex(usize);
+
+/// A position in the spec's component definitions.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ComponentIndex(usize);
+
+impl Index<FieldIndex> for [Field] {
+    type Output = Field;
+
+    fn index(&self, index: FieldIndex) -> &Field {
+        &self[index.0]
+    }
+}
+
+impl Index<ComponentIndex> for [spec::Component] {
+    type Output = spec::Component;
+
+    fn index(&self, index: ComponentIndex) -> &spec::Component {
+        &self[index.0]
+    }
 }
 
 impl Spec {
@@ -132,20 +156,25 @@ fn resolve_messages(spec: &Spec) -> Result<Vec<ResolvedMessage>, Error> {
         .collect()
 }
 
-fn index_fields(fields: &[Field]) -> Result<HashMap<Tag, usize>, Error> {
+fn index_fields(fields: &[Field]) -> Result<HashMap<Tag, FieldIndex>, Error> {
     let mut by_tag = HashMap::new();
     for (index, field) in fields.iter().enumerate() {
-        if by_tag.insert(field.tag, index).is_some() {
+        if by_tag.insert(field.tag, FieldIndex(index)).is_some() {
             return Err(Error::DuplicateTag { tag: field.tag });
         }
     }
     Ok(by_tag)
 }
 
-fn index_components(components: &[spec::Component]) -> Result<HashMap<&str, usize>, Error> {
+fn index_components(
+    components: &[spec::Component],
+) -> Result<HashMap<&str, ComponentIndex>, Error> {
     let mut by_name = HashMap::new();
     for (index, component) in components.iter().enumerate() {
-        if by_name.insert(component.name.as_str(), index).is_some() {
+        if by_name
+            .insert(component.name.as_str(), ComponentIndex(index))
+            .is_some()
+        {
             return Err(Error::DuplicateComponent {
                 component: component.name.clone(),
             });
@@ -158,11 +187,11 @@ fn index_components(components: &[spec::Component]) -> Result<HashMap<&str, usiz
 /// requiredness relative to the component itself.
 fn expand_components(
     spec: &Spec,
-    by_name: &HashMap<&str, usize>,
-    fields_by_tag: &HashMap<Tag, usize>,
+    by_name: &HashMap<&str, ComponentIndex>,
+    fields_by_tag: &HashMap<Tag, FieldIndex>,
 ) -> Result<Vec<Vec<ResolvedMember>>, Error> {
     let mut expansions = vec![None; spec.components.len()];
-    for index in 0..spec.components.len() {
+    for index in (0..spec.components.len()).map(ComponentIndex) {
         expand_component(
             index,
             spec,
@@ -179,17 +208,17 @@ fn expand_components(
 }
 
 fn expand_component(
-    index: usize,
+    index: ComponentIndex,
     spec: &Spec,
-    by_name: &HashMap<&str, usize>,
-    fields_by_tag: &HashMap<Tag, usize>,
-    stack: &mut Vec<usize>,
+    by_name: &HashMap<&str, ComponentIndex>,
+    fields_by_tag: &HashMap<Tag, FieldIndex>,
+    stack: &mut Vec<ComponentIndex>,
     expansions: &mut Vec<Option<Vec<ResolvedMember>>>,
 ) -> Result<(), Error> {
-    if expansions[index].is_some() {
+    if expansions[index.0].is_some() {
         return Ok(());
     }
-    let component = &spec.components[index];
+    let component = &spec.components.as_slice()[index];
     if stack.contains(&index) {
         return Err(Error::CircularComponent {
             component: component.name.clone(),
@@ -212,7 +241,7 @@ fn expand_component(
                     });
                 };
                 expand_component(child, spec, by_name, fields_by_tag, stack, expansions)?;
-                let expansion = expansions[child]
+                let expansion = expansions[child.0]
                     .as_ref()
                     .expect("the recursive call above expands the child");
                 extend_with_expansion(&mut members, expansion, component_ref.is_required);
@@ -222,7 +251,7 @@ fn expand_component(
     stack.pop();
 
     check_unique_tags(&members, &context, &spec.fields)?;
-    expansions[index] = Some(members);
+    expansions[index.0] = Some(members);
 
     Ok(())
 }
@@ -230,9 +259,9 @@ fn expand_component(
 fn resolve_message(
     message: &spec::Message,
     spec: &Spec,
-    by_name: &HashMap<&str, usize>,
+    by_name: &HashMap<&str, ComponentIndex>,
     expansions: &[Vec<ResolvedMember>],
-    fields_by_tag: &HashMap<Tag, usize>,
+    fields_by_tag: &HashMap<Tag, FieldIndex>,
 ) -> Result<ResolvedMessage, Error> {
     let context = MemberContext::Message(message.name.clone());
     let mut members = Vec::new();
@@ -250,7 +279,7 @@ fn resolve_message(
                 };
                 extend_with_expansion(
                     &mut members,
-                    &expansions[component],
+                    &expansions[component.0],
                     component_ref.is_required,
                 );
             }
@@ -265,7 +294,7 @@ fn resolve_message(
 fn resolve_field_ref(
     field_ref: &spec::FieldRef,
     context: &MemberContext,
-    fields_by_tag: &HashMap<Tag, usize>,
+    fields_by_tag: &HashMap<Tag, FieldIndex>,
 ) -> Result<ResolvedMember, Error> {
     let Some(&field_index) = fields_by_tag.get(&field_ref.tag) else {
         return Err(Error::UnknownField {
