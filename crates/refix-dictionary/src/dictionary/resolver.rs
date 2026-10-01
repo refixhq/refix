@@ -68,31 +68,9 @@ impl<'a> Resolver<'a> {
 
         let context = MemberContext::Component(component.name.clone());
         self.stack.push(index);
-        let mut members = Vec::new();
-        for member in &component.members {
-            match member {
-                spec::Member::Field(field_ref) => {
-                    members.push(self.resolve_field_ref(field_ref, &context)?);
-                }
-                spec::Member::Component(component_ref) => {
-                    let Some(&child) = self.components_by_name.get(component_ref.name.as_str())
-                    else {
-                        return Err(Error::UnknownComponent {
-                            context,
-                            component: component_ref.name.clone(),
-                        });
-                    };
-                    self.expand_component(child)?;
-                    let expansion = self.expansions[child.0]
-                        .as_ref()
-                        .expect("the call above expands the child");
-                    extend_with_expansion(&mut members, expansion, component_ref.is_required);
-                }
-            }
-        }
+        let members = self.resolve_members(&component.members, &context)?;
         self.stack.pop();
 
-        check_unique_tags(&members, &context, &spec.fields)?;
         self.expansions[index.0] = Some(members);
 
         Ok(())
@@ -100,17 +78,28 @@ impl<'a> Resolver<'a> {
 
     fn resolve_message(&mut self, message: &spec::Message) -> Result<ResolvedMessage, Error> {
         let context = MemberContext::Message(message.name.clone());
-        let mut members = Vec::new();
-        for member in &message.members {
+        let members = self.resolve_members(&message.members, &context)?;
+        Ok(ResolvedMessage { members })
+    }
+
+    /// Resolves one member list, expanding component references in
+    /// place, and checks that no tag appears in it twice.
+    fn resolve_members(
+        &mut self,
+        members: &[spec::Member],
+        context: &MemberContext,
+    ) -> Result<Vec<ResolvedMember>, Error> {
+        let mut resolved = Vec::new();
+        for member in members {
             match member {
                 spec::Member::Field(field_ref) => {
-                    members.push(self.resolve_field_ref(field_ref, &context)?);
+                    resolved.push(self.resolve_field_ref(field_ref, context)?);
                 }
                 spec::Member::Component(component_ref) => {
                     let Some(&child) = self.components_by_name.get(component_ref.name.as_str())
                     else {
                         return Err(Error::UnknownComponent {
-                            context,
+                            context: context.clone(),
                             component: component_ref.name.clone(),
                         });
                     };
@@ -118,14 +107,13 @@ impl<'a> Resolver<'a> {
                     let expansion = self.expansions[child.0]
                         .as_ref()
                         .expect("the call above expands the child");
-                    extend_with_expansion(&mut members, expansion, component_ref.is_required);
+                    extend_with_expansion(&mut resolved, expansion, component_ref.is_required);
                 }
             }
         }
 
-        check_unique_tags(&members, &context, &self.spec.fields)?;
-
-        Ok(ResolvedMessage { members })
+        check_unique_tags(&resolved, context, &self.spec.fields)?;
+        Ok(resolved)
     }
 
     fn resolve_field_ref(
