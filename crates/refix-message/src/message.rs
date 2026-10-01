@@ -1,8 +1,6 @@
+use crate::Tag;
 use crate::value::InvalidValue;
 use bytes::Bytes;
-
-/// Tag recorded for a run of bytes that could not be tokenised into a field.
-pub const MALFORMED_TAG: u32 = 0;
 
 /// A field's position in a message's index.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -20,7 +18,7 @@ impl Slot {
 /// The tag and byte range of a field's value within the frame.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RawField {
-    pub(crate) tag: u32,
+    pub(crate) tag: Tag,
     pub(crate) value_start: u32,
     pub(crate) value_end: u32,
 }
@@ -43,12 +41,12 @@ impl RawMessage {
     }
 
     /// Value of the first occurrence of `tag`, scanning from the start.
-    pub fn get(&self, tag: u32) -> Option<&[u8]> {
+    pub fn get(&self, tag: Tag) -> Option<&[u8]> {
         self.find(tag, Slot::START).map(|(_, value)| value)
     }
 
     /// First occurrence of `tag` as UTF-8 text; `Ok(None)` when absent.
-    pub fn get_str(&self, tag: u32) -> Result<Option<&str>, InvalidValue> {
+    pub fn get_str(&self, tag: Tag) -> Result<Option<&str>, InvalidValue> {
         let Some(value) = self.get(tag) else {
             return Ok(None);
         };
@@ -57,7 +55,7 @@ impl RawMessage {
     }
 
     /// First occurrence of `tag` parsed as an integer; `Ok(None)` when absent.
-    pub fn get_int(&self, tag: u32) -> Result<Option<i64>, InvalidValue> {
+    pub fn get_int(&self, tag: Tag) -> Result<Option<i64>, InvalidValue> {
         let Some(value) = self.get_str(tag)? else {
             return Ok(None);
         };
@@ -67,9 +65,9 @@ impl RawMessage {
 
     /// Every field as `(tag, value)`, in wire order, duplicates included.
     ///
-    /// Includes an entry with [`MALFORMED_TAG`] for any byte run that could
+    /// Includes an entry with [`Tag::MALFORMED`] for any byte run that could
     /// not be tokenised, so the entries cover the whole frame.
-    pub fn entries(&self) -> impl Iterator<Item = (u32, &[u8])> {
+    pub fn entries(&self) -> impl Iterator<Item = (Tag, &[u8])> {
         self.fields
             .iter()
             .map(|&field| (field.tag, self.slice(field)))
@@ -77,7 +75,7 @@ impl RawMessage {
 
     /// First occurrence of `tag` at or after `from`, with its slot so the
     /// caller can continue or bound a range.
-    fn find(&self, tag: u32, from: Slot) -> Option<(Slot, &[u8])> {
+    fn find(&self, tag: Tag, from: Slot) -> Option<(Slot, &[u8])> {
         let rest = self.fields.get(from.index()..)?;
         let offset = rest.iter().position(|field| field.tag == tag)?;
         let slot = Slot((from.index() + offset) as u32);
@@ -115,7 +113,7 @@ mod tests {
             let value_end = bytes.len() as u32;
             bytes.push(SOH);
             index.push(RawField {
-                tag: *tag,
+                tag: Tag(*tag),
                 value_start,
                 value_end,
             });
@@ -126,72 +124,72 @@ mod tests {
     #[test]
     fn get_returns_first_occurrence() {
         let message = message_of(&[(35, "0"), (58, "first"), (58, "second")]);
-        assert_eq!(message.get(58), Some(b"first".as_slice()));
+        assert_eq!(message.get(Tag(58)), Some(b"first".as_slice()));
     }
 
     #[test]
     fn get_absent_tag() {
         let message = message_of(&[(35, "0")]);
-        assert_eq!(message.get(58), None);
+        assert_eq!(message.get(Tag(58)), None);
     }
 
     #[test]
     fn get_str_returns_text() {
         let message = message_of(&[(58, "hello")]);
-        assert_eq!(message.get_str(58), Ok(Some("hello")));
+        assert_eq!(message.get_str(Tag(58)), Ok(Some("hello")));
     }
 
     #[test]
     fn get_str_absent_tag() {
         let message = message_of(&[(35, "0")]);
-        assert_eq!(message.get_str(58), Ok(None));
+        assert_eq!(message.get_str(Tag(58)), Ok(None));
     }
 
     #[test]
     fn get_str_empty_value() {
         let message = message_of(&[(58, "")]);
-        assert_eq!(message.get_str(58), Ok(Some("")));
+        assert_eq!(message.get_str(Tag(58)), Ok(Some("")));
     }
 
     #[test]
     fn get_str_rejects_invalid_utf8() {
         let message = message_of(&[(58, b"caf\xE9".as_slice())]);
-        assert_eq!(message.get_str(58), Err(InvalidValue { tag: 58 }));
+        assert_eq!(message.get_str(Tag(58)), Err(InvalidValue { tag: Tag(58) }));
     }
 
     #[test]
     fn get_int_parses_digits() {
         let message = message_of(&[(38, "200")]);
-        assert_eq!(message.get_int(38), Ok(Some(200)));
+        assert_eq!(message.get_int(Tag(38)), Ok(Some(200)));
     }
 
     #[test]
     fn get_int_parses_a_negative_value() {
         let message = message_of(&[(38, "-5")]);
-        assert_eq!(message.get_int(38), Ok(Some(-5)));
+        assert_eq!(message.get_int(Tag(38)), Ok(Some(-5)));
     }
 
     #[test]
     fn get_int_absent_tag() {
         let message = message_of(&[(35, "0")]);
-        assert_eq!(message.get_int(38), Ok(None));
+        assert_eq!(message.get_int(Tag(38)), Ok(None));
     }
 
     #[test]
     fn get_int_rejects_garbage() {
         let message = message_of(&[(38, "12x3")]);
-        assert_eq!(message.get_int(38), Err(InvalidValue { tag: 38 }));
+        assert_eq!(message.get_int(Tag(38)), Err(InvalidValue { tag: Tag(38) }));
     }
 
     #[test]
     fn get_int_rejects_an_empty_value() {
         let message = message_of(&[(38, "")]);
-        assert_eq!(message.get_int(38), Err(InvalidValue { tag: 38 }));
+        assert_eq!(message.get_int(Tag(38)), Err(InvalidValue { tag: Tag(38) }));
     }
 
     #[test]
     fn get_int_rejects_invalid_utf8() {
         let message = message_of(&[(38, b"\xE9".as_slice())]);
-        assert_eq!(message.get_int(38), Err(InvalidValue { tag: 38 }));
+        assert_eq!(message.get_int(Tag(38)), Err(InvalidValue { tag: Tag(38) }));
     }
 }

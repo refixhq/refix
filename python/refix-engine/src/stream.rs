@@ -4,7 +4,7 @@ use pyo3::types::{PyAnyMethods, PyBytes, PyModule};
 use pyo3::{Bound, Py, PyAny, PyResult, Python, pyclass, pymethods};
 use refix_message::framing::GarbledReason;
 use refix_message::stream::Outcome;
-use refix_message::{MessageStream as CoreMessageStream, Tokenizer as CoreTokenizer};
+use refix_message::{MessageStream as CoreMessageStream, Tag, Tokenizer as CoreTokenizer};
 
 #[pyclass(module = "refix._core")]
 pub(crate) struct MessageStream(CoreMessageStream);
@@ -14,7 +14,8 @@ impl MessageStream {
     #[new]
     #[pyo3(signature = (*, extra_length_tags = Vec::new()))]
     fn new(extra_length_tags: Vec<u32>) -> Self {
-        let tokenizer = CoreTokenizer::with_extra_length_tags(extra_length_tags);
+        let tokenizer =
+            CoreTokenizer::with_extra_length_tags(extra_length_tags.into_iter().map(Tag));
         Self(CoreMessageStream::new(tokenizer))
     }
 
