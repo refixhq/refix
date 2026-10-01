@@ -1,6 +1,6 @@
 use crate::{
     Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Member,
-    MemberContext, Message, Protocol, Spec, Version, dictionary,
+    MemberContext, Message, Protocol, Spec, Tag, Version, dictionary,
 };
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
@@ -27,7 +27,7 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
 
     let version = parse_version(root)?;
     let fields = parse_fields(root)?;
-    let tags_by_name: HashMap<&str, u32> = fields
+    let tags_by_name: HashMap<&str, Tag> = fields
         .iter()
         .map(|field| (field.name.as_str(), field.tag))
         .collect();
@@ -102,7 +102,7 @@ fn parse_field(node: Node) -> Result<Field, Error> {
 
     Ok(Field {
         name,
-        tag: int_attribute(node, "number")?,
+        tag: Tag(int_attribute(node, "number")?),
         data_type: parse_data_type(string_attribute(node, "type")?),
         values,
     })
@@ -110,7 +110,7 @@ fn parse_field(node: Node) -> Result<Field, Error> {
 
 fn parse_components(
     root: Node,
-    tags_by_name: &HashMap<&str, u32>,
+    tags_by_name: &HashMap<&str, Tag>,
     warnings: &mut Vec<Warning>,
 ) -> Result<Vec<Component>, Error> {
     let Some(section) = root.children().find(|node| node.has_tag_name("components")) else {
@@ -128,7 +128,7 @@ fn parse_components(
 
 fn parse_component(
     node: Node,
-    tags_by_name: &HashMap<&str, u32>,
+    tags_by_name: &HashMap<&str, Tag>,
     warnings: &mut Vec<Warning>,
 ) -> Result<Component, Error> {
     let name = string_attribute(node, "name")?;
@@ -148,7 +148,7 @@ fn parse_data_type(name: String) -> DataType {
 
 fn parse_messages(
     root: Node,
-    tags_by_name: &HashMap<&str, u32>,
+    tags_by_name: &HashMap<&str, Tag>,
     warnings: &mut Vec<Warning>,
 ) -> Result<Vec<Message>, Error> {
     let Some(section) = root.children().find(|node| node.has_tag_name("messages")) else {
@@ -164,7 +164,7 @@ fn parse_messages(
 
 fn parse_message(
     node: Node,
-    tags_by_name: &HashMap<&str, u32>,
+    tags_by_name: &HashMap<&str, Tag>,
     warnings: &mut Vec<Warning>,
 ) -> Result<Message, Error> {
     let name = string_attribute(node, "name")?;
@@ -187,7 +187,7 @@ fn parse_message(
 fn parse_members(
     node: Node,
     context: MemberContext,
-    tags_by_name: &HashMap<&str, u32>,
+    tags_by_name: &HashMap<&str, Tag>,
     warnings: &mut Vec<Warning>,
 ) -> Result<Vec<Member>, Error> {
     let mut members = Vec::new();
@@ -217,7 +217,7 @@ fn parse_members(
 fn parse_field_ref(
     node: Node,
     context: MemberContext,
-    tags_by_name: &HashMap<&str, u32>,
+    tags_by_name: &HashMap<&str, Tag>,
 ) -> Result<FieldRef, Error> {
     let name = string_attribute(node, "name")?;
     let Some(&tag) = tags_by_name.get(name.as_str()) else {
@@ -506,25 +506,25 @@ mod tests {
                 vec![
                     Field {
                         name: "ClOrdID".to_owned(),
-                        tag: 11,
+                        tag: Tag(11),
                         data_type: DataType::String,
                         values: vec![],
                     },
                     Field {
                         name: "PriceType".to_owned(),
-                        tag: 423,
+                        tag: Tag(423),
                         data_type: DataType::Int,
                         values: vec![],
                     },
                     Field {
                         name: "OrderQty".to_owned(),
-                        tag: 38,
+                        tag: Tag(38),
                         data_type: DataType::Other("QTY".to_owned()),
                         values: vec![],
                     },
                     Field {
                         name: "OrdType".to_owned(),
-                        tag: 40,
+                        tag: Tag(40),
                         data_type: DataType::Other("CHAR".to_owned()),
                         values: vec![
                             EnumValue {
@@ -643,11 +643,11 @@ mod tests {
                         name: "CommissionData".to_owned(),
                         members: vec![
                             Member::Field(FieldRef {
-                                tag: 12,
+                                tag: Tag(12),
                                 is_required: true,
                             }),
                             Member::Field(FieldRef {
-                                tag: 13,
+                                tag: Tag(13),
                                 is_required: false,
                             }),
                         ],
@@ -724,11 +724,11 @@ mod tests {
                     msg_type: "D".to_owned(),
                     members: vec![
                         Member::Field(FieldRef {
-                            tag: 11,
+                            tag: Tag(11),
                             is_required: true,
                         }),
                         Member::Field(FieldRef {
-                            tag: 58,
+                            tag: Tag(58),
                             is_required: false,
                         }),
                         Member::Component(ComponentRef {
