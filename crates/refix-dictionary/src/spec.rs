@@ -77,6 +77,11 @@ pub struct ComponentRef {
 pub enum MemberContext {
     Message(String),
     Component(String),
+    /// A group's entries, named after the group's count field.
+    Group {
+        name: String,
+        parent: Box<MemberContext>,
+    },
 }
 
 impl fmt::Display for MemberContext {
@@ -84,6 +89,7 @@ impl fmt::Display for MemberContext {
         match self {
             Self::Message(name) => write!(f, "message '{name}'"),
             Self::Component(name) => write!(f, "component '{name}'"),
+            Self::Group { name, parent } => write!(f, "group '{name}' in {parent}"),
         }
     }
 }
@@ -133,4 +139,30 @@ pub enum Category {
     Admin,
     /// Business messages: orders, executions, market data.
     App,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_nested_group_context_names_its_whole_path() {
+        let context = MemberContext::Group {
+            name: "NoPartySubIDs".to_owned(),
+            parent: Box::new(MemberContext::Group {
+                name: "NoPartyIDs".to_owned(),
+                parent: Box::new(MemberContext::Component("Parties".to_owned())),
+            }),
+        };
+
+        assert_eq!(
+            context.to_string(),
+            "group 'NoPartySubIDs' in group 'NoPartyIDs' in component 'Parties'"
+        );
+
+        assert_eq!(
+            context.to_string(),
+            "group 'NoPartySubIDs' in group 'NoPartyIDs' in component 'Parties'"
+        );
+    }
 }
