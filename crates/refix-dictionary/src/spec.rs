@@ -45,9 +45,9 @@ pub struct Component {
     pub members: Vec<Member>,
 }
 
-/// A member of a message or component.
+/// A member of a message, component or group entry.
 ///
-/// This can either be a field reference or a component reference.
+/// This can be a field reference, a component reference or a repeating group.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Member {
     Field(FieldRef),

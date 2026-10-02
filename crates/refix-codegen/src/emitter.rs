@@ -48,8 +48,8 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
 mod tests {
     use super::*;
     use refix_dictionary::{
-        Category, DataType, EnumValue, Field, FieldRef, Member, Message, Protocol, Spec, Tag,
-        Version,
+        Category, DataType, EnumValue, Field, FieldRef, Group, Member, MemberContext, Message,
+        Protocol, Spec, Tag, Version,
     };
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
@@ -202,5 +202,39 @@ impl NewOrderSingle {
         let heartbeat = generated.code.find("pub struct Heartbeat").unwrap();
         let test_request = generated.code.find("pub struct TestRequest").unwrap();
         assert!(heartbeat < test_request);
+    }
+
+    #[test]
+    fn a_group_is_skipped_with_a_warning() {
+        let spec = spec_of(
+            vec![Message {
+                name: "NewOrderSingle".to_owned(),
+                msg_type: "D".to_owned(),
+                members: vec![Member::Group(Group {
+                    count_tag: Tag(453),
+                    is_required: false,
+                    members: vec![Member::Field(FieldRef {
+                        tag: Tag(448),
+                        is_required: false,
+                    })],
+                })],
+                category: Category::App,
+            }],
+            vec![
+                field("NoPartyIDs", 453, DataType::Other("NUMINGROUP".to_owned())),
+                field("PartyID", 448, DataType::String),
+            ],
+        );
+
+        let generated = generate(&spec.resolve().unwrap(), "toy.xml").unwrap();
+
+        assert!(!generated.code.contains("no_party_ids"));
+        assert!(!generated.code.contains("party_id"));
+        assert_eq!(
+            generated.warnings,
+            vec![Warning::UnsupportedGroup {
+                context: MemberContext::Message("NewOrderSingle".to_owned()).group("NoPartyIDs"),
+            }]
+        );
     }
 }
