@@ -2,7 +2,7 @@ use super::{
     ComponentIndex, Dictionary, Error, FieldIndex, ResolvedGroup, ResolvedMember, ResolvedMessage,
 };
 use crate::{Field, MemberContext, Spec, Tag, spec};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, hash_map::Entry};
 
 impl Spec {
     /// Resolves this spec into a [`Dictionary`], checking its integrity.
@@ -253,27 +253,34 @@ fn check_unique_tags(
     context: &MemberContext,
     fields: &[Field],
 ) -> Result<(), Error> {
-    insert_unique_tags(members, context, fields, &mut HashSet::new())
+    insert_unique_tags(members, context, fields, &mut HashMap::new())
 }
 
-/// Adds every tag in `members` to `seen`, descending into group entries:
-/// a tag may appear only once in a message, at any depth.
+/// Records where each tag in `members` appears, descending into group
+/// entries: a tag may appear only once in a message, at any depth.
 fn insert_unique_tags(
     members: &[ResolvedMember],
     context: &MemberContext,
     fields: &[Field],
-    seen: &mut HashSet<Tag>,
+    seen: &mut HashMap<Tag, MemberContext>,
 ) -> Result<(), Error> {
     for member in members {
         let tag = fields[member.first_field()].tag;
-        if !seen.insert(tag) {
-            return Err(Error::DuplicateField {
-                context: context.clone(),
-                tag,
-            });
+        match seen.entry(tag) {
+            Entry::Occupied(first) => {
+                return Err(Error::DuplicateField {
+                    tag,
+                    first: first.get().clone(),
+                    second: context.clone(),
+                });
+            }
+            Entry::Vacant(slot) => {
+                slot.insert(context.clone());
+            }
         }
         if let ResolvedMember::Group(group) = member {
-            insert_unique_tags(&group.members, context, fields, seen)?;
+            let entry = context.group(&fields[group.count_field_index].name);
+            insert_unique_tags(&group.members, &entry, fields, seen)?;
         }
     }
     Ok(())

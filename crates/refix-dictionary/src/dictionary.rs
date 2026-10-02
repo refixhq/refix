@@ -541,8 +541,9 @@ mod tests {
         assert_eq!(
             spec.resolve().unwrap_err(),
             Error::DuplicateField {
-                context: MemberContext::Component("Top".to_owned()),
                 tag: Tag(58),
+                first: MemberContext::Component("Top".to_owned()),
+                second: MemberContext::Component("Top".to_owned()),
             }
         );
     }
@@ -561,8 +562,9 @@ mod tests {
         assert_eq!(
             spec.resolve().unwrap_err(),
             Error::DuplicateField {
-                context: MemberContext::Message("NewOrderSingle".to_owned()),
                 tag: Tag(58),
+                first: MemberContext::Message("NewOrderSingle".to_owned()),
+                second: MemberContext::Message("NewOrderSingle".to_owned()),
             }
         );
     }
@@ -845,8 +847,9 @@ mod tests {
             assert_eq!(
                 spec.resolve().unwrap_err(),
                 Error::DuplicateField {
-                    context: nos_context(),
                     tag: Tag(448),
+                    first: nos_context(),
+                    second: nos_context().group("NoPartyIDs"),
                 }
             );
         }
@@ -868,8 +871,9 @@ mod tests {
             assert_eq!(
                 spec.resolve().unwrap_err(),
                 Error::DuplicateField {
-                    context: nos_context(),
                     tag: Tag(453),
+                    first: nos_context(),
+                    second: nos_context(),
                 }
             );
         }
@@ -893,8 +897,9 @@ mod tests {
             assert_eq!(
                 spec.resolve().unwrap_err(),
                 Error::DuplicateField {
-                    context: nos_context(),
                     tag: Tag(448),
+                    first: nos_context().group("NoPartyIDs"),
+                    second: nos_context().group("NoNestedPartyIDs"),
                 }
             );
         }
@@ -917,8 +922,9 @@ mod tests {
             assert_eq!(
                 spec.resolve().unwrap_err(),
                 Error::DuplicateField {
-                    context: nos_context().group("NoPartyIDs"),
                     tag: Tag(448),
+                    first: nos_context().group("NoPartyIDs"),
+                    second: nos_context().group("NoPartyIDs"),
                 }
             );
         }
