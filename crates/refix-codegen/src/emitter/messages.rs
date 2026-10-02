@@ -1,10 +1,13 @@
-use refix_dictionary::{DataType, Field, dictionary};
+use refix_dictionary::{DataType, Field, MemberContext, dictionary};
 
-use super::{Error, naming::method_name};
+use super::{Error, Warning, naming::method_name};
 
-pub(super) fn emit_message(message: dictionary::Message<'_>) -> Result<String, Error> {
+pub(super) fn emit_message(
+    message: dictionary::Message<'_>,
+    warnings: &mut Vec<Warning>,
+) -> Result<String, Error> {
     let message_struct = emit_message_struct(message);
-    let message_impl = emit_message_impl(message)?;
+    let message_impl = emit_message_impl(message, warnings)?;
     Ok(format!("{message_struct}\n{message_impl}"))
 }
 
@@ -12,7 +15,10 @@ fn emit_message_struct(message: dictionary::Message<'_>) -> String {
     format!("pub struct {}(RawMessage);\n", message.name())
 }
 
-fn emit_message_impl(message: dictionary::Message<'_>) -> Result<String, Error> {
+fn emit_message_impl(
+    message: dictionary::Message<'_>,
+    warnings: &mut Vec<Warning>,
+) -> Result<String, Error> {
     let mut members = vec![
         format!(
             "    pub const MSG_TYPE: &[u8] = b\"{}\";\n",
@@ -21,14 +27,17 @@ fn emit_message_impl(message: dictionary::Message<'_>) -> Result<String, Error> 
         "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),
         "    pub fn raw(&self) -> &RawMessage {\n        &self.0\n    }\n".to_owned(),
     ];
-    members.extend(
-        message
-            .members()
-            .map(|member| match member {
-                dictionary::Member::Field { field, .. } => emit_accessor(field),
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-    );
+    for member in message.members() {
+        match member {
+            dictionary::Member::Field { field, .. } => members.push(emit_accessor(field)?),
+            dictionary::Member::Group(group) => {
+                let context = MemberContext::Message(message.name().to_owned());
+                warnings.push(Warning::UnsupportedGroup {
+                    context: context.group(&group.count_field().name),
+                });
+            }
+        }
+    }
 
     Ok(format!(
         "impl {} {{\n{}}}\n",

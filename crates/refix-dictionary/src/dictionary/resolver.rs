@@ -1,4 +1,6 @@
-use super::{ComponentIndex, Dictionary, Error, FieldIndex, ResolvedMember, ResolvedMessage};
+use super::{
+    ComponentIndex, Dictionary, Error, FieldIndex, ResolvedGroup, ResolvedMember, ResolvedMessage,
+};
 use crate::{Field, MemberContext, Spec, Tag, spec};
 use std::collections::{HashMap, HashSet};
 
@@ -68,7 +70,7 @@ impl<'a> Resolver<'a> {
 
         let context = MemberContext::Component(component.name.clone());
         self.stack.push(index);
-        let members = self.resolve_members(&component.members, &context)?;
+        let members = self.resolve_members(&component.members, &context, false)?;
         self.stack.pop();
 
         self.expansions[index.0] = Some(members);
@@ -78,19 +80,24 @@ impl<'a> Resolver<'a> {
 
     fn resolve_message(&mut self, message: &spec::Message) -> Result<ResolvedMessage, Error> {
         let context = MemberContext::Message(message.name.clone());
-        let members = self.resolve_members(&message.members, &context)?;
+        let members = self.resolve_members(&message.members, &context, false)?;
         Ok(ResolvedMessage { members })
     }
 
     /// Resolves one member list, expanding component references in
     /// place, and checks that no tag appears in it twice.
+    ///
+    /// In a group entry the first member is required whatever its declared
+    /// flag: a component in first position becomes required, and the field
+    /// every entry starts with must be present.
     fn resolve_members(
         &mut self,
         members: &[spec::Member],
         context: &MemberContext,
+        is_entry: bool,
     ) -> Result<Vec<ResolvedMember>, Error> {
         let mut resolved = Vec::new();
-        for member in members {
+        for (position, member) in members.iter().enumerate() {
             match member {
                 spec::Member::Field(field_ref) => {
                     resolved.push(self.resolve_field_ref(field_ref, context)?);
@@ -107,13 +114,44 @@ impl<'a> Resolver<'a> {
                     let expansion = self.expansions[child.0]
                         .as_ref()
                         .expect("the call above expands the child");
-                    extend_with_expansion(&mut resolved, expansion, component_ref.is_required);
+                    let is_required = component_ref.is_required || (is_entry && position == 0);
+                    extend_with_expansion(&mut resolved, expansion, is_required);
+                }
+                spec::Member::Group(group) => {
+                    resolved.push(ResolvedMember::Group(self.resolve_group(group, context)?));
                 }
             }
         }
 
+        if is_entry && let Some(first) = resolved.first_mut() {
+            first.require();
+        }
         check_unique_tags(&resolved, context, &self.spec.fields)?;
         Ok(resolved)
+    }
+
+    /// Resolves a group: its count field in the enclosing scope, and its
+    /// entry members with requiredness relative to the entry.
+    fn resolve_group(
+        &mut self,
+        group: &spec::Group,
+        context: &MemberContext,
+    ) -> Result<ResolvedGroup, Error> {
+        let count_field_index = self.field_index(group.count_tag, context)?;
+        let spec = self.spec;
+        let entry = context.group(&spec.fields.as_slice()[count_field_index].name);
+        let members = self.resolve_members(&group.members, &entry, true)?;
+        let Some(first) = members.first() else {
+            return Err(Error::EmptyGroup { context: entry });
+        };
+        let delimiter_index = first.first_field();
+
+        Ok(ResolvedGroup {
+            count_field_index,
+            delimiter_index,
+            is_required: group.is_required,
+            members,
+        })
     }
 
     fn resolve_field_ref(
@@ -121,17 +159,50 @@ impl<'a> Resolver<'a> {
         field_ref: &spec::FieldRef,
         context: &MemberContext,
     ) -> Result<ResolvedMember, Error> {
-        let Some(&field_index) = self.fields_by_tag.get(&field_ref.tag) else {
-            return Err(Error::UnknownField {
-                context: context.clone(),
-                tag: field_ref.tag,
-            });
-        };
-
-        Ok(ResolvedMember {
-            field_index,
+        Ok(ResolvedMember::Field {
+            field_index: self.field_index(field_ref.tag, context)?,
             is_required: field_ref.is_required,
         })
+    }
+
+    /// The definition `tag` refers to, where it is used in `context`.
+    fn field_index(&self, tag: Tag, context: &MemberContext) -> Result<FieldIndex, Error> {
+        self.fields_by_tag
+            .get(&tag)
+            .copied()
+            .ok_or_else(|| Error::UnknownField {
+                context: context.clone(),
+                tag,
+            })
+    }
+}
+
+impl ResolvedMember {
+    /// The field this member starts with on the wire: the field itself, or
+    /// a group's count field.
+    fn first_field(&self) -> FieldIndex {
+        match self {
+            ResolvedMember::Field { field_index, .. } => *field_index,
+            ResolvedMember::Group(group) => group.count_field_index,
+        }
+    }
+
+    /// Makes this member required in its scope.
+    fn require(&mut self) {
+        match self {
+            ResolvedMember::Field { is_required, .. } => *is_required = true,
+            ResolvedMember::Group(group) => group.is_required = true,
+        }
+    }
+
+    /// Keeps this member required only if `is_required` holds as well.
+    fn combine_required(&mut self, is_required: bool) {
+        match self {
+            ResolvedMember::Field {
+                is_required: own, ..
+            } => *own &= is_required,
+            ResolvedMember::Group(group) => group.is_required &= is_required,
+        }
     }
 }
 
@@ -162,14 +233,18 @@ fn index_components(
     Ok(by_name)
 }
 
+/// Splices a component's expansion into a scope. The reference's
+/// requiredness applies to the expansion's own members; the entries of
+/// groups within it keep theirs.
 fn extend_with_expansion(
     members: &mut Vec<ResolvedMember>,
     expansion: &[ResolvedMember],
     is_required: bool,
 ) {
-    members.extend(expansion.iter().map(|member| ResolvedMember {
-        field_index: member.field_index,
-        is_required: is_required && member.is_required,
+    members.extend(expansion.iter().map(|member| {
+        let mut member = member.clone();
+        member.combine_required(is_required);
+        member
     }));
 }
 
@@ -178,14 +253,27 @@ fn check_unique_tags(
     context: &MemberContext,
     fields: &[Field],
 ) -> Result<(), Error> {
-    let mut seen = HashSet::new();
+    insert_unique_tags(members, context, fields, &mut HashSet::new())
+}
+
+/// Adds every tag in `members` to `seen`, descending into group entries:
+/// a tag may appear only once in a message, at any depth.
+fn insert_unique_tags(
+    members: &[ResolvedMember],
+    context: &MemberContext,
+    fields: &[Field],
+    seen: &mut HashSet<Tag>,
+) -> Result<(), Error> {
     for member in members {
-        let tag = fields[member.field_index].tag;
+        let tag = fields[member.first_field()].tag;
         if !seen.insert(tag) {
             return Err(Error::DuplicateField {
                 context: context.clone(),
                 tag,
             });
+        }
+        if let ResolvedMember::Group(group) = member {
+            insert_unique_tags(&group.members, context, fields, seen)?;
         }
     }
     Ok(())

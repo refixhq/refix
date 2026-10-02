@@ -22,6 +22,9 @@ pub enum Error {
     CircularComponent {
         component: String,
     },
+    EmptyGroup {
+        context: MemberContext,
+    },
     DuplicateField {
         context: MemberContext,
         tag: Tag,
@@ -45,6 +48,9 @@ impl fmt::Display for Error {
             }
             Error::CircularComponent { component } => {
                 write!(f, "component '{component}' is part of a reference cycle")
+            }
+            Error::EmptyGroup { context } => {
+                write!(f, "{context} has no members")
             }
             Error::DuplicateField { context, tag } => {
                 write!(f, "{context} contains tag {tag} more than once")

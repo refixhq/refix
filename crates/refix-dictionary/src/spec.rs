@@ -52,6 +52,7 @@ pub struct Component {
 pub enum Member {
     Field(FieldRef),
     Component(ComponentRef),
+    Group(Group),
 }
 
 /// A field as used by one message or component (Orchestra's `fieldRef`).
@@ -70,7 +71,18 @@ pub struct ComponentRef {
     pub is_required: bool,
 }
 
-/// The owner of a member list: the message or component a member appears in.
+/// A repeating group, declared inline in a message, component or entry.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Group {
+    /// Tag of the group's NumInGroup count field.
+    pub count_tag: Tag,
+    pub is_required: bool,
+    /// The members of each entry, in source order.
+    pub members: Vec<Member>,
+}
+
+/// The owner of a member list: the message, component or group entry a
+/// member appears in.
 ///
 /// Diagnostics use this to name the place a problem was found.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -82,6 +94,16 @@ pub enum MemberContext {
         name: String,
         parent: Box<MemberContext>,
     },
+}
+
+impl MemberContext {
+    /// The context of a group's entries, nested in this context.
+    pub fn group(&self, name: &str) -> MemberContext {
+        MemberContext::Group {
+            name: name.to_owned(),
+            parent: Box::new(self.clone()),
+        }
+    }
 }
 
 impl fmt::Display for MemberContext {

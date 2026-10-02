@@ -8,6 +8,7 @@ mod resolver;
 
 use crate::{Category, Field, Spec, Version, spec};
 pub use error::Error;
+use std::fmt;
 use std::ops::Index;
 
 /// A resolved data dictionary, produced by [`Spec::resolve`].
@@ -22,12 +23,23 @@ struct ResolvedMessage {
     members: Vec<ResolvedMember>,
 }
 
-/// A member as an index into the spec's field definitions, so the
+/// A member as indices into the spec's field definitions, so the
 /// dictionary stays free of self-references.
-#[derive(Clone, Copy, Debug)]
-struct ResolvedMember {
-    field_index: FieldIndex,
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ResolvedMember {
+    Field {
+        field_index: FieldIndex,
+        is_required: bool,
+    },
+    Group(ResolvedGroup),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ResolvedGroup {
+    count_field_index: FieldIndex,
+    delimiter_index: FieldIndex,
     is_required: bool,
+    members: Vec<ResolvedMember>,
 }
 
 /// A position in the spec's field definitions.
@@ -107,11 +119,7 @@ impl<'a> Message<'a> {
 
     /// The members in source order, components expanded in place.
     pub fn members(&self) -> impl Iterator<Item = Member<'a>> {
-        let fields = self.fields;
-        self.members.iter().map(move |member| Member::Field {
-            field: &fields[member.field_index],
-            is_required: member.is_required,
-        })
+        members_of(self.members, self.fields)
     }
 }
 
@@ -125,6 +133,68 @@ pub enum Member<'a> {
         /// on the path to it: required only if required at every level.
         is_required: bool,
     },
+    Group(Group<'a>),
+}
+
+/// A read view of one repeating group, with its entry members resolved.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct Group<'a> {
+    resolved: &'a ResolvedGroup,
+    fields: &'a [Field],
+}
+
+impl<'a> Group<'a> {
+    /// The NumInGroup field, e.g. `NoPartyIDs(453)`.
+    pub fn count_field(&self) -> &'a Field {
+        &self.fields[self.resolved.count_field_index]
+    }
+
+    /// The field every entry starts with: the entry's first field after
+    /// expansion, or a nested group's count field.
+    pub fn delimiter(&self) -> &'a Field {
+        &self.fields[self.resolved.delimiter_index]
+    }
+
+    /// Whether the count field is required in the enclosing scope,
+    /// combined across every component on the path to it.
+    pub fn is_required(&self) -> bool {
+        self.resolved.is_required
+    }
+
+    /// The members of each entry in source order, with requiredness
+    /// relative to the entry.
+    pub fn members(&self) -> impl Iterator<Item = Member<'a>> {
+        members_of(&self.resolved.members, self.fields)
+    }
+}
+
+impl fmt::Debug for Group<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Group")
+            .field("count_field", &self.count_field().name)
+            .field("is_required", &self.is_required())
+            .field("members", &self.members().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
+fn members_of<'a>(
+    members: &'a [ResolvedMember],
+    fields: &'a [Field],
+) -> impl Iterator<Item = Member<'a>> {
+    members.iter().map(move |member| match member {
+        ResolvedMember::Field {
+            field_index,
+            is_required,
+        } => Member::Field {
+            field: &fields[*field_index],
+            is_required: *is_required,
+        },
+        ResolvedMember::Group(group) => Member::Group(Group {
+            resolved: group,
+            fields,
+        }),
+    })
 }
 
 #[cfg(test)]
@@ -148,12 +218,12 @@ mod tests {
         })
     }
 
-    /// A message's members as (tag, is_required), for messages without groups.
-    fn field_members(message: Message<'_>) -> Vec<(Tag, bool)> {
-        message
-            .members()
+    /// Members as (tag, is_required), for member lists without groups.
+    fn field_members<'a>(members: impl Iterator<Item = Member<'a>>) -> Vec<(Tag, bool)> {
+        members
             .map(|member| match member {
                 Member::Field { field, is_required } => (field.tag, is_required),
+                Member::Group(group) => panic!("unexpected group {}", group.count_field().name),
             })
             .collect()
     }
@@ -270,7 +340,7 @@ mod tests {
 
         let message = dictionary.messages().next().unwrap();
         assert_eq!(
-            field_members(message),
+            field_members(message.members()),
             vec![
                 (Tag(11), true),
                 (Tag(12), true),
@@ -299,7 +369,7 @@ mod tests {
         // An optional component makes everything below it optional.
         let message = dictionary.messages().next().unwrap();
         assert_eq!(
-            field_members(message),
+            field_members(message.members()),
             vec![(Tag(12), false), (Tag(13), false)]
         );
     }
@@ -321,7 +391,7 @@ mod tests {
         let dictionary = spec.resolve().unwrap();
 
         let message = dictionary.messages().next().unwrap();
-        assert_eq!(field_members(message), vec![(Tag(12), true)]);
+        assert_eq!(field_members(message.members()), vec![(Tag(12), true)]);
     }
 
     #[test]
