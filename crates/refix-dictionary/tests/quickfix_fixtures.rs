@@ -105,7 +105,7 @@ fn parses_the_full_fix44_dictionary() {
         dictionary::Member::Field { field, .. } if field.tag == Tag(55) && field.name == "Symbol"
     )));
 
-    // Parties' NoPartyIDs, with NoPartySubIDs nested in its entries.
+    // Parties' NoPartyIDs, with NoPartySubIDs nested in its instances.
     let parties = resolved
         .members()
         .find_map(|member| match member {
@@ -115,7 +115,7 @@ fn parses_the_full_fix44_dictionary() {
         .unwrap();
     assert!(!parties.is_required());
     assert_eq!(parties.delimiter().tag, Tag(448));
-    let entry: Vec<(Tag, bool)> = parties
+    let instance: Vec<(Tag, bool)> = parties
         .members()
         .map(|member| match member {
             dictionary::Member::Field { field, is_required } => (field.tag, is_required),
@@ -123,7 +123,7 @@ fn parses_the_full_fix44_dictionary() {
         })
         .collect();
     assert_eq!(
-        entry,
+        instance,
         vec![
             (Tag(448), true),
             (Tag(447), false),

@@ -87,14 +87,14 @@ impl<'a> Resolver<'a> {
     /// Resolves one member list, expanding component references in
     /// place, and checks that no tag appears in it twice.
     ///
-    /// In a group entry the first member is required whatever its declared
+    /// In a group instance the first member is required whatever its declared
     /// flag: a component in first position becomes required, and the field
-    /// every entry starts with must be present.
+    /// every instance starts with must be present.
     fn resolve_members(
         &mut self,
         members: &[spec::Member],
         context: &MemberContext,
-        is_entry: bool,
+        is_instance: bool,
     ) -> Result<Vec<ResolvedMember>, Error> {
         let mut resolved = Vec::new();
         for (position, member) in members.iter().enumerate() {
@@ -114,7 +114,7 @@ impl<'a> Resolver<'a> {
                     let expansion = self.expansions[child.0]
                         .as_ref()
                         .expect("the call above expands the child");
-                    let is_required = component_ref.is_required || (is_entry && position == 0);
+                    let is_required = component_ref.is_required || (is_instance && position == 0);
                     extend_with_expansion(&mut resolved, expansion, is_required);
                 }
                 spec::Member::Group(group) => {
@@ -123,7 +123,7 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        if is_entry && let Some(first) = resolved.first_mut() {
+        if is_instance && let Some(first) = resolved.first_mut() {
             first.require();
         }
         check_unique_tags(&resolved, context, &self.spec.fields)?;
@@ -131,7 +131,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolves a group: its count field in the enclosing scope, and its
-    /// entry members with requiredness relative to the entry.
+    /// instance members with requiredness relative to the instance.
     fn resolve_group(
         &mut self,
         group: &spec::Group,
@@ -139,10 +139,10 @@ impl<'a> Resolver<'a> {
     ) -> Result<ResolvedGroup, Error> {
         let count_field_index = self.field_index(group.count_tag, context)?;
         let spec = self.spec;
-        let entry = context.group(&spec.fields.as_slice()[count_field_index].name);
-        let members = self.resolve_members(&group.members, &entry, true)?;
+        let instance = context.group(&spec.fields.as_slice()[count_field_index].name);
+        let members = self.resolve_members(&group.members, &instance, true)?;
         let Some(first) = members.first() else {
-            return Err(Error::EmptyGroup { context: entry });
+            return Err(Error::EmptyGroup { context: instance });
         };
         let delimiter_index = first.first_field();
 
@@ -234,7 +234,7 @@ fn index_components(
 }
 
 /// Splices a component's expansion into a scope. The reference's
-/// requiredness applies to the expansion's own members; the entries of
+/// requiredness applies to the expansion's own members; the instances of
 /// groups within it keep theirs.
 fn extend_with_expansion(
     members: &mut Vec<ResolvedMember>,
@@ -257,7 +257,7 @@ fn check_unique_tags(
 }
 
 /// Records where each tag in `members` appears, descending into group
-/// entries: a tag may appear only once in a message, at any depth.
+/// instances: a tag may appear only once in a message, at any depth.
 fn insert_unique_tags(
     members: &[ResolvedMember],
     context: &MemberContext,
@@ -279,8 +279,8 @@ fn insert_unique_tags(
             }
         }
         if let ResolvedMember::Group(group) = member {
-            let entry = context.group(&fields[group.count_field_index].name);
-            insert_unique_tags(&group.members, &entry, fields, seen)?;
+            let instance = context.group(&fields[group.count_field_index].name);
+            insert_unique_tags(&group.members, &instance, fields, seen)?;
         }
     }
     Ok(())

@@ -45,7 +45,7 @@ pub struct Component {
     pub members: Vec<Member>,
 }
 
-/// A member of a message, component or group entry.
+/// A member of a message, component or group instance.
 ///
 /// This can be a field reference, a component reference or a repeating group.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -71,17 +71,18 @@ pub struct ComponentRef {
     pub is_required: bool,
 }
 
-/// A repeating group, declared inline in a message, component or entry.
+/// A repeating group, declared inline in a message, component or group
+/// instance.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Group {
     /// Tag of the group's NumInGroup count field.
     pub count_tag: Tag,
     pub is_required: bool,
-    /// The members of each entry, in source order.
+    /// The members of each instance, in source order.
     pub members: Vec<Member>,
 }
 
-/// The owner of a member list: the message, component or group entry a
+/// The owner of a member list: the message, component or group instance a
 /// member appears in.
 ///
 /// Diagnostics use this to name the place a problem was found.
@@ -89,7 +90,7 @@ pub struct Group {
 pub enum MemberContext {
     Message(String),
     Component(String),
-    /// A group's entries, named after the group's count field.
+    /// A group's instances, named after the group's count field.
     Group {
         name: String,
         parent: Box<MemberContext>,
@@ -97,7 +98,7 @@ pub enum MemberContext {
 }
 
 impl MemberContext {
-    /// The context of a group's entries, nested in this context.
+    /// The context of a group's instances, nested in this context.
     pub fn group(&self, name: &str) -> MemberContext {
         MemberContext::Group {
             name: name.to_owned(),
