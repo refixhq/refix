@@ -66,10 +66,7 @@ impl<'a> GroupTable<'a> {
     }
 }
 
-/// Every tag the walked scope can contain, at any depth: a message's tags
-/// for its groups, or a group's instance tags for the groups nested in it.
-/// The walker uses them to tell a tag that belongs elsewhere from one it
-/// does not know.
+/// Every tag the walked scope (a message or a group instance) can contain, at any depth.
 #[derive(Clone, Copy, Debug)]
 pub struct KnownTags<'a>(&'a [Tag]);
 
@@ -659,6 +656,99 @@ mod tests {
 
             let sub_ids: Vec<Option<&str>> = nested.iter().map(|sub| text(&sub, 523)).collect();
             assert_eq!(sub_ids, [Some("S1"), Some("S2")]);
+        }
+    }
+
+    mod instances {
+        use super::*;
+
+        /// An instance type as codegen would write it.
+        #[derive(Clone, Copy, Debug)]
+        struct Party<'a>(Scope<'a>);
+
+        impl<'a> From<Scope<'a>> for Party<'a> {
+            fn from(scope: Scope<'a>) -> Self {
+                Self(scope)
+            }
+        }
+
+        impl<'a> Party<'a> {
+            fn party_id(&self) -> Option<&'a str> {
+                text(&self.0, 448)
+            }
+        }
+
+        fn parties(message: &RawMessage) -> Instances<'_, Party<'_>> {
+            Instances::from(message.get_group(&NO_PARTY_IDS, &KNOWN).unwrap())
+        }
+
+        #[test]
+        fn reads_each_instance_through_its_type() {
+            let message = message("35=D|453=2|448=AL|448=BOB|54=1|");
+            let parties = parties(&message);
+
+            assert_eq!(parties.len(), 2);
+            let ids: Vec<Option<&str>> = parties.iter().map(|party| party.party_id()).collect();
+            assert_eq!(ids, [Some("AL"), Some("BOB")]);
+        }
+
+        #[test]
+        fn an_absent_group_has_no_instances() {
+            let message = message("35=D|11=X|54=1|");
+            let parties = parties(&message);
+
+            assert!(parties.is_empty());
+            assert_eq!(parties.iter().count(), 0);
+        }
+
+        #[test]
+        fn get_reads_one_instance_by_position() {
+            let message = message("35=D|453=2|448=AL|448=BOB|54=1|");
+            let parties = parties(&message);
+
+            assert_eq!(parties.get(1).unwrap().party_id(), Some("BOB"));
+            assert!(parties.get(2).is_none());
+        }
+
+        #[test]
+        fn iterates_by_reference() {
+            let message = message("35=D|453=2|448=AL|448=BOB|54=1|");
+            let parties = parties(&message);
+
+            let mut ids = Vec::new();
+            for party in &parties {
+                ids.push(party.party_id());
+            }
+            assert_eq!(ids, [Some("AL"), Some("BOB")]);
+        }
+
+        #[test]
+        fn the_iterator_knows_its_length() {
+            let message = message("35=D|453=2|448=AL|448=BOB|54=1|");
+            let parties = parties(&message);
+
+            let mut iter = parties.iter();
+            assert_eq!(iter.len(), 2);
+            iter.next();
+            assert_eq!(iter.len(), 1);
+        }
+
+        #[test]
+        fn default_is_empty() {
+            let parties: Instances<'_, Party<'_>> = Instances::default();
+            assert!(parties.is_empty());
+        }
+
+        #[test]
+        fn a_nested_group_is_read_through_an_instance_scope() {
+            let message = message("35=D|453=1|448=AL|802=2|523=S1|523=S2|54=1|");
+            let parties = parties(&message);
+            let party = parties.get(0).unwrap();
+
+            let sub_ids: Instances<'_, Scope<'_>> =
+                Instances::from(party.0.get_group(&NO_PARTY_SUB_IDS, &KNOWN).unwrap());
+            let values: Vec<Option<&str>> = sub_ids.iter().map(|sub| text(&sub, 523)).collect();
+            assert_eq!(values, [Some("S1"), Some("S2")]);
         }
     }
 
