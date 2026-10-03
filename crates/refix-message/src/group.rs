@@ -1,5 +1,5 @@
-use crate::Tag;
 use crate::message::{Scope, Slot};
+use crate::{InvalidValue, RawMessage, Tag};
 
 /// CheckSum(10) closes every frame, so it always ends a group.
 const CHECK_SUM: Tag = Tag(10);
@@ -120,6 +120,40 @@ pub enum Anomaly {
     CountMismatch { declared: usize, found: usize },
 }
 
+/// A well-formed repeating group: its instances, in wire order.
+#[derive(Clone, Debug)]
+pub struct Group<'a> {
+    instances: Vec<Scope<'a>>,
+}
+
+impl<'a> Group<'a> {
+    /// The number of instances.
+    pub fn len(&self) -> usize {
+        self.instances.len()
+    }
+
+    /// Whether the group has no instances, as with a count of zero.
+    pub fn is_empty(&self) -> bool {
+        self.instances.is_empty()
+    }
+
+    /// The instances, in wire order.
+    pub fn iter(&self) -> impl Iterator<Item = Scope<'a>> {
+        self.instances.iter().copied()
+    }
+}
+
+impl RawMessage {
+    /// The group `table` describes, read from the whole frame.
+    pub fn get_group(
+        &self,
+        table: &GroupTable<'_>,
+        known: &KnownTags<'_>,
+    ) -> Result<Option<Group<'_>>, InvalidValue> {
+        self.scope().get_group(table, known)
+    }
+}
+
 impl<'a> Scope<'a> {
     /// Walks the group `table` describes, or `None` if its count field is
     /// not in this scope.
@@ -131,6 +165,27 @@ impl<'a> Scope<'a> {
     pub fn walk_group(&self, table: &GroupTable<'_>, known: &KnownTags<'_>) -> Option<Walk<'a>> {
         let (count_slot, _) = self.find(table.count_tag, self.start())?;
         Some(walk(self, count_slot, table, known).0)
+    }
+
+    /// The group `table` describes: `Ok(None)` if its count field is
+    /// absent, and an error on the count tag if the group is malformed in
+    /// any way. A count of zero is an empty group.
+    pub fn get_group(
+        &self,
+        table: &GroupTable<'_>,
+        known: &KnownTags<'_>,
+    ) -> Result<Option<Group<'a>>, InvalidValue> {
+        let Some(walk) = self.walk_group(table, known) else {
+            return Ok(None);
+        };
+        if !walk.anomalies.is_empty() {
+            return Err(InvalidValue {
+                tag: table.count_tag,
+            });
+        }
+        Ok(Some(Group {
+            instances: walk.instances,
+        }))
     }
 }
 
@@ -438,6 +493,68 @@ mod tests {
             };
             assert_eq!(text(first, 452), Some("1"));
             assert_eq!((text(second, 452), text(second, 448)), (Some("3"), None));
+        }
+    }
+
+    mod contract {
+        use super::*;
+
+        #[test]
+        fn an_absent_group_is_none() {
+            let message = message("35=D|11=X|54=1|");
+            assert!(matches!(message.get_group(&NO_PARTY_IDS, &KNOWN), Ok(None)));
+        }
+
+        #[test]
+        fn a_well_formed_group_reads_its_instances() {
+            let message = message("35=D|453=2|448=AL|452=1|448=BOB|54=1|");
+            let group = message.get_group(&NO_PARTY_IDS, &KNOWN).unwrap().unwrap();
+
+            assert_eq!(group.len(), 2);
+            let parties: Vec<(Option<&str>, Option<&str>)> = group
+                .iter()
+                .map(|instance| (text(&instance, 448), text(&instance, 452)))
+                .collect();
+            assert_eq!(parties, [(Some("AL"), Some("1")), (Some("BOB"), None)]);
+        }
+
+        #[test]
+        fn a_zero_count_is_an_empty_group() {
+            let message = message("35=D|453=0|54=1|");
+            let group = message.get_group(&NO_PARTY_IDS, &KNOWN).unwrap().unwrap();
+
+            assert!(group.is_empty());
+        }
+
+        #[test]
+        fn any_anomaly_is_an_error_on_the_count_tag() {
+            let malformed = [
+                "35=D|453=x|448=AL|54=1|",
+                "35=D|453=3|448=AL|448=BOB|54=1|",
+                "35=D|453=1|452=1|448=AL|54=1|",
+            ];
+            for body in malformed {
+                let message = message(body);
+                assert_eq!(
+                    message.get_group(&NO_PARTY_IDS, &KNOWN).unwrap_err(),
+                    InvalidValue { tag: Tag(453) },
+                    "{body}"
+                );
+            }
+        }
+
+        #[test]
+        fn a_nested_group_is_read_from_its_instance() {
+            let message = message("35=D|453=1|448=AL|802=2|523=S1|523=S2|54=1|");
+            let group = message.get_group(&NO_PARTY_IDS, &KNOWN).unwrap().unwrap();
+            let instance = group.iter().next().unwrap();
+            let nested = instance
+                .get_group(&NO_PARTY_SUB_IDS, &KNOWN)
+                .unwrap()
+                .unwrap();
+
+            let sub_ids: Vec<Option<&str>> = nested.iter().map(|sub| text(&sub, 523)).collect();
+            assert_eq!(sub_ids, [Some("S1"), Some("S2")]);
         }
     }
 
