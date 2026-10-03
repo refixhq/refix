@@ -1,5 +1,7 @@
 use crate::message::{Scope, Slot};
 use crate::{InvalidValue, RawMessage, Tag};
+use std::fmt;
+use std::marker::PhantomData;
 
 /// CheckSum(10) closes every frame, so it always ends a group.
 const CHECK_SUM: Tag = Tag(10);
@@ -64,8 +66,7 @@ impl<'a> GroupTable<'a> {
     }
 }
 
-/// Every tag a message defines, at any depth, so the walker can tell a tag
-/// that belongs elsewhere from one it does not know.
+/// Every tag the walked scope (a message or a group instance) can contain, at any depth.
 #[derive(Clone, Copy, Debug)]
 pub struct KnownTags<'a>(&'a [Tag]);
 
@@ -142,6 +143,106 @@ impl<'a> Group<'a> {
         self.instances.iter().copied()
     }
 }
+
+/// A group's instances.
+///
+/// This is a type wrapping the instance's [`Scope`],
+/// such as a generated instance type.
+///
+/// An absent group has no instances, the same as a count of zero.
+pub struct Instances<'a, T> {
+    instances: Vec<Scope<'a>>,
+    instance: PhantomData<fn() -> T>,
+}
+
+impl<T> Instances<'_, T> {
+    /// The number of instances.
+    pub fn len(&self) -> usize {
+        self.instances.len()
+    }
+
+    /// Whether there are no instances.
+    pub fn is_empty(&self) -> bool {
+        self.instances.is_empty()
+    }
+}
+
+impl<'a, T: From<Scope<'a>>> Instances<'a, T> {
+    /// The instance at `index`, in wire order.
+    pub fn get(&self, index: usize) -> Option<T> {
+        self.instances.get(index).copied().map(T::from)
+    }
+
+    /// The instances, in wire order.
+    pub fn iter(&self) -> Iter<'_, 'a, T> {
+        Iter {
+            scopes: self.instances.iter(),
+            instance: PhantomData,
+        }
+    }
+}
+
+impl<'a, T> From<Option<Group<'a>>> for Instances<'a, T> {
+    fn from(group: Option<Group<'a>>) -> Self {
+        Self {
+            instances: group.map(|group| group.instances).unwrap_or_default(),
+            instance: PhantomData,
+        }
+    }
+}
+
+impl<T> Default for Instances<'_, T> {
+    fn default() -> Self {
+        Self {
+            instances: Vec::new(),
+            instance: PhantomData,
+        }
+    }
+}
+
+impl<T> Clone for Instances<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            instances: self.instances.clone(),
+            instance: PhantomData,
+        }
+    }
+}
+
+impl<T> fmt::Debug for Instances<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(&self.instances).finish()
+    }
+}
+
+impl<'i, 'a, T: From<Scope<'a>>> IntoIterator for &'i Instances<'a, T> {
+    type Item = T;
+    type IntoIter = Iter<'i, 'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+/// An iterator over a group's instances, each read through `T`.
+pub struct Iter<'i, 'a, T> {
+    scopes: std::slice::Iter<'i, Scope<'a>>,
+    instance: PhantomData<fn() -> T>,
+}
+
+impl<'a, T: From<Scope<'a>>> Iterator for Iter<'_, 'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        self.scopes.next().copied().map(T::from)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.scopes.size_hint()
+    }
+}
+
+impl<'a, T: From<Scope<'a>>> ExactSizeIterator for Iter<'_, 'a, T> {}
 
 impl RawMessage {
     /// The group `table` describes, read from the whole frame.
@@ -555,6 +656,99 @@ mod tests {
 
             let sub_ids: Vec<Option<&str>> = nested.iter().map(|sub| text(&sub, 523)).collect();
             assert_eq!(sub_ids, [Some("S1"), Some("S2")]);
+        }
+    }
+
+    mod instances {
+        use super::*;
+
+        /// An instance type as codegen would write it.
+        #[derive(Clone, Copy, Debug)]
+        struct Party<'a>(Scope<'a>);
+
+        impl<'a> From<Scope<'a>> for Party<'a> {
+            fn from(scope: Scope<'a>) -> Self {
+                Self(scope)
+            }
+        }
+
+        impl<'a> Party<'a> {
+            fn party_id(&self) -> Option<&'a str> {
+                text(&self.0, 448)
+            }
+        }
+
+        fn parties(message: &RawMessage) -> Instances<'_, Party<'_>> {
+            Instances::from(message.get_group(&NO_PARTY_IDS, &KNOWN).unwrap())
+        }
+
+        #[test]
+        fn reads_each_instance_through_its_type() {
+            let message = message("35=D|453=2|448=AL|448=BOB|54=1|");
+            let parties = parties(&message);
+
+            assert_eq!(parties.len(), 2);
+            let ids: Vec<Option<&str>> = parties.iter().map(|party| party.party_id()).collect();
+            assert_eq!(ids, [Some("AL"), Some("BOB")]);
+        }
+
+        #[test]
+        fn an_absent_group_has_no_instances() {
+            let message = message("35=D|11=X|54=1|");
+            let parties = parties(&message);
+
+            assert!(parties.is_empty());
+            assert_eq!(parties.iter().count(), 0);
+        }
+
+        #[test]
+        fn get_reads_one_instance_by_position() {
+            let message = message("35=D|453=2|448=AL|448=BOB|54=1|");
+            let parties = parties(&message);
+
+            assert_eq!(parties.get(1).unwrap().party_id(), Some("BOB"));
+            assert!(parties.get(2).is_none());
+        }
+
+        #[test]
+        fn iterates_by_reference() {
+            let message = message("35=D|453=2|448=AL|448=BOB|54=1|");
+            let parties = parties(&message);
+
+            let mut ids = Vec::new();
+            for party in &parties {
+                ids.push(party.party_id());
+            }
+            assert_eq!(ids, [Some("AL"), Some("BOB")]);
+        }
+
+        #[test]
+        fn the_iterator_knows_its_length() {
+            let message = message("35=D|453=2|448=AL|448=BOB|54=1|");
+            let parties = parties(&message);
+
+            let mut iter = parties.iter();
+            assert_eq!(iter.len(), 2);
+            iter.next();
+            assert_eq!(iter.len(), 1);
+        }
+
+        #[test]
+        fn default_is_empty() {
+            let parties: Instances<'_, Party<'_>> = Instances::default();
+            assert!(parties.is_empty());
+        }
+
+        #[test]
+        fn a_nested_group_is_read_through_an_instance_scope() {
+            let message = message("35=D|453=1|448=AL|802=2|523=S1|523=S2|54=1|");
+            let parties = parties(&message);
+            let party = parties.get(0).unwrap();
+
+            let sub_ids: Instances<'_, Scope<'_>> =
+                Instances::from(party.0.get_group(&NO_PARTY_SUB_IDS, &KNOWN).unwrap());
+            let values: Vec<Option<&str>> = sub_ids.iter().map(|sub| text(&sub, 523)).collect();
+            assert_eq!(values, [Some("S1"), Some("S2")]);
         }
     }
 
