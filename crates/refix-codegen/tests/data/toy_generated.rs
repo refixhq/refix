@@ -20,13 +20,76 @@ impl<'a> OrdType<'a> {
     }
 }
 
+pub mod parties {
+    use super::*;
+
+    pub const TABLE: GroupTable<'static> = GroupTable::new(
+        Tag(453),
+        Tag(448),
+        &[Tag(448), Tag(802)],
+        &[ptys_sub_grp::TABLE],
+    );
+
+    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(448), Tag(523), Tag(802)]);
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Instance<'a>(refix_message::Scope<'a>);
+
+    impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {
+        fn from(scope: refix_message::Scope<'a>) -> Self {
+            Self(scope)
+        }
+    }
+
+    impl<'a> Instance<'a> {
+        pub fn raw(&self) -> refix_message::Scope<'a> {
+            self.0
+        }
+
+        pub fn party_id(&self) -> Result<Option<&'a str>, InvalidValue> {
+            self.0.get_str(Tag(448))
+        }
+
+        pub fn ptys_sub_grp(&self) -> Result<Instances<'a, ptys_sub_grp::Instance<'a>>, InvalidValue> {
+            self.0.get_group(&ptys_sub_grp::TABLE, &KNOWN_TAGS).map(Instances::from)
+        }
+    }
+}
+
+pub mod ptys_sub_grp {
+    use super::*;
+
+    pub const TABLE: GroupTable<'static> = GroupTable::new(Tag(802), Tag(523), &[Tag(523)], &[]);
+
+    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(523)]);
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Instance<'a>(refix_message::Scope<'a>);
+
+    impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {
+        fn from(scope: refix_message::Scope<'a>) -> Self {
+            Self(scope)
+        }
+    }
+
+    impl<'a> Instance<'a> {
+        pub fn raw(&self) -> refix_message::Scope<'a> {
+            self.0
+        }
+
+        pub fn party_sub_id(&self) -> Result<Option<&'a str>, InvalidValue> {
+            self.0.get_str(Tag(523))
+        }
+    }
+}
+
 pub struct NewOrderSingle(RawMessage);
 
 impl NewOrderSingle {
     pub const MSG_TYPE: &[u8] = b"D";
 
     pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
-        Tag(11), Tag(38), Tag(40), Tag(44), Tag(448), Tag(453),
+        Tag(11), Tag(38), Tag(40), Tag(44), Tag(448), Tag(453), Tag(523), Tag(802),
     ]);
 
     pub fn from_raw(raw: RawMessage) -> Self {
@@ -41,6 +104,10 @@ impl NewOrderSingle {
         self.0.get_str(Tag(11))
     }
 
+    pub fn parties(&self) -> Result<Instances<'_, parties::Instance<'_>>, InvalidValue> {
+        self.0.get_group(&parties::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
+    }
+
     pub fn order_qty(&self) -> Result<Option<i64>, InvalidValue> {
         self.0.get_int(Tag(38))
     }
@@ -52,24 +119,40 @@ impl NewOrderSingle {
     pub fn ord_type(&self) -> Option<OrdType<'_>> {
         self.0.get(Tag(40)).map(OrdType::from_bytes)
     }
+}
 
-    pub fn party_ids(&self) -> Result<Instances<'_, new_order_single::party_ids::Instance<'_>>, InvalidValue> {
-        self.0.get_group(&new_order_single::party_ids::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
+pub struct Logon(RawMessage);
+
+impl Logon {
+    pub const MSG_TYPE: &[u8] = b"A";
+
+    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(372), Tag(384)]);
+
+    pub fn from_raw(raw: RawMessage) -> Self {
+        Self(raw)
+    }
+
+    pub fn raw(&self) -> &RawMessage {
+        &self.0
+    }
+
+    pub fn msg_types(&self) -> Result<Instances<'_, logon::msg_types::Instance<'_>>, InvalidValue> {
+        self.0.get_group(&logon::msg_types::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
     }
 }
 
-pub mod new_order_single {
-    pub mod party_ids {
+pub mod logon {
+    pub mod msg_types {
         use super::super::*;
 
         pub const TABLE: GroupTable<'static> = GroupTable::new(
-            Tag(453),
-            Tag(448),
-            &[Tag(448)],
+            Tag(384),
+            Tag(372),
+            &[Tag(372)],
             &[],
         );
 
-        pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(448)]);
+        pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(372)]);
 
         #[derive(Clone, Copy, Debug)]
         pub struct Instance<'a>(refix_message::Scope<'a>);
@@ -85,8 +168,8 @@ pub mod new_order_single {
                 self.0
             }
 
-            pub fn party_id(&self) -> Result<Option<&'a str>, InvalidValue> {
-                self.0.get_str(Tag(448))
+            pub fn ref_msg_type(&self) -> Result<Option<&'a str>, InvalidValue> {
+                self.0.get_str(Tag(372))
             }
         }
     }

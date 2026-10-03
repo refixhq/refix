@@ -6,10 +6,12 @@ use refix_codegen::generate;
 use refix_dictionary::quickfix;
 use refix_message::{InvalidValue, Tag, Tokenizer};
 
+// Not every generated item is read here, e.g. a leaf group's KNOWN_TAGS.
+#[allow(dead_code)]
 #[path = "data/toy_generated.rs"]
 mod toy;
 
-use toy::{NewOrderSingle, OrdType};
+use toy::{Logon, NewOrderSingle, OrdType};
 
 const TOY_XML: &str = include_str!("data/toy.xml");
 const TOY_GENERATED: &str = include_str!("data/toy_generated.rs");
@@ -88,4 +90,68 @@ fn a_malformed_value_reads_as_an_error() {
     let order = NewOrderSingle::from_raw(raw);
 
     assert_eq!(order.order_qty(), Err(InvalidValue { tag: Tag(38) }));
+}
+
+#[test]
+fn typed_reads_over_groups() {
+    let raw = Tokenizer::default()
+        .tokenize(frame(
+            "35=D|11=ORDER-1|453=2|448=AL|802=1|523=DESK-1|448=BOB|38=200|",
+        ))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+    let parties = order.parties().unwrap();
+
+    let ids: Vec<Option<&str>> = parties
+        .iter()
+        .map(|party| party.party_id().unwrap())
+        .collect();
+    assert_eq!(ids, [Some("AL"), Some("BOB")]);
+
+    let sub_ids = parties.get(0).unwrap().ptys_sub_grp().unwrap();
+    assert_eq!(sub_ids.len(), 1);
+    assert_eq!(sub_ids.get(0).unwrap().party_sub_id(), Ok(Some("DESK-1")));
+    assert!(parties.get(1).unwrap().ptys_sub_grp().unwrap().is_empty());
+
+    assert_eq!(order.order_qty(), Ok(Some(200)));
+}
+
+#[test]
+fn an_absent_group_reads_as_empty() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|11=ORDER-1|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert!(order.parties().unwrap().is_empty());
+}
+
+#[test]
+fn a_malformed_group_reads_as_an_error() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|453=2|448=AL|38=200|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(order.parties().unwrap_err(), InvalidValue { tag: Tag(453) });
+}
+
+#[test]
+fn reads_a_group_declared_in_its_message() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=A|384=2|372=D|372=8|"))
+        .unwrap();
+
+    let logon = Logon::from_raw(raw);
+
+    let msg_types: Vec<Option<&str>> = logon
+        .msg_types()
+        .unwrap()
+        .iter()
+        .map(|msg_type| msg_type.ref_msg_type().unwrap())
+        .collect();
+    assert_eq!(msg_types, [Some("D"), Some("8")]);
 }
