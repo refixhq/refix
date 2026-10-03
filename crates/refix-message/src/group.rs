@@ -1,5 +1,7 @@
 use crate::message::{Scope, Slot};
 use crate::{InvalidValue, RawMessage, Tag};
+use std::fmt;
+use std::marker::PhantomData;
 
 /// CheckSum(10) closes every frame, so it always ends a group.
 const CHECK_SUM: Tag = Tag(10);
@@ -64,8 +66,10 @@ impl<'a> GroupTable<'a> {
     }
 }
 
-/// Every tag a message defines, at any depth, so the walker can tell a tag
-/// that belongs elsewhere from one it does not know.
+/// Every tag the walked scope can contain, at any depth: a message's tags
+/// for its groups, or a group's instance tags for the groups nested in it.
+/// The walker uses them to tell a tag that belongs elsewhere from one it
+/// does not know.
 #[derive(Clone, Copy, Debug)]
 pub struct KnownTags<'a>(&'a [Tag]);
 
@@ -142,6 +146,106 @@ impl<'a> Group<'a> {
         self.instances.iter().copied()
     }
 }
+
+/// A group's instances.
+///
+/// This is a type wrapping the instance's [`Scope`],
+/// such as a generated instance type.
+///
+/// An absent group has no instances, the same as a count of zero.
+pub struct Instances<'a, T> {
+    instances: Vec<Scope<'a>>,
+    instance: PhantomData<fn() -> T>,
+}
+
+impl<T> Instances<'_, T> {
+    /// The number of instances.
+    pub fn len(&self) -> usize {
+        self.instances.len()
+    }
+
+    /// Whether there are no instances.
+    pub fn is_empty(&self) -> bool {
+        self.instances.is_empty()
+    }
+}
+
+impl<'a, T: From<Scope<'a>>> Instances<'a, T> {
+    /// The instance at `index`, in wire order.
+    pub fn get(&self, index: usize) -> Option<T> {
+        self.instances.get(index).copied().map(T::from)
+    }
+
+    /// The instances, in wire order.
+    pub fn iter(&self) -> Iter<'_, 'a, T> {
+        Iter {
+            scopes: self.instances.iter(),
+            instance: PhantomData,
+        }
+    }
+}
+
+impl<'a, T> From<Option<Group<'a>>> for Instances<'a, T> {
+    fn from(group: Option<Group<'a>>) -> Self {
+        Self {
+            instances: group.map(|group| group.instances).unwrap_or_default(),
+            instance: PhantomData,
+        }
+    }
+}
+
+impl<T> Default for Instances<'_, T> {
+    fn default() -> Self {
+        Self {
+            instances: Vec::new(),
+            instance: PhantomData,
+        }
+    }
+}
+
+impl<T> Clone for Instances<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            instances: self.instances.clone(),
+            instance: PhantomData,
+        }
+    }
+}
+
+impl<T> fmt::Debug for Instances<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(&self.instances).finish()
+    }
+}
+
+impl<'i, 'a, T: From<Scope<'a>>> IntoIterator for &'i Instances<'a, T> {
+    type Item = T;
+    type IntoIter = Iter<'i, 'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+/// An iterator over a group's instances, each read through `T`.
+pub struct Iter<'i, 'a, T> {
+    scopes: std::slice::Iter<'i, Scope<'a>>,
+    instance: PhantomData<fn() -> T>,
+}
+
+impl<'a, T: From<Scope<'a>>> Iterator for Iter<'_, 'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        self.scopes.next().copied().map(T::from)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.scopes.size_hint()
+    }
+}
+
+impl<'a, T: From<Scope<'a>>> ExactSizeIterator for Iter<'_, 'a, T> {}
 
 impl RawMessage {
     /// The group `table` describes, read from the whole frame.
