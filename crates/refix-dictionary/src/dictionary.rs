@@ -6,7 +6,7 @@
 mod error;
 mod resolver;
 
-use crate::{Category, Field, Spec, Version, spec};
+use crate::{Category, Field, MemberContext, Spec, Version, spec};
 pub use error::Error;
 use std::fmt;
 use std::ops::Index;
@@ -39,6 +39,10 @@ struct ResolvedGroup {
     count_field_index: FieldIndex,
     delimiter_index: FieldIndex,
     is_required: bool,
+    declared_in: MemberContext,
+    /// The component this group makes up, when it is that component's only
+    /// member.
+    component: Option<String>,
     members: Vec<ResolvedMember>,
 }
 
@@ -159,6 +163,18 @@ impl<'a> Group<'a> {
     /// combined across every component on the path to it.
     pub fn is_required(&self) -> bool {
         self.resolved.is_required
+    }
+
+    /// Where the group's `<group>` element sits: a message, a component,
+    /// or another group's instance.
+    pub fn declared_in(&self) -> &'a MemberContext {
+        &self.resolved.declared_in
+    }
+
+    /// The component this group makes up, when it is that component's only
+    /// member.
+    pub fn component(&self) -> Option<&'a str> {
+        self.resolved.component.as_deref()
     }
 
     /// The members of each instance in source order, with requiredness
