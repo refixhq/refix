@@ -773,6 +773,144 @@ mod tests {
         }
 
         #[test]
+        fn an_inline_group_is_declared_in_its_message() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(453, false, vec![field_ref(448, false)])],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 0);
+            assert_eq!(group.declared_in(), &nos_context());
+            assert_eq!(group.component(), None);
+        }
+
+        #[test]
+        fn a_group_making_up_a_component_takes_its_name() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![component(
+                    "Parties",
+                    vec![group(453, false, vec![field_ref(448, false)])],
+                )],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![component_ref("Parties", false)],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 0);
+            assert_eq!(
+                group.declared_in(),
+                &MemberContext::Component("Parties".to_owned())
+            );
+            assert_eq!(group.component(), Some("Parties"));
+        }
+
+        #[test]
+        fn a_group_sharing_its_component_does_not_take_its_name() {
+            let spec = spec_of(
+                vec![
+                    field("Symbol", 55),
+                    field("NoSecurityAltID", 454),
+                    field("SecurityAltID", 455),
+                ],
+                vec![component(
+                    "Instrument",
+                    vec![
+                        field_ref(55, false),
+                        group(454, false, vec![field_ref(455, false)]),
+                    ],
+                )],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![component_ref("Instrument", true)],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 1);
+            assert_eq!(
+                group.declared_in(),
+                &MemberContext::Component("Instrument".to_owned())
+            );
+            assert_eq!(group.component(), None);
+        }
+
+        #[test]
+        fn a_nested_group_is_declared_in_its_own_component() {
+            let spec = spec_of(
+                vec![
+                    field("NoPartyIDs", 453),
+                    field("PartyID", 448),
+                    field("NoPartySubIDs", 802),
+                    field("PartySubID", 523),
+                ],
+                vec![
+                    component(
+                        "PtysSubGrp",
+                        vec![group(802, false, vec![field_ref(523, false)])],
+                    ),
+                    component(
+                        "Parties",
+                        vec![group(
+                            453,
+                            false,
+                            vec![field_ref(448, false), component_ref("PtysSubGrp", false)],
+                        )],
+                    ),
+                ],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![component_ref("Parties", false)],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let parties = group_at(dictionary.messages().next().unwrap(), 0);
+            let Some(Member::Group(sub_ids)) = parties.members().nth(1) else {
+                panic!("expected a nested group");
+            };
+            assert_eq!(
+                sub_ids.declared_in(),
+                &MemberContext::Component("PtysSubGrp".to_owned())
+            );
+            assert_eq!(sub_ids.component(), Some("PtysSubGrp"));
+        }
+
+        #[test]
+        fn a_component_wrapping_a_component_does_not_claim_its_group() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![
+                    component(
+                        "Inner",
+                        vec![group(453, false, vec![field_ref(448, false)])],
+                    ),
+                    component("Outer", vec![component_ref("Inner", false)]),
+                ],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![component_ref("Outer", false)],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 0);
+            assert_eq!(group.component(), Some("Inner"));
+        }
+
+        #[test]
         fn an_empty_group_is_an_error() {
             let spec = spec_of(
                 parties_fields(),
