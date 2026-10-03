@@ -3,8 +3,8 @@
 
 use refix_dictionary::quickfix::{self, Warning};
 use refix_dictionary::{
-    Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Member, Message,
-    Protocol, Tag, Version, dictionary,
+    Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Member, MemberContext,
+    Message, Protocol, Tag, Version, dictionary,
 };
 
 const FIX44: &str = include_str!("data/quickfix/FIX44.xml");
@@ -115,6 +115,7 @@ fn parses_the_full_fix44_dictionary() {
         .unwrap();
     assert!(!parties.is_required());
     assert_eq!(parties.delimiter().tag, Tag(448));
+    assert_eq!(parties.component(), Some("Parties"));
     let instance: Vec<(Tag, bool)> = parties
         .members()
         .map(|member| match member {
@@ -131,6 +132,26 @@ fn parses_the_full_fix44_dictionary() {
             (Tag(802), false)
         ]
     );
+
+    // Logon declares its one group inline, the only FIX44 group without a
+    // component of its own.
+    let msg_types = parsed
+        .dictionary
+        .messages()
+        .find(|message| message.name() == "Logon")
+        .unwrap()
+        .members()
+        .find_map(|member| match member {
+            dictionary::Member::Group(group) => Some(group),
+            dictionary::Member::Field { .. } => None,
+        })
+        .unwrap();
+    assert_eq!(msg_types.count_field().name, "NoMsgTypes");
+    assert_eq!(
+        msg_types.declared_in(),
+        &MemberContext::Message("Logon".to_owned())
+    );
+    assert_eq!(msg_types.component(), None);
 
     // Every message-level group parses and resolves.
     let groups: usize = parsed

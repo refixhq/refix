@@ -70,8 +70,14 @@ impl<'a> Resolver<'a> {
 
         let context = MemberContext::Component(component.name.clone());
         self.stack.push(index);
-        let members = self.resolve_members(&component.members, &context, false)?;
+        let mut members = self.resolve_members(&component.members, &context, false)?;
         self.stack.pop();
+
+        if let [spec::Member::Group(_)] = component.members.as_slice()
+            && let [ResolvedMember::Group(group)] = members.as_mut_slice()
+        {
+            group.component = Some(component.name.clone());
+        }
 
         self.expansions[index.0] = Some(members);
 
@@ -150,6 +156,8 @@ impl<'a> Resolver<'a> {
             count_field_index,
             delimiter_index,
             is_required: group.is_required,
+            declared_in: context.clone(),
+            component: None,
             members,
         })
     }

@@ -6,7 +6,7 @@
 mod error;
 mod resolver;
 
-use crate::{Category, Field, Spec, Version, spec};
+use crate::{Category, Field, MemberContext, Spec, Version, spec};
 pub use error::Error;
 use std::fmt;
 use std::ops::Index;
@@ -39,6 +39,10 @@ struct ResolvedGroup {
     count_field_index: FieldIndex,
     delimiter_index: FieldIndex,
     is_required: bool,
+    declared_in: MemberContext,
+    /// The component this group makes up, when it is that component's only
+    /// member.
+    component: Option<String>,
     members: Vec<ResolvedMember>,
 }
 
@@ -159,6 +163,18 @@ impl<'a> Group<'a> {
     /// combined across every component on the path to it.
     pub fn is_required(&self) -> bool {
         self.resolved.is_required
+    }
+
+    /// Where the group's `<group>` element sits: a message, a component,
+    /// or another group's instance.
+    pub fn declared_in(&self) -> &'a MemberContext {
+        &self.resolved.declared_in
+    }
+
+    /// The component this group makes up, when it is that component's only
+    /// member.
+    pub fn component(&self) -> Option<&'a str> {
+        self.resolved.component.as_deref()
     }
 
     /// The members of each instance in source order, with requiredness
@@ -754,6 +770,144 @@ mod tests {
             };
             assert!(inner.is_required());
             assert_eq!(field_members(inner.members()), vec![(Tag(523), true)]);
+        }
+
+        #[test]
+        fn an_inline_group_is_declared_in_its_message() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(453, false, vec![field_ref(448, false)])],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 0);
+            assert_eq!(group.declared_in(), &nos_context());
+            assert_eq!(group.component(), None);
+        }
+
+        #[test]
+        fn a_group_making_up_a_component_takes_its_name() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![component(
+                    "Parties",
+                    vec![group(453, false, vec![field_ref(448, false)])],
+                )],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![component_ref("Parties", false)],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 0);
+            assert_eq!(
+                group.declared_in(),
+                &MemberContext::Component("Parties".to_owned())
+            );
+            assert_eq!(group.component(), Some("Parties"));
+        }
+
+        #[test]
+        fn a_group_sharing_its_component_does_not_take_its_name() {
+            let spec = spec_of(
+                vec![
+                    field("Symbol", 55),
+                    field("NoSecurityAltID", 454),
+                    field("SecurityAltID", 455),
+                ],
+                vec![component(
+                    "Instrument",
+                    vec![
+                        field_ref(55, false),
+                        group(454, false, vec![field_ref(455, false)]),
+                    ],
+                )],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![component_ref("Instrument", true)],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 1);
+            assert_eq!(
+                group.declared_in(),
+                &MemberContext::Component("Instrument".to_owned())
+            );
+            assert_eq!(group.component(), None);
+        }
+
+        #[test]
+        fn a_nested_group_is_declared_in_its_own_component() {
+            let spec = spec_of(
+                vec![
+                    field("NoPartyIDs", 453),
+                    field("PartyID", 448),
+                    field("NoPartySubIDs", 802),
+                    field("PartySubID", 523),
+                ],
+                vec![
+                    component(
+                        "PtysSubGrp",
+                        vec![group(802, false, vec![field_ref(523, false)])],
+                    ),
+                    component(
+                        "Parties",
+                        vec![group(
+                            453,
+                            false,
+                            vec![field_ref(448, false), component_ref("PtysSubGrp", false)],
+                        )],
+                    ),
+                ],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![component_ref("Parties", false)],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let parties = group_at(dictionary.messages().next().unwrap(), 0);
+            let Some(Member::Group(sub_ids)) = parties.members().nth(1) else {
+                panic!("expected a nested group");
+            };
+            assert_eq!(
+                sub_ids.declared_in(),
+                &MemberContext::Component("PtysSubGrp".to_owned())
+            );
+            assert_eq!(sub_ids.component(), Some("PtysSubGrp"));
+        }
+
+        #[test]
+        fn a_component_wrapping_a_component_does_not_claim_its_group() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![
+                    component(
+                        "Inner",
+                        vec![group(453, false, vec![field_ref(448, false)])],
+                    ),
+                    component("Outer", vec![component_ref("Inner", false)]),
+                ],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![component_ref("Outer", false)],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 0);
+            assert_eq!(group.component(), Some("Inner"));
         }
 
         #[test]
