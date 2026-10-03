@@ -41,6 +41,13 @@ pub(super) fn variant_name(field: &Field, value: &EnumValue) -> Result<String, E
     Ok(name)
 }
 
+/// The name of the module holding a message's own groups.
+pub(super) fn message_module_name(message: &str) -> Result<String, Error> {
+    identifier(snake_case(message)).ok_or_else(|| Error::UnrepresentableMessageName {
+        message: message.to_owned(),
+    })
+}
+
 /// Strips a `No` that starts a word: `NoPartyIDs`, but not `Notional`.
 fn without_no_prefix(name: &str) -> Option<&str> {
     name.strip_prefix("No")
@@ -70,7 +77,7 @@ const RESERVED_WORDS: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::{group_name, method_name, variant_name};
+    use super::{group_name, message_module_name, method_name, variant_name};
     use crate::emitter::Error;
     use refix_dictionary::{
         Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Group, Member,
@@ -219,6 +226,22 @@ mod tests {
             group_named(None, "NoSelf").unwrap_err(),
             Error::UnrepresentableGroupName {
                 context: MemberContext::Message("NewOrderSingle".to_owned()).group("NoSelf"),
+            }
+        );
+    }
+
+    #[test]
+    fn message_module_names_are_snake_case() {
+        let name = message_module_name("NewOrderSingle");
+        assert_eq!(name.unwrap(), "new_order_single");
+    }
+
+    #[test]
+    fn an_unescapable_message_module_name_is_an_error() {
+        assert_eq!(
+            message_module_name("Self").unwrap_err(),
+            Error::UnrepresentableMessageName {
+                message: "Self".to_owned(),
             }
         );
     }

@@ -1,28 +1,31 @@
 use refix_dictionary::{DataType, Field, MemberContext, dictionary};
 
-use super::{Error, Warning, naming::method_name};
+use super::Error;
+use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags, known_tags};
+use super::layout::{MAX_WIDTH, indent};
+use super::naming::{message_module_name, method_name};
 
-pub(super) fn emit_message(
-    message: dictionary::Message<'_>,
-    warnings: &mut Vec<Warning>,
-) -> Result<String, Error> {
-    let message_struct = emit_message_struct(message);
-    let message_impl = emit_message_impl(message, warnings)?;
-    Ok(format!("{message_struct}\n{message_impl}"))
+pub(super) fn emit_message(message: dictionary::Message<'_>) -> Result<String, Error> {
+    let mut items = vec![emit_message_struct(message), emit_message_impl(message)?];
+    if let Some(module) = emit_message_module(message)? {
+        items.push(module);
+    }
+    Ok(items.join("\n"))
 }
 
 fn emit_message_struct(message: dictionary::Message<'_>) -> String {
     format!("pub struct {}(RawMessage);\n", message.name())
 }
 
-fn emit_message_impl(
-    message: dictionary::Message<'_>,
-    warnings: &mut Vec<Warning>,
-) -> Result<String, Error> {
+fn emit_message_impl(message: dictionary::Message<'_>) -> Result<String, Error> {
     let mut members = vec![
         format!(
             "    pub const MSG_TYPE: &[u8] = b\"{}\";\n",
             message.msg_type()
+        ),
+        indent(
+            &emit_known_tags(&known_tags(message.members()), MAX_WIDTH - 4),
+            1,
         ),
         "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),
         "    pub fn raw(&self) -> &RawMessage {\n        &self.0\n    }\n".to_owned(),
@@ -32,12 +35,11 @@ fn emit_message_impl(
             dictionary::Member::Field { field, .. } => {
                 members.push(emit_accessor(field, Lifetime::Receiver)?)
             }
-            dictionary::Member::Group(group) => {
-                let context = MemberContext::Message(message.name().to_owned());
-                warnings.push(Warning::UnsupportedGroup {
-                    context: context.group(&group.count_field().name),
-                });
-            }
+            dictionary::Member::Group(group) => members.push(emit_group_accessor(
+                group,
+                Lifetime::Receiver,
+                "Self::KNOWN_TAGS",
+            )?),
         }
     }
 
@@ -48,16 +50,40 @@ fn emit_message_impl(
     ))
 }
 
+/// The module holding the groups declared directly in a message, if it
+/// declares any.
+fn emit_message_module(message: dictionary::Message<'_>) -> Result<Option<String>, Error> {
+    let modules = message
+        .members()
+        .filter_map(|member| match member {
+            dictionary::Member::Group(group)
+                if matches!(group.declared_in(), MemberContext::Message(_)) =>
+            {
+                Some(emit_group_module(group))
+            }
+            _ => None,
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if modules.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "pub mod {} {{\n{}}}\n",
+        message_module_name(message.name())?,
+        indent(&modules.join("\n"), 1)
+    )))
+}
+
 /// The lifetime an accessor's borrowed results live for.
 #[derive(Clone, Copy)]
-enum Lifetime {
+pub(super) enum Lifetime {
     /// The receiver's, elided: a message owns its bytes.
     Receiver,
     /// The wrapped scope's `'a`: a group instance borrows its bytes.
     Scope,
 }
 
-fn emit_accessor(field: &Field, lifetime: Lifetime) -> Result<String, Error> {
+pub(super) fn emit_accessor(field: &Field, lifetime: Lifetime) -> Result<String, Error> {
     let name = method_name(field)?;
     let tag = field.tag;
     let (reference, type_lifetime) = match lifetime {
