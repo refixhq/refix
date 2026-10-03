@@ -11,20 +11,24 @@ pub enum Error {
     DuplicateComponent {
         component: String,
     },
-    UnknownField {
-        context: MemberContext,
+    DuplicateField {
         tag: Tag,
+        first: MemberContext,
+        second: MemberContext,
+    },
+    UnknownField {
+        tag: Tag,
+        context: MemberContext,
     },
     UnknownComponent {
-        context: MemberContext,
         component: String,
+        context: MemberContext,
     },
     CircularComponent {
         component: String,
     },
-    DuplicateField {
+    EmptyGroup {
         context: MemberContext,
-        tag: Tag,
     },
 }
 
@@ -37,6 +41,12 @@ impl fmt::Display for Error {
             Error::DuplicateComponent { component } => {
                 write!(f, "component '{component}' is defined more than once")
             }
+            Error::DuplicateField { tag, first, second } if first == second => {
+                write!(f, "{first} contains tag {tag} more than once")
+            }
+            Error::DuplicateField { tag, first, second } => {
+                write!(f, "tag {tag} appears in both {first} and {second}")
+            }
             Error::UnknownField { context, tag } => {
                 write!(f, "{context} references unknown tag {tag}")
             }
@@ -46,11 +56,46 @@ impl fmt::Display for Error {
             Error::CircularComponent { component } => {
                 write!(f, "component '{component}' is part of a reference cycle")
             }
-            Error::DuplicateField { context, tag } => {
-                write!(f, "{context} contains tag {tag} more than once")
+            Error::EmptyGroup { context } => {
+                write!(f, "{context} has no members")
             }
         }
     }
 }
 
 impl std::error::Error for Error {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_duplicate_in_one_place_reads_as_contained_twice() {
+        let context = MemberContext::Component("Top".to_owned());
+        let error = Error::DuplicateField {
+            tag: Tag(58),
+            first: context.clone(),
+            second: context,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "component 'Top' contains tag 58 more than once"
+        );
+    }
+
+    #[test]
+    fn a_duplicate_in_two_places_names_both() {
+        let message = MemberContext::Message("NewOrderSingle".to_owned());
+        let error = Error::DuplicateField {
+            tag: Tag(448),
+            first: message.clone(),
+            second: message.group("NoPartyIDs"),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "tag 448 appears in both message 'NewOrderSingle' and group 'NoPartyIDs' in message 'NewOrderSingle'"
+        );
+    }
+}

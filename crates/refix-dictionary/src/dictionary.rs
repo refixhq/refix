@@ -8,6 +8,7 @@ mod resolver;
 
 use crate::{Category, Field, Spec, Version, spec};
 pub use error::Error;
+use std::fmt;
 use std::ops::Index;
 
 /// A resolved data dictionary, produced by [`Spec::resolve`].
@@ -22,12 +23,23 @@ struct ResolvedMessage {
     members: Vec<ResolvedMember>,
 }
 
-/// A member as an index into the spec's field definitions, so the
+/// A member as indices into the spec's field definitions, so the
 /// dictionary stays free of self-references.
-#[derive(Clone, Copy, Debug)]
-struct ResolvedMember {
-    field_index: FieldIndex,
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ResolvedMember {
+    Field {
+        field_index: FieldIndex,
+        is_required: bool,
+    },
+    Group(ResolvedGroup),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ResolvedGroup {
+    count_field_index: FieldIndex,
+    delimiter_index: FieldIndex,
     is_required: bool,
+    members: Vec<ResolvedMember>,
 }
 
 /// A position in the spec's field definitions.
@@ -107,23 +119,84 @@ impl<'a> Message<'a> {
 
     /// The members in source order, components expanded in place.
     pub fn members(&self) -> impl Iterator<Item = Member<'a>> {
-        let fields = self.fields;
-        self.members.iter().map(move |member| Member {
-            field: &fields[member.field_index],
-            is_required: member.is_required,
-        })
+        members_of(self.members, self.fields)
     }
 }
 
-/// A field as used by one message, with its reference resolved.
+/// A member of a message or group entry, with its references resolved.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Member<'a> {
-    /// The referenced field definition.
-    pub field: &'a Field,
-    /// Whether the field is required, combined across every component
-    /// on the path to it: required only if required at every level.
-    pub is_required: bool,
+pub enum Member<'a> {
+    Field {
+        /// The referenced field definition.
+        field: &'a Field,
+        /// Whether the field is required, combined across every component
+        /// on the path to it: required only if required at every level.
+        is_required: bool,
+    },
+    Group(Group<'a>),
 }
+
+/// A read view of one repeating group, with its entry members resolved.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct Group<'a> {
+    resolved: &'a ResolvedGroup,
+    fields: &'a [Field],
+}
+
+impl<'a> Group<'a> {
+    /// The NumInGroup field, e.g. `NoPartyIDs(453)`.
+    pub fn count_field(&self) -> &'a Field {
+        &self.fields[self.resolved.count_field_index]
+    }
+
+    /// The field every entry starts with: the entry's first field after
+    /// expansion, or a nested group's count field.
+    pub fn delimiter(&self) -> &'a Field {
+        &self.fields[self.resolved.delimiter_index]
+    }
+
+    /// Whether the count field is required in the enclosing scope,
+    /// combined across every component on the path to it.
+    pub fn is_required(&self) -> bool {
+        self.resolved.is_required
+    }
+
+    /// The members of each entry in source order, with requiredness
+    /// relative to the entry.
+    pub fn members(&self) -> impl Iterator<Item = Member<'a>> {
+        members_of(&self.resolved.members, self.fields)
+    }
+}
+
+impl fmt::Debug for Group<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Group")
+            .field("count_field", &self.count_field().name)
+            .field("is_required", &self.is_required())
+            .field("members", &self.members().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
+fn members_of<'a>(
+    members: &'a [ResolvedMember],
+    fields: &'a [Field],
+) -> impl Iterator<Item = Member<'a>> {
+    members.iter().map(move |member| match member {
+        ResolvedMember::Field {
+            field_index,
+            is_required,
+        } => Member::Field {
+            field: &fields[*field_index],
+            is_required: *is_required,
+        },
+        ResolvedMember::Group(group) => Member::Group(Group {
+            resolved: group,
+            fields,
+        }),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,6 +216,16 @@ mod tests {
             tag: Tag(tag),
             is_required,
         })
+    }
+
+    /// Members as (tag, is_required), for member lists without groups.
+    fn field_members<'a>(members: impl Iterator<Item = Member<'a>>) -> Vec<(Tag, bool)> {
+        members
+            .map(|member| match member {
+                Member::Field { field, is_required } => (field.tag, is_required),
+                Member::Group(group) => panic!("unexpected group {}", group.count_field().name),
+            })
+            .collect()
     }
 
     fn component_ref(name: &str, is_required: bool) -> spec::Member {
@@ -207,11 +290,11 @@ mod tests {
         assert_eq!(
             messages[0].members().collect::<Vec<Member>>(),
             vec![
-                Member {
+                Member::Field {
                     field: &dictionary.fields()[0],
                     is_required: true,
                 },
-                Member {
+                Member::Field {
                     field: &dictionary.fields()[1],
                     is_required: false,
                 },
@@ -256,8 +339,15 @@ mod tests {
         let dictionary = spec.resolve().unwrap();
 
         let message = dictionary.messages().next().unwrap();
-        let tags: Vec<Tag> = message.members().map(|member| member.field.tag).collect();
-        assert_eq!(tags, vec![Tag(11), Tag(12), Tag(13), Tag(58)]);
+        assert_eq!(
+            field_members(message.members()),
+            vec![
+                (Tag(11), true),
+                (Tag(12), true),
+                (Tag(13), true),
+                (Tag(58), false)
+            ]
+        );
     }
 
     #[test]
@@ -278,8 +368,10 @@ mod tests {
 
         // An optional component makes everything below it optional.
         let message = dictionary.messages().next().unwrap();
-        let required: Vec<bool> = message.members().map(|member| member.is_required).collect();
-        assert_eq!(required, vec![false, false]);
+        assert_eq!(
+            field_members(message.members()),
+            vec![(Tag(12), false), (Tag(13), false)]
+        );
     }
 
     #[test]
@@ -299,7 +391,7 @@ mod tests {
         let dictionary = spec.resolve().unwrap();
 
         let message = dictionary.messages().next().unwrap();
-        assert!(message.members().next().unwrap().is_required);
+        assert_eq!(field_members(message.members()), vec![(Tag(12), true)]);
     }
 
     #[test]
@@ -449,8 +541,9 @@ mod tests {
         assert_eq!(
             spec.resolve().unwrap_err(),
             Error::DuplicateField {
-                context: MemberContext::Component("Top".to_owned()),
                 tag: Tag(58),
+                first: MemberContext::Component("Top".to_owned()),
+                second: MemberContext::Component("Top".to_owned()),
             }
         );
     }
@@ -469,8 +562,9 @@ mod tests {
         assert_eq!(
             spec.resolve().unwrap_err(),
             Error::DuplicateField {
-                context: MemberContext::Message("NewOrderSingle".to_owned()),
                 tag: Tag(58),
+                first: MemberContext::Message("NewOrderSingle".to_owned()),
+                second: MemberContext::Message("NewOrderSingle".to_owned()),
             }
         );
     }
@@ -503,5 +597,336 @@ mod tests {
             spec.resolve().unwrap_err(),
             Error::DuplicateTag { tag: Tag(11) }
         );
+    }
+
+    mod groups {
+        use super::*;
+
+        fn group(count_tag: u32, is_required: bool, members: Vec<spec::Member>) -> spec::Member {
+            spec::Member::Group(spec::Group {
+                count_tag: Tag(count_tag),
+                is_required,
+                members,
+            })
+        }
+
+        fn parties_fields() -> Vec<Field> {
+            vec![
+                field("NoPartyIDs", 453),
+                field("PartyID", 448),
+                field("PartyRole", 452),
+                field("PartyIDSource", 447),
+            ]
+        }
+
+        /// The group at `position` among a message's members.
+        fn group_at(message: Message<'_>, position: usize) -> Group<'_> {
+            match message.members().nth(position) {
+                Some(Member::Group(group)) => group,
+                other => panic!("expected a group, found {other:?}"),
+            }
+        }
+
+        fn nos_context() -> MemberContext {
+            MemberContext::Message("NewOrderSingle".to_owned())
+        }
+
+        #[test]
+        fn resolves_a_group_in_a_message() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(
+                        453,
+                        false,
+                        vec![field_ref(448, false), field_ref(452, true)],
+                    )],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 0);
+            assert_eq!(group.count_field().tag, Tag(453));
+            assert_eq!(group.delimiter().tag, Tag(448));
+            assert!(!group.is_required());
+            // The delimiter is required in every entry, whatever its flag.
+            assert_eq!(
+                field_members(group.members()),
+                vec![(Tag(448), true), (Tag(452), true)]
+            );
+        }
+
+        #[test]
+        fn requiredness_restarts_in_each_entry() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![component(
+                    "Parties",
+                    vec![group(
+                        453,
+                        true,
+                        vec![
+                            field_ref(448, true),
+                            field_ref(452, false),
+                            field_ref(447, true),
+                        ],
+                    )],
+                )],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![component_ref("Parties", false)],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            // The optional component makes the group optional, but not the
+            // fields its entries require.
+            let group = group_at(dictionary.messages().next().unwrap(), 0);
+            assert!(!group.is_required());
+            assert_eq!(
+                field_members(group.members()),
+                vec![(Tag(448), true), (Tag(452), false), (Tag(447), true)]
+            );
+        }
+
+        #[test]
+        fn a_component_first_in_an_entry_becomes_required() {
+            let spec = spec_of(
+                vec![
+                    field("NoRelatedSym", 146),
+                    field("Symbol", 55),
+                    field("SecurityID", 48),
+                    field("Text", 58),
+                ],
+                vec![component(
+                    "Instrument",
+                    vec![field_ref(55, false), field_ref(48, true)],
+                )],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(
+                        146,
+                        false,
+                        vec![component_ref("Instrument", false), field_ref(58, false)],
+                    )],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let group = group_at(dictionary.messages().next().unwrap(), 0);
+            assert_eq!(group.delimiter().tag, Tag(55));
+            assert_eq!(
+                field_members(group.members()),
+                vec![(Tag(55), true), (Tag(48), true), (Tag(58), false)]
+            );
+        }
+
+        #[test]
+        fn a_nested_group_first_in_an_entry_is_the_delimiter() {
+            let spec = spec_of(
+                vec![
+                    field("NoPartyIDs", 453),
+                    field("NoPartySubIDs", 802),
+                    field("PartySubID", 523),
+                ],
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(
+                        453,
+                        false,
+                        vec![group(802, false, vec![field_ref(523, false)])],
+                    )],
+                )],
+            );
+
+            let dictionary = spec.resolve().unwrap();
+
+            let outer = group_at(dictionary.messages().next().unwrap(), 0);
+            assert_eq!(outer.delimiter().tag, Tag(802));
+            let Some(Member::Group(inner)) = outer.members().next() else {
+                panic!("expected a nested group");
+            };
+            assert!(inner.is_required());
+            assert_eq!(field_members(inner.members()), vec![(Tag(523), true)]);
+        }
+
+        #[test]
+        fn an_empty_group_is_an_error() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message("NewOrderSingle", vec![group(453, false, vec![])])],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::EmptyGroup {
+                    context: nos_context().group("NoPartyIDs"),
+                }
+            );
+        }
+
+        #[test]
+        fn a_group_of_an_empty_component_is_an_error() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![component("Nothing", vec![])],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(453, false, vec![component_ref("Nothing", true)])],
+                )],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::EmptyGroup {
+                    context: nos_context().group("NoPartyIDs"),
+                }
+            );
+        }
+
+        #[test]
+        fn an_unknown_count_tag_is_an_error() {
+            let spec = spec_of(
+                vec![field("PartyID", 448)],
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(453, false, vec![field_ref(448, false)])],
+                )],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::UnknownField {
+                    context: nos_context(),
+                    tag: Tag(453),
+                }
+            );
+        }
+
+        #[test]
+        fn a_cycle_through_a_group_is_an_error() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![component(
+                    "Parties",
+                    vec![group(453, false, vec![component_ref("Parties", false)])],
+                )],
+                vec![],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::CircularComponent {
+                    component: "Parties".to_owned(),
+                }
+            );
+        }
+
+        #[test]
+        fn a_tag_in_a_scope_and_in_its_group_is_an_error() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![
+                        field_ref(448, false),
+                        group(453, false, vec![field_ref(448, false)]),
+                    ],
+                )],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::DuplicateField {
+                    tag: Tag(448),
+                    first: nos_context(),
+                    second: nos_context().group("NoPartyIDs"),
+                }
+            );
+        }
+
+        #[test]
+        fn a_count_tag_also_used_as_a_field_is_an_error() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![
+                        field_ref(453, false),
+                        group(453, false, vec![field_ref(448, false)]),
+                    ],
+                )],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::DuplicateField {
+                    tag: Tag(453),
+                    first: nos_context(),
+                    second: nos_context(),
+                }
+            );
+        }
+
+        #[test]
+        fn sibling_groups_sharing_a_tag_are_an_error() {
+            let mut fields = parties_fields();
+            fields.push(field("NoNestedPartyIDs", 539));
+            let spec = spec_of(
+                fields,
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![
+                        group(453, false, vec![field_ref(448, false)]),
+                        group(539, false, vec![field_ref(448, false)]),
+                    ],
+                )],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::DuplicateField {
+                    tag: Tag(448),
+                    first: nos_context().group("NoPartyIDs"),
+                    second: nos_context().group("NoNestedPartyIDs"),
+                }
+            );
+        }
+
+        #[test]
+        fn a_duplicate_within_an_entry_names_the_entry() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(
+                        453,
+                        false,
+                        vec![field_ref(448, false), field_ref(448, false)],
+                    )],
+                )],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::DuplicateField {
+                    tag: Tag(448),
+                    first: nos_context().group("NoPartyIDs"),
+                    second: nos_context().group("NoPartyIDs"),
+                }
+            );
+        }
     }
 }

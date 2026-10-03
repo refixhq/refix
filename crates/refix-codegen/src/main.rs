@@ -41,7 +41,12 @@ fn run(args: &Args) -> Result<(), String> {
         .unwrap_or_else(|| args.dictionary.to_string_lossy());
     let generated = refix_codegen::generate(&parsed.dictionary, &source)
         .map_err(|error| format!("cannot generate from '{dictionary_path}': {error}"))?;
-    fs::write(&args.output, generated)
+
+    for warning in &generated.warnings {
+        eprintln!("warning: {warning}");
+    }
+
+    fs::write(&args.output, generated.code)
         .map_err(|error| format!("cannot write '{}': {error}", args.output.display()))?;
 
     Ok(())

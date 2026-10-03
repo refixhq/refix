@@ -1,6 +1,6 @@
 use crate::{
-    Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Member,
-    MemberContext, Message, Protocol, Spec, Tag, Version, dictionary,
+    Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Group,
+    Member, MemberContext, Message, Protocol, Spec, Tag, Version, dictionary,
 };
 use roxmltree::Node;
 use std::collections::{HashMap, HashSet};
@@ -200,10 +200,12 @@ fn parse_members(
                 tags_by_name,
             )?)),
             "component" => members.push(Member::Component(parse_component_ref(child)?)),
-            "group" => warnings.push(Warning::UnsupportedGroup {
-                context: context.clone(),
-                group: string_attribute(child, "name")?,
-            }),
+            "group" => members.push(Member::Group(parse_group(
+                child,
+                &context,
+                tags_by_name,
+                warnings,
+            )?)),
             other => warnings.push(Warning::UnsupportedElement {
                 context: context.clone(),
                 element: other.to_owned(),
@@ -239,6 +241,25 @@ fn parse_component_ref(node: Node) -> Result<ComponentRef, Error> {
     Ok(ComponentRef {
         name,
         is_required: required_attribute(node)?,
+    })
+}
+
+fn parse_group(
+    node: Node,
+    context: &MemberContext,
+    tags_by_name: &HashMap<&str, Tag>,
+    warnings: &mut Vec<Warning>,
+) -> Result<Group, Error> {
+    // A group element names and flags its count field the way a field
+    // reference does.
+    let count = parse_field_ref(node, context.clone(), tags_by_name)?;
+    let name = string_attribute(node, "name")?;
+    let members = parse_members(node, context.group(&name), tags_by_name, warnings)?;
+
+    Ok(Group {
+        count_tag: count.tag,
+        is_required: count.is_required,
+        members,
     })
 }
 
@@ -317,10 +338,6 @@ pub struct Parsed {
 /// A construct the parser recognised but the model does not hold yet.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Warning {
-    UnsupportedGroup {
-        context: MemberContext,
-        group: String,
-    },
     UnsupportedElement {
         context: MemberContext,
         element: String,
@@ -333,9 +350,6 @@ pub enum Warning {
 impl fmt::Display for Warning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Warning::UnsupportedGroup { context, group } => {
-                write!(f, "group '{group}' in {context} is not supported yet")
-            }
             Warning::UnsupportedElement { context, element } => {
                 write!(f, "unexpected element <{element}> in {context}")
             }
@@ -614,12 +628,16 @@ mod tests {
  <fields>
   <field number='12' name='Commission' type='AMT'/>
   <field number='13' name='CommType' type='CHAR'/>
+  <field number='539' name='NoNestedPartyIDs' type='NUMINGROUP'/>
+  <field number='524' name='NestedPartyID' type='STRING'/>
  </fields>
  <components>
   <component name='CommissionData'>
    <field name='Commission' required='Y'/>
    <field name='CommType'/>
-   <group name='NoNested' required='N'/>
+   <group name='NoNestedPartyIDs' required='N'>
+    <field name='NestedPartyID' required='Y'/>
+   </group>
   </component>
   <component name='SpreadOrBenchmarkCurveData'>
    <component name='CommissionData' required='Y'/>
@@ -650,6 +668,14 @@ mod tests {
                                 tag: Tag(13),
                                 is_required: false,
                             }),
+                            Member::Group(Group {
+                                count_tag: Tag(539),
+                                is_required: false,
+                                members: vec![Member::Field(FieldRef {
+                                    tag: Tag(524),
+                                    is_required: true,
+                                })],
+                            }),
                         ],
                     },
                     Component {
@@ -664,16 +690,22 @@ mod tests {
         }
 
         #[test]
-        fn groups_in_components_surface_as_warnings() {
-            let parsed = parse(DICTIONARY).unwrap();
+        fn an_undefined_field_in_a_group_names_the_group() {
+            let error = parse(
+                "<fix major='4' minor='4'>\
+                 <fields><field number='453' name='NoPartyIDs' type='NUMINGROUP'/></fields>\
+                 <components><component name='Parties'>\
+                 <group name='NoPartyIDs'><field name='PartyID'/></group>\
+                 </component></components></fix>",
+            )
+            .unwrap_err();
 
-            assert_eq!(
-                parsed.warnings,
-                vec![Warning::UnsupportedGroup {
-                    context: MemberContext::Component("CommissionData".to_owned()),
-                    group: "NoNested".to_owned(),
-                }]
-            );
+            let parties = MemberContext::Component("Parties".to_owned());
+            assert!(matches!(
+                error,
+                Error::UnknownField { context, ref field }
+                    if context == parties.group("NoPartyIDs") && field == "PartyID"
+            ));
         }
 
         #[test]
@@ -692,6 +724,8 @@ mod tests {
   <field number='11' name='ClOrdID' type='STRING'/>
   <field number='58' name='Text' type='STRING'/>
   <field number='448' name='PartyID' type='STRING'/>
+  <field number='78' name='NoAllocs' type='NUMINGROUP'/>
+  <field number='79' name='AllocAccount' type='STRING'/>
  </fields>
  <components>
   <component name='Parties'>
@@ -703,7 +737,9 @@ mod tests {
    <field name='ClOrdID' required='Y'/>
    <field name='Text'/>
    <component name='Parties' required='N'/>
-   <group name='NoAllocs' required='N'/>
+   <group name='NoAllocs' required='N'>
+    <field name='AllocAccount'/>
+   </group>
   </message>
  </messages>
 </fix>";
@@ -735,6 +771,14 @@ mod tests {
                             name: "Parties".to_owned(),
                             is_required: false,
                         }),
+                        Member::Group(Group {
+                            count_tag: Tag(78),
+                            is_required: false,
+                            members: vec![Member::Field(FieldRef {
+                                tag: Tag(79),
+                                is_required: false,
+                            })],
+                        }),
                     ],
                     category: Category::App,
                 }]
@@ -742,15 +786,49 @@ mod tests {
         }
 
         #[test]
-        fn groups_surface_as_warnings() {
+        fn groups_parse_without_warnings() {
             let parsed = parse(DICTIONARY).unwrap();
+            assert!(parsed.warnings.is_empty());
+        }
 
+        #[test]
+        fn a_group_with_an_undefined_count_field_is_an_error() {
+            let error = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='NewOrderSingle' msgtype='D' msgcat='app'>\
+                 <group name='NoAllocs'/></message></messages></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::UnknownField { context, ref field }
+                    if context == MemberContext::Message("NewOrderSingle".to_owned())
+                        && field == "NoAllocs"
+            ));
+        }
+
+        #[test]
+        fn an_unknown_element_in_a_group_names_the_group() {
+            let parsed = parse(
+                "<fix major='4' minor='4'>\
+                 <fields>\
+                 <field number='78' name='NoAllocs' type='NUMINGROUP'/>\
+                 <field number='79' name='AllocAccount' type='STRING'/>\
+                 </fields>\
+                 <messages><message name='NewOrderSingle' msgtype='D' msgcat='app'>\
+                 <group name='NoAllocs'><field name='AllocAccount'/><bogus/></group>\
+                 </message></messages></fix>",
+            )
+            .unwrap();
+
+            let message = MemberContext::Message("NewOrderSingle".to_owned());
             assert_eq!(
                 parsed.warnings,
-                vec![Warning::UnsupportedGroup {
-                    context: MemberContext::Message("NewOrderSingle".to_owned()),
-                    group: "NoAllocs".to_owned(),
-                },]
+                vec![Warning::UnsupportedElement {
+                    context: message.group("NoAllocs"),
+                    element: "bogus".to_owned(),
+                }]
             );
         }
 

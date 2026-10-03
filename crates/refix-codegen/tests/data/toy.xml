@@ -23,5 +23,7 @@
       <value enum="1" description="MARKET"/>
       <value enum="2" description="LIMIT"/>
     </field>
+    <field number="453" name="NoPartyIDs" type="NUMINGROUP"/>
+    <field number="448" name="PartyID" type="STRING"/>
   </fields>
 </fix>

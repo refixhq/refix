@@ -45,13 +45,14 @@ pub struct Component {
     pub members: Vec<Member>,
 }
 
-/// A member of a message or component.
+/// A member of a message, component or group entry.
 ///
-/// This can either be a field reference or a component reference.
+/// This can be a field reference, a component reference or a repeating group.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Member {
     Field(FieldRef),
     Component(ComponentRef),
+    Group(Group),
 }
 
 /// A field as used by one message or component (Orchestra's `fieldRef`).
@@ -70,13 +71,39 @@ pub struct ComponentRef {
     pub is_required: bool,
 }
 
-/// The owner of a member list: the message or component a member appears in.
+/// A repeating group, declared inline in a message, component or entry.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Group {
+    /// Tag of the group's NumInGroup count field.
+    pub count_tag: Tag,
+    pub is_required: bool,
+    /// The members of each entry, in source order.
+    pub members: Vec<Member>,
+}
+
+/// The owner of a member list: the message, component or group entry a
+/// member appears in.
 ///
 /// Diagnostics use this to name the place a problem was found.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MemberContext {
     Message(String),
     Component(String),
+    /// A group's entries, named after the group's count field.
+    Group {
+        name: String,
+        parent: Box<MemberContext>,
+    },
+}
+
+impl MemberContext {
+    /// The context of a group's entries, nested in this context.
+    pub fn group(&self, name: &str) -> MemberContext {
+        MemberContext::Group {
+            name: name.to_owned(),
+            parent: Box::new(self.clone()),
+        }
+    }
 }
 
 impl fmt::Display for MemberContext {
@@ -84,6 +111,7 @@ impl fmt::Display for MemberContext {
         match self {
             Self::Message(name) => write!(f, "message '{name}'"),
             Self::Component(name) => write!(f, "component '{name}'"),
+            Self::Group { name, parent } => write!(f, "group '{name}' in {parent}"),
         }
     }
 }
@@ -133,4 +161,30 @@ pub enum Category {
     Admin,
     /// Business messages: orders, executions, market data.
     App,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_nested_group_context_names_its_whole_path() {
+        let context = MemberContext::Group {
+            name: "NoPartySubIDs".to_owned(),
+            parent: Box::new(MemberContext::Group {
+                name: "NoPartyIDs".to_owned(),
+                parent: Box::new(MemberContext::Component("Parties".to_owned())),
+            }),
+        };
+
+        assert_eq!(
+            context.to_string(),
+            "group 'NoPartySubIDs' in group 'NoPartyIDs' in component 'Parties'"
+        );
+
+        assert_eq!(
+            context.to_string(),
+            "group 'NoPartySubIDs' in group 'NoPartyIDs' in component 'Parties'"
+        );
+    }
 }
