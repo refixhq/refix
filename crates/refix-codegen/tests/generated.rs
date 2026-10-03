@@ -21,6 +21,22 @@ fn the_checked_in_module_is_fresh() {
     assert_eq!(generated.code, TOY_GENERATED);
 }
 
+#[test]
+fn the_toy_group_is_reported_as_not_generated() {
+    let parsed = quickfix::parse(TOY_XML).unwrap();
+    let generated = generate(&parsed.dictionary, "toy.xml").unwrap();
+
+    assert!(parsed.warnings.is_empty());
+    assert_eq!(
+        generated
+            .warnings
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        vec!["group 'NoPartyIDs' in message 'NewOrderSingle' is not generated yet"]
+    );
+}
+
 /// A complete frame around the `|`-delimited `body`, with correct
 /// BodyLength and CheckSum.
 fn frame(body: &str) -> Bytes {

@@ -97,20 +97,64 @@ fn parses_the_full_fix44_dictionary() {
         .messages()
         .find(|message| message.name() == "NewOrderSingle")
         .unwrap();
-    assert_eq!(resolved.members().count(), 149);
+    // 149 fields and 7 groups, components expanded in place.
+    assert_eq!(resolved.members().count(), 156);
     // Symbol(55) arrives through the Instrument component's expansion.
     assert!(resolved.members().any(|member| matches!(
         member,
         dictionary::Member::Field { field, .. } if field.tag == Tag(55) && field.name == "Symbol"
     )));
 
-    // 2 unmodelled sections (header and trailer), 92 group warnings
-    // (91 in components, 1 in messages)
-    assert_eq!(parsed.warnings.len(), 94);
+    // Parties' NoPartyIDs, with NoPartySubIDs nested in its entries.
+    let parties = resolved
+        .members()
+        .find_map(|member| match member {
+            dictionary::Member::Group(group) if group.count_field().tag == Tag(453) => Some(group),
+            _ => None,
+        })
+        .unwrap();
+    assert!(!parties.is_required());
+    assert_eq!(parties.delimiter().tag, Tag(448));
+    let entry: Vec<(Tag, bool)> = parties
+        .members()
+        .map(|member| match member {
+            dictionary::Member::Field { field, is_required } => (field.tag, is_required),
+            dictionary::Member::Group(group) => (group.count_field().tag, group.is_required()),
+        })
+        .collect();
     assert_eq!(
-        parsed.warnings[0],
-        Warning::UnsupportedSection {
-            section: "header".to_owned(),
-        }
+        entry,
+        vec![
+            (Tag(448), true),
+            (Tag(447), false),
+            (Tag(452), false),
+            (Tag(802), false)
+        ]
+    );
+
+    // Every message-level group parses and resolves.
+    let groups: usize = parsed
+        .dictionary
+        .messages()
+        .map(|message| {
+            message
+                .members()
+                .filter(|member| matches!(member, dictionary::Member::Group(_)))
+                .count()
+        })
+        .sum();
+    assert_eq!(groups, 356);
+
+    // Only the header and trailer remain unmodelled.
+    assert_eq!(
+        parsed.warnings,
+        vec![
+            Warning::UnsupportedSection {
+                section: "header".to_owned(),
+            },
+            Warning::UnsupportedSection {
+                section: "trailer".to_owned(),
+            },
+        ]
     );
 }
