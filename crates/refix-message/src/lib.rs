@@ -8,7 +8,7 @@ mod test_utils;
 mod tokenizer;
 mod value;
 
-pub use message::RawMessage;
+pub use message::{RawMessage, Scope};
 pub use stream::MessageStream;
 pub use tag::Tag;
 pub use tokenizer::{TokenizeError, Tokenizer};

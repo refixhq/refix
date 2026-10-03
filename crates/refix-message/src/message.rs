@@ -40,27 +40,28 @@ impl RawMessage {
         &self.bytes
     }
 
+    /// The whole frame as a [`Scope`].
+    pub fn scope(&self) -> Scope<'_> {
+        Scope {
+            message: self,
+            start: Slot::START,
+            end: Slot(self.fields.len() as u32),
+        }
+    }
+
     /// Value of the first occurrence of `tag`, scanning from the start.
     pub fn get(&self, tag: Tag) -> Option<&[u8]> {
-        self.find(tag, Slot::START).map(|(_, value)| value)
+        self.scope().get(tag)
     }
 
-    /// First occurrence of `tag` as UTF-8 text; `Ok(None)` when absent.
+    /// First occurrence of `tag` as UTF-8 text or `Ok(None)` when absent.
     pub fn get_str(&self, tag: Tag) -> Result<Option<&str>, InvalidValue> {
-        let Some(value) = self.get(tag) else {
-            return Ok(None);
-        };
-        let value = std::str::from_utf8(value).map_err(|_| InvalidValue { tag })?;
-        Ok(Some(value))
+        self.scope().get_str(tag)
     }
 
-    /// First occurrence of `tag` parsed as an integer; `Ok(None)` when absent.
+    /// First occurrence of `tag` parsed as an integer or `Ok(None)` when absent.
     pub fn get_int(&self, tag: Tag) -> Result<Option<i64>, InvalidValue> {
-        let Some(value) = self.get_str(tag)? else {
-            return Ok(None);
-        };
-        let value = value.parse().map_err(|_| InvalidValue { tag })?;
-        Ok(Some(value))
+        self.scope().get_int(tag)
     }
 
     /// Every field as `(tag, value)`, in wire order, duplicates included.
@@ -71,15 +72,6 @@ impl RawMessage {
         self.fields
             .iter()
             .map(|&field| (field.tag, self.slice(field)))
-    }
-
-    /// First occurrence of `tag` at or after `from`, with its slot so the
-    /// caller can continue or bound a range.
-    fn find(&self, tag: Tag, from: Slot) -> Option<(Slot, &[u8])> {
-        let rest = self.fields.get(from.index()..)?;
-        let offset = rest.iter().position(|field| field.tag == tag)?;
-        let slot = Slot((from.index() + offset) as u32);
-        Some((slot, self.value(slot)))
     }
 
     fn value(&self, slot: Slot) -> &[u8] {
@@ -94,6 +86,48 @@ impl RawMessage {
     #[cfg(test)]
     pub(crate) fn raw_fields(&self) -> &[RawField] {
         &self.fields
+    }
+}
+
+/// A bounded view of a message's fields - the whole frame or one group.
+#[derive(Clone, Copy, Debug)]
+pub struct Scope<'a> {
+    message: &'a RawMessage,
+    start: Slot,
+    end: Slot,
+}
+
+impl<'a> Scope<'a> {
+    /// Value of the first occurrence of `tag` in this scope.
+    pub fn get(&self, tag: Tag) -> Option<&'a [u8]> {
+        self.find(tag, self.start).map(|(_, value)| value)
+    }
+
+    /// First occurrence of `tag` as UTF-8 text or `Ok(None)` when absent.
+    pub fn get_str(&self, tag: Tag) -> Result<Option<&'a str>, InvalidValue> {
+        let Some(value) = self.get(tag) else {
+            return Ok(None);
+        };
+        let value = std::str::from_utf8(value).map_err(|_| InvalidValue { tag })?;
+        Ok(Some(value))
+    }
+
+    /// First occurrence of `tag` parsed as an integer or `Ok(None)` when absent.
+    pub fn get_int(&self, tag: Tag) -> Result<Option<i64>, InvalidValue> {
+        let Some(value) = self.get_str(tag)? else {
+            return Ok(None);
+        };
+        let value = value.parse().map_err(|_| InvalidValue { tag })?;
+        Ok(Some(value))
+    }
+
+    /// First occurrence of `tag` at or after `from` and before the end of
+    /// the scope, with its slot so the caller can continue or bound a range.
+    fn find(&self, tag: Tag, from: Slot) -> Option<(Slot, &'a [u8])> {
+        let fields = self.message.fields.get(from.index()..self.end.index())?;
+        let offset = fields.iter().position(|field| field.tag == tag)?;
+        let slot = Slot((from.index() + offset) as u32);
+        Some((slot, self.message.value(slot)))
     }
 }
 
@@ -191,5 +225,74 @@ mod tests {
     fn get_int_rejects_invalid_utf8() {
         let message = message_of(&[(38, b"\xE9".as_slice())]);
         assert_eq!(message.get_int(Tag(38)), Err(InvalidValue { tag: Tag(38) }));
+    }
+
+    mod scope {
+        use super::*;
+
+        /// A scope over the fields in slots `start..end` of `message`.
+        fn scope_of(message: &RawMessage, start: u32, end: u32) -> Scope<'_> {
+            Scope {
+                message,
+                start: Slot(start),
+                end: Slot(end),
+            }
+        }
+
+        #[test]
+        fn a_scope_does_not_read_past_its_end() {
+            // Two party entries; only the second has a PartyRole(452).
+            let message = message_of(&[(453, "2"), (448, "AL"), (448, "BOB"), (452, "3")]);
+            let first_entry = scope_of(&message, 1, 2);
+
+            assert_eq!(first_entry.get(Tag(448)), Some(b"AL".as_slice()));
+            assert_eq!(first_entry.get(Tag(452)), None);
+        }
+
+        #[test]
+        fn a_scope_does_not_read_before_its_start() {
+            let message = message_of(&[(453, "2"), (448, "AL"), (448, "BOB"), (452, "3")]);
+            let second_entry = scope_of(&message, 2, 4);
+
+            assert_eq!(second_entry.get(Tag(448)), Some(b"BOB".as_slice()));
+            assert_eq!(second_entry.get(Tag(453)), None);
+        }
+
+        #[test]
+        fn conversions_stay_within_the_scope() {
+            let message = message_of(&[(38, "100"), (58, "first"), (38, "x"), (58, "second")]);
+            let tail = scope_of(&message, 2, 4);
+
+            assert_eq!(tail.get_str(Tag(58)), Ok(Some("second")));
+            assert_eq!(tail.get_int(Tag(38)), Err(InvalidValue { tag: Tag(38) }));
+        }
+
+        #[test]
+        fn an_empty_scope_finds_nothing() {
+            let message = message_of(&[(35, "D")]);
+            assert_eq!(scope_of(&message, 1, 1).get(Tag(35)), None);
+        }
+
+        #[test]
+        fn the_whole_frame_scope_reads_like_the_message() {
+            let message = message_of(&[(35, "D"), (38, "200"), (58, "hello")]);
+            let scope = message.scope();
+
+            assert_eq!(scope.get(Tag(35)), message.get(Tag(35)));
+            assert_eq!(scope.get_int(Tag(38)), Ok(Some(200)));
+            assert_eq!(scope.get_str(Tag(58)), Ok(Some("hello")));
+            assert_eq!(scope.get(Tag(99)), None);
+        }
+
+        #[test]
+        fn values_outlive_the_scope_they_were_read_from() {
+            let message = message_of(&[(58, "kept")]);
+            let value = {
+                let scope = message.scope();
+                scope.get(Tag(58))
+            };
+
+            assert_eq!(value, Some(b"kept".as_slice()));
+        }
     }
 }
