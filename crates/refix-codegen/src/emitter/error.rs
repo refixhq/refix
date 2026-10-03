@@ -1,7 +1,10 @@
+use refix_dictionary::MemberContext;
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Error {
     UnrepresentableName { field: String },
     UnrepresentableValue { field: String, description: String },
+    UnrepresentableGroupName { context: MemberContext },
 }
 
 impl std::fmt::Display for Error {
@@ -15,6 +18,9 @@ impl std::fmt::Display for Error {
                     f,
                     "value '{description}' of field '{field}' cannot be a rust variant name"
                 )
+            }
+            Error::UnrepresentableGroupName { context } => {
+                write!(f, "{context} cannot be a rust name")
             }
         }
     }
