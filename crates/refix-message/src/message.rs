@@ -13,6 +13,11 @@ impl Slot {
     fn index(self) -> usize {
         self.0 as usize
     }
+
+    /// The slot after this one.
+    pub(crate) fn next(self) -> Slot {
+        Slot(self.0 + 1)
+    }
 }
 
 /// The tag and byte range of a field's value within the frame.
@@ -124,11 +129,36 @@ impl<'a> Scope<'a> {
 
     /// First occurrence of `tag` at or after `from` and before the end of
     /// the scope, with its slot so the caller can continue or bound a range.
-    fn find(&self, tag: Tag, from: Slot) -> Option<(Slot, &'a [u8])> {
+    pub(crate) fn find(&self, tag: Tag, from: Slot) -> Option<(Slot, &'a [u8])> {
         let fields = self.message.fields.get(from.index()..self.end.index())?;
         let offset = fields.iter().position(|field| field.tag == tag)?;
         let slot = Slot((from.index() + offset) as u32);
         Some((slot, self.message.value(slot)))
+    }
+
+    /// The fields `start..end` of the same message.
+    pub(crate) fn narrow(&self, start: Slot, end: Slot) -> Scope<'a> {
+        Scope {
+            message: self.message,
+            start,
+            end,
+        }
+    }
+
+    pub(crate) fn start(&self) -> Slot {
+        self.start
+    }
+
+    pub(crate) fn end(&self) -> Slot {
+        self.end
+    }
+
+    pub(crate) fn tag_at(&self, slot: Slot) -> Tag {
+        self.message.fields[slot.index()].tag
+    }
+
+    pub(crate) fn value_at(&self, slot: Slot) -> &'a [u8] {
+        self.message.value(slot)
     }
 }
 
