@@ -123,7 +123,7 @@ impl<'a> Message<'a> {
     }
 }
 
-/// A member of a message or group entry, with its references resolved.
+/// A member of a message or group instance, with its references resolved.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Member<'a> {
     Field {
@@ -136,7 +136,7 @@ pub enum Member<'a> {
     Group(Group<'a>),
 }
 
-/// A read view of one repeating group, with its entry members resolved.
+/// A read view of one repeating group, with its instance members resolved.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Group<'a> {
     resolved: &'a ResolvedGroup,
@@ -149,7 +149,7 @@ impl<'a> Group<'a> {
         &self.fields[self.resolved.count_field_index]
     }
 
-    /// The field every entry starts with: the entry's first field after
+    /// The field every instance starts with: the instance's first field after
     /// expansion, or a nested group's count field.
     pub fn delimiter(&self) -> &'a Field {
         &self.fields[self.resolved.delimiter_index]
@@ -161,8 +161,8 @@ impl<'a> Group<'a> {
         self.resolved.is_required
     }
 
-    /// The members of each entry in source order, with requiredness
-    /// relative to the entry.
+    /// The members of each instance in source order, with requiredness
+    /// relative to the instance.
     pub fn members(&self) -> impl Iterator<Item = Member<'a>> {
         members_of(&self.resolved.members, self.fields)
     }
@@ -652,7 +652,7 @@ mod tests {
             assert_eq!(group.count_field().tag, Tag(453));
             assert_eq!(group.delimiter().tag, Tag(448));
             assert!(!group.is_required());
-            // The delimiter is required in every entry, whatever its flag.
+            // The delimiter is required in every instance, whatever its flag.
             assert_eq!(
                 field_members(group.members()),
                 vec![(Tag(448), true), (Tag(452), true)]
@@ -660,7 +660,7 @@ mod tests {
         }
 
         #[test]
-        fn requiredness_restarts_in_each_entry() {
+        fn requiredness_restarts_in_each_instance() {
             let spec = spec_of(
                 parties_fields(),
                 vec![component(
@@ -684,7 +684,7 @@ mod tests {
             let dictionary = spec.resolve().unwrap();
 
             // The optional component makes the group optional, but not the
-            // fields its entries require.
+            // fields its instances require.
             let group = group_at(dictionary.messages().next().unwrap(), 0);
             assert!(!group.is_required());
             assert_eq!(
@@ -694,7 +694,7 @@ mod tests {
         }
 
         #[test]
-        fn a_component_first_in_an_entry_becomes_required() {
+        fn a_component_first_in_an_instance_becomes_required() {
             let spec = spec_of(
                 vec![
                     field("NoRelatedSym", 146),
@@ -727,7 +727,7 @@ mod tests {
         }
 
         #[test]
-        fn a_nested_group_first_in_an_entry_is_the_delimiter() {
+        fn a_nested_group_first_in_an_instance_is_the_delimiter() {
             let spec = spec_of(
                 vec![
                     field("NoPartyIDs", 453),
@@ -905,7 +905,7 @@ mod tests {
         }
 
         #[test]
-        fn a_duplicate_within_an_entry_names_the_entry() {
+        fn a_duplicate_within_an_instance_names_the_instance() {
             let spec = spec_of(
                 parties_fields(),
                 vec![],

@@ -89,7 +89,8 @@ impl RawMessage {
     }
 }
 
-/// A bounded view of a message's fields - the whole frame or one group.
+/// A bounded view of a message's fields - the whole frame or one group
+/// instance.
 #[derive(Clone, Copy, Debug)]
 pub struct Scope<'a> {
     message: &'a RawMessage,
@@ -241,21 +242,21 @@ mod tests {
 
         #[test]
         fn a_scope_does_not_read_past_its_end() {
-            // Two party entries; only the second has a PartyRole(452).
+            // Two party instances; only the second has a PartyRole(452).
             let message = message_of(&[(453, "2"), (448, "AL"), (448, "BOB"), (452, "3")]);
-            let first_entry = scope_of(&message, 1, 2);
+            let first_instance = scope_of(&message, 1, 2);
 
-            assert_eq!(first_entry.get(Tag(448)), Some(b"AL".as_slice()));
-            assert_eq!(first_entry.get(Tag(452)), None);
+            assert_eq!(first_instance.get(Tag(448)), Some(b"AL".as_slice()));
+            assert_eq!(first_instance.get(Tag(452)), None);
         }
 
         #[test]
         fn a_scope_does_not_read_before_its_start() {
             let message = message_of(&[(453, "2"), (448, "AL"), (448, "BOB"), (452, "3")]);
-            let second_entry = scope_of(&message, 2, 4);
+            let second_instance = scope_of(&message, 2, 4);
 
-            assert_eq!(second_entry.get(Tag(448)), Some(b"BOB".as_slice()));
-            assert_eq!(second_entry.get(Tag(453)), None);
+            assert_eq!(second_instance.get(Tag(448)), Some(b"BOB".as_slice()));
+            assert_eq!(second_instance.get(Tag(453)), None);
         }
 
         #[test]
