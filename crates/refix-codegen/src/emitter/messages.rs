@@ -77,9 +77,9 @@ fn emit_message_module(message: dictionary::Message<'_>) -> Result<Option<String
 /// The lifetime an accessor's borrowed results live for.
 #[derive(Clone, Copy)]
 pub(super) enum Lifetime {
-    /// The receiver's, elided: a message owns its bytes.
+    /// The receiver's elided lifetime, as a message owns its bytes.
     Receiver,
-    /// The wrapped scope's `'a`: a group instance borrows its bytes.
+    /// The wrapped scope's `'a`, as a group instance borrows its bytes.
     Scope,
 }
 

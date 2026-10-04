@@ -49,7 +49,7 @@ pub(super) fn message_module_name(message: &str) -> Result<String, Error> {
     })
 }
 
-/// Strips a `No` that starts a word: `NoPartyIDs`, but not `Notional`.
+/// Strips a `No` that starts a word, as in `NoPartyIDs` but not `Notional`.
 fn without_no_prefix(name: &str) -> Option<&str> {
     name.strip_prefix("No")
         .filter(|rest| rest.starts_with(|c: char| c.is_ascii_uppercase()))

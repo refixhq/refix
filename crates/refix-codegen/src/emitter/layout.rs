@@ -15,8 +15,10 @@ pub(super) fn indent(text: &str, levels: usize) -> String {
         .collect()
 }
 
-/// A slice literal of `items` between `head` and `tail`: on one line when
-/// that fits in `width`, else with the items filling indented lines.
+/// A slice literal of `items` between `head` and `tail`.
+///
+/// It stays on one line when that fits in `width`. Otherwise the items fill
+/// indented lines.
 pub(super) fn slice(head: &str, items: &[String], tail: &str, width: usize) -> String {
     let one_line = format!("{head}&[{}]{tail}", items.join(", "));
     if one_line.len() <= width || items.is_empty() {

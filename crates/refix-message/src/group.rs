@@ -121,7 +121,7 @@ pub enum Anomaly {
     CountMismatch { declared: usize, found: usize },
 }
 
-/// A well-formed repeating group: its instances, in wire order.
+/// A well-formed repeating group's instances, in wire order.
 #[derive(Clone, Debug)]
 pub struct Group<'a> {
     instances: Vec<Scope<'a>>,
@@ -262,15 +262,17 @@ impl<'a> Scope<'a> {
     /// An instance starts at the delimiter, or wherever one of its tags
     /// repeats. A tag the message does not know stays in its instance; any
     /// other tag outside the table, or CheckSum, ends the group. Nothing is
-    /// rejected: malformed groups are reported as anomalies.
+    /// rejected, and malformed groups are reported as anomalies.
     pub fn walk_group(&self, table: &GroupTable<'_>, known: &KnownTags<'_>) -> Option<Walk<'a>> {
         let (count_slot, _) = self.find(table.count_tag, self.start())?;
         Some(walk(self, count_slot, table, known).0)
     }
 
-    /// The group `table` describes: `Ok(None)` if its count field is
-    /// absent, and an error on the count tag if the group is malformed in
-    /// any way. A count of zero is an empty group.
+    /// The group `table` describes, or `Ok(None)` if its count field is
+    /// absent.
+    ///
+    /// A group malformed in any way is an error on the count tag. A count of
+    /// zero is an empty group.
     pub fn get_group(
         &self,
         table: &GroupTable<'_>,
@@ -356,7 +358,7 @@ fn walk<'a>(
     (walk, slot)
 }
 
-/// A NumInGroup value: a non-negative integer.
+/// Parses a NumInGroup value, which must be a non-negative integer.
 fn parse_count(value: &[u8]) -> Option<usize> {
     std::str::from_utf8(value).ok()?.parse().ok()
 }

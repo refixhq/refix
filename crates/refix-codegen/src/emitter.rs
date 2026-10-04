@@ -14,8 +14,7 @@ use groups::{emit_group_module, shared_groups};
 use messages::emit_message;
 pub use warning::Warning;
 
-/// The result of a successful generation: the generated module, plus any
-/// [`Warning`] produced along the way.
+/// The generated module and any [`Warning`] produced along the way.
 #[derive(Debug)]
 pub struct Generated {
     pub code: String,

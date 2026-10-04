@@ -1,8 +1,8 @@
 use refix_message::Tag;
 use std::fmt;
 
-/// A FIX data dictionary as authored: the field, message and component
-/// definitions of one FIX version or venue dialect.
+/// The field, message and component definitions of one FIX version or venue
+/// dialect, as authored.
 ///
 /// A spec is plain data and makes no consistency guarantees. It is what
 /// frontends parse into and what dialect authors construct by hand.
@@ -82,8 +82,7 @@ pub struct Group {
     pub members: Vec<Member>,
 }
 
-/// The owner of a member list: the message, component or group instance a
-/// member appears in.
+/// The message, component or group instance a member appears in.
 ///
 /// Diagnostics use this to name the place a problem was found.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -145,7 +144,7 @@ pub enum DataType {
 }
 
 impl DataType {
-    /// Whether values are FIX `int`s: `Int` and its subtypes.
+    /// Whether the type is `Int` or one of its subtypes.
     pub fn is_int_based(&self) -> bool {
         matches!(
             self,

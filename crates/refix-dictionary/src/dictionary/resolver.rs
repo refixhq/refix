@@ -26,8 +26,10 @@ fn resolve_messages(spec: &Spec) -> Result<Vec<ResolvedMessage>, Error> {
         .collect()
 }
 
-/// State shared while resolving one spec: the lookup tables, the memoised
-/// component expansions, and the components currently being expanded.
+/// State shared while resolving one spec.
+///
+/// It holds the lookup tables, the memoised component expansions and the
+/// components currently being expanded.
 struct Resolver<'a> {
     spec: &'a Spec,
     fields_by_tag: HashMap<Tag, FieldIndex>,
@@ -95,7 +97,7 @@ impl<'a> Resolver<'a> {
     /// place, and checks that no tag appears in it twice.
     ///
     /// In a group instance the first member is required whatever its declared
-    /// flag: a component in first position becomes required, and the field
+    /// flag. A component in first position becomes required, and the field
     /// every instance starts with must be present.
     fn resolve_members(
         &mut self,
@@ -137,7 +139,7 @@ impl<'a> Resolver<'a> {
         Ok(resolved)
     }
 
-    /// Resolves a group: its count field in the enclosing scope, and its
+    /// Resolves a group's count field in the enclosing scope, and its
     /// instance members with requiredness relative to the instance.
     fn resolve_group(
         &mut self,
@@ -187,8 +189,7 @@ impl<'a> Resolver<'a> {
 }
 
 impl ResolvedMember {
-    /// The field this member starts with on the wire: the field itself, or
-    /// a group's count field.
+    /// The field this member starts with on the wire, or a group's count field.
     fn first_field(&self) -> FieldIndex {
         match self {
             ResolvedMember::Field { field_index, .. } => *field_index,
@@ -285,7 +286,7 @@ fn check_unique_tags(
 }
 
 /// Records where each tag in `members` appears, descending into group
-/// instances: a tag may appear only once in a message, at any depth.
+/// instances. A tag may appear only once in a message, at any depth.
 fn insert_unique_tags(
     members: &[ResolvedMember],
     context: &MemberContext,

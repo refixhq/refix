@@ -46,14 +46,13 @@ fn collect_groups<'a>(
     }
 }
 
-/// Whether a group gets a module: all do, except those declared directly
-/// in another group's instance.
+/// Whether a group gets a module. Groups declared directly in another
+/// group's instance don't.
 fn has_module(group: dictionary::Group<'_>) -> bool {
     !matches!(group.declared_in(), MemberContext::Group { .. })
 }
 
-/// The path of a group's module from the generated root: shared groups
-/// sit at the root, a message's own groups under the message's module.
+/// The path of a group's module from the generated root.
 fn module_path(group: dictionary::Group<'_>) -> Result<String, Error> {
     let name = group_name(group)?;
     match group.declared_in() {
@@ -138,9 +137,10 @@ fn emit_table(group: dictionary::Group<'_>, width: usize) -> Result<String, Erro
     Ok(format!("{head}\n{});\n", indent(&arguments.concat(), 1)))
 }
 
-/// The arguments of a group's `GroupTable::new`: its count tag, its
-/// delimiter, the tags its instances directly contain and the tables of
-/// its nested groups.
+/// The arguments of a group's `GroupTable::new`.
+///
+/// These are the count tag, the delimiter, the tags its instances directly
+/// contain and the tables of its nested groups.
 fn table_arguments(
     group: dictionary::Group<'_>,
 ) -> Result<(Tag, Tag, Vec<String>, Vec<String>), Error> {
@@ -165,8 +165,7 @@ fn table_arguments(
     ))
 }
 
-/// A nested group's table: its module's `TABLE`, or written out in place
-/// for a group without a module.
+/// A nested group's `TABLE`, written out in place for a group without a module.
 fn table_reference(group: dictionary::Group<'_>) -> Result<String, Error> {
     if has_module(group) {
         return Ok(format!("{}::TABLE", module_path(group)?));

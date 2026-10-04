@@ -133,8 +133,7 @@ pub enum Member<'a> {
     Field {
         /// The referenced field definition.
         field: &'a Field,
-        /// Whether the field is required, combined across every component
-        /// on the path to it: required only if required at every level.
+        /// Whether the field is required at every level on the path to it.
         is_required: bool,
     },
     Group(Group<'a>),
@@ -153,8 +152,10 @@ impl<'a> Group<'a> {
         &self.fields[self.resolved.count_field_index]
     }
 
-    /// The field every instance starts with: the instance's first field after
-    /// expansion, or a nested group's count field.
+    /// The field every instance starts with.
+    ///
+    /// That is the instance's first field after expansion, or a nested
+    /// group's count field.
     pub fn delimiter(&self) -> &'a Field {
         &self.fields[self.resolved.delimiter_index]
     }
@@ -165,8 +166,7 @@ impl<'a> Group<'a> {
         self.resolved.is_required
     }
 
-    /// Where the group's `<group>` element sits: a message, a component,
-    /// or another group's instance.
+    /// The message, component or group instance the `<group>` element sits in.
     pub fn declared_in(&self) -> &'a MemberContext {
         &self.resolved.declared_in
     }
