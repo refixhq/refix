@@ -7,7 +7,7 @@ use refix_message::{GroupTable, Instances, InvalidValue, KnownTags, RawMessage, 
 pub enum OrdType<'a> {
     Market,
     Limit,
-    Unknown(&'a [u8]),
+    Unrecognized(&'a [u8]),
 }
 
 impl<'a> OrdType<'a> {
@@ -15,7 +15,7 @@ impl<'a> OrdType<'a> {
         match bytes {
             b"1" => Self::Market,
             b"2" => Self::Limit,
-            unknown => Self::Unknown(unknown),
+            unrecognized => Self::Unrecognized(unrecognized),
         }
     }
 }

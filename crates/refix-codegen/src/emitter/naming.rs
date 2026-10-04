@@ -32,7 +32,8 @@ pub(super) fn variant_name(field: &Field, value: &EnumValue) -> Result<String, E
     let name = pascal_case(&value.description);
     let starts_with_letter = name.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
     let alphanumeric = name.chars().all(|c| c.is_ascii_alphanumeric());
-    if !starts_with_letter || !alphanumeric || name == "Self" {
+    // `Unrecognized` is taken by the catch-all variant.
+    if !starts_with_letter || !alphanumeric || matches!(name.as_str(), "Self" | "Unrecognized") {
         return Err(Error::UnrepresentableValue {
             field: field.name.clone(),
             description: value.description.clone(),
@@ -280,6 +281,11 @@ mod tests {
     #[test]
     fn self_is_an_error() {
         assert!(variant_of("SELF").is_err());
+    }
+
+    #[test]
+    fn unrecognized_is_an_error() {
+        assert!(variant_of("UNRECOGNIZED").is_err());
     }
 
     #[test]
