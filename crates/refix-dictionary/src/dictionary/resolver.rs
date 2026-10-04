@@ -38,6 +38,7 @@ struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     fn new(spec: &'a Spec) -> Result<Self, Error> {
+        check_int_values(&spec.fields)?;
         Ok(Self {
             spec,
             fields_by_tag: index_fields(&spec.fields)?,
@@ -222,6 +223,25 @@ fn index_fields(fields: &[Field]) -> Result<HashMap<Tag, FieldIndex>, Error> {
         }
     }
     Ok(by_tag)
+}
+
+/// Checks that every value listed for an int-based field is a FIX integer.
+fn check_int_values(fields: &[Field]) -> Result<(), Error> {
+    let int_fields = fields.iter().filter(|field| field.data_type.is_int_based());
+    for field in int_fields {
+        if let Some(value) = field.values.iter().find(|value| !is_integer(&value.value)) {
+            return Err(Error::NonIntegerValue {
+                field: field.name.clone(),
+                value: value.value.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn is_integer(value: &str) -> bool {
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) && value.parse::<i64>().is_ok()
 }
 
 fn index_components(
