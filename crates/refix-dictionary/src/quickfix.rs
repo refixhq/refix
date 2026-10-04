@@ -142,6 +142,14 @@ fn parse_data_type(name: String) -> DataType {
     match name.as_str() {
         "STRING" => DataType::String,
         "INT" => DataType::Int,
+        "LENGTH" => DataType::Length,
+        "NUMINGROUP" => DataType::NumInGroup,
+        "SEQNUM" => DataType::SeqNum,
+        "TAGNUM" => DataType::TagNum,
+        "DAYOFMONTH" => DataType::DayOfMonth,
+        "CHAR" => DataType::Char,
+        "MULTIPLECHARVALUE" => DataType::MultipleCharValue,
+        "MULTIPLESTRINGVALUE" | "MULTIPLEVALUESTRING" => DataType::MultipleStringValue,
         _ => DataType::Other(name),
     }
 }
@@ -539,7 +547,7 @@ mod tests {
                     Field {
                         name: "OrdType".to_owned(),
                         tag: Tag(40),
-                        data_type: DataType::Other("CHAR".to_owned()),
+                        data_type: DataType::Char,
                         values: vec![
                             EnumValue {
                                 value: "1".to_owned(),
@@ -553,6 +561,27 @@ mod tests {
                     },
                 ]
             );
+        }
+
+        #[test]
+        fn maps_type_names_to_data_types() {
+            let cases = [
+                ("STRING", DataType::String),
+                ("INT", DataType::Int),
+                ("LENGTH", DataType::Length),
+                ("NUMINGROUP", DataType::NumInGroup),
+                ("SEQNUM", DataType::SeqNum),
+                ("TAGNUM", DataType::TagNum),
+                ("DAYOFMONTH", DataType::DayOfMonth),
+                ("CHAR", DataType::Char),
+                ("MULTIPLECHARVALUE", DataType::MultipleCharValue),
+                ("MULTIPLESTRINGVALUE", DataType::MultipleStringValue),
+                ("MULTIPLEVALUESTRING", DataType::MultipleStringValue),
+                ("PRICE", DataType::Other("PRICE".to_owned())),
+            ];
+            for (name, data_type) in cases {
+                assert_eq!(parse_data_type(name.to_owned()), data_type, "{name}");
+            }
         }
 
         #[test]

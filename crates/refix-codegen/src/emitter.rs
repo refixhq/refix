@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn generates_a_complete_module() {
-        let mut ord_type = field("OrdType", 40, DataType::Other("CHAR".to_owned()));
+        let mut ord_type = field("OrdType", 40, DataType::Char);
         ord_type.values = vec![
             EnumValue {
                 value: "1".to_owned(),
@@ -272,13 +272,9 @@ impl NewOrderSingle {
             let mut spec = spec_of(
                 messages,
                 vec![
-                    field("NoPartyIDs", 453, DataType::Other("NUMINGROUP".to_owned())),
+                    field("NoPartyIDs", 453, DataType::NumInGroup),
                     field("PartyID", 448, DataType::String),
-                    field(
-                        "NoPartySubIDs",
-                        802,
-                        DataType::Other("NUMINGROUP".to_owned()),
-                    ),
+                    field("NoPartySubIDs", 802, DataType::NumInGroup),
                     field("PartySubID", 523, DataType::String),
                 ],
             );
@@ -442,7 +438,7 @@ impl NewOrderSingle {
                     vec![group(384, vec![field_ref(372)])],
                 )],
                 vec![
-                    field("NoMsgTypes", 384, DataType::Other("NUMINGROUP".to_owned())),
+                    field("NoMsgTypes", 384, DataType::NumInGroup),
                     field("RefMsgType", 372, DataType::String),
                 ],
             );

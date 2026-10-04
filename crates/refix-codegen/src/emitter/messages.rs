@@ -105,7 +105,7 @@ pub(super) fn emit_accessor(field: &Field, lifetime: Lifetime) -> Result<String,
         DataType::Int => format!(
             "    pub fn {name}(&self) -> Result<Option<i64>, InvalidValue> {{\n        self.0.get_int(Tag({tag}))\n    }}\n"
         ),
-        DataType::Other(_) => format!(
+        _ => format!(
             "    pub fn {name}(&self) -> Option<{reference}[u8]> {{\n        self.0.get(Tag({tag}))\n    }}\n"
         ),
     };

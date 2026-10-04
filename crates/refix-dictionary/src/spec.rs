@@ -131,8 +131,32 @@ pub struct EnumValue {
 pub enum DataType {
     String,
     Int,
+    Length,
+    NumInGroup,
+    SeqNum,
+    TagNum,
+    DayOfMonth,
+    Char,
+    MultipleCharValue,
+    /// Also FIX 4.4's `MultipleValueString`.
+    MultipleStringValue,
     /// A type no consumer interprets yet, e.g. `"PRICE"`.
     Other(String),
+}
+
+impl DataType {
+    /// Whether values are FIX `int`s: `Int` and its subtypes.
+    pub fn is_int_based(&self) -> bool {
+        matches!(
+            self,
+            Self::Int
+                | Self::Length
+                | Self::NumInGroup
+                | Self::SeqNum
+                | Self::TagNum
+                | Self::DayOfMonth
+        )
+    }
 }
 
 /// The FIX version a dictionary describes, e.g. FIX 4.4 or FIXT 1.1.
@@ -167,6 +191,32 @@ pub enum Category {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_int_family_is_int_based() {
+        for data_type in [
+            DataType::Int,
+            DataType::Length,
+            DataType::NumInGroup,
+            DataType::SeqNum,
+            DataType::TagNum,
+            DataType::DayOfMonth,
+        ] {
+            assert!(data_type.is_int_based(), "{data_type:?}");
+        }
+    }
+
+    #[test]
+    fn other_types_are_not_int_based() {
+        for data_type in [
+            DataType::String,
+            DataType::Char,
+            DataType::MultipleStringValue,
+            DataType::Other("PRICE".to_owned()),
+        ] {
+            assert!(!data_type.is_int_based(), "{data_type:?}");
+        }
+    }
 
     #[test]
     fn a_nested_group_context_names_its_whole_path() {
