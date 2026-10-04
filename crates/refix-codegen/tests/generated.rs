@@ -73,12 +73,15 @@ fn an_absent_field_reads_as_none() {
 }
 
 #[test]
-fn an_unknown_enum_value_is_representable() {
+fn an_unrecognized_enum_value_is_representable() {
     let raw = Tokenizer::default().tokenize(frame("35=D|40=X|")).unwrap();
 
     let order = NewOrderSingle::from_raw(raw);
 
-    assert_eq!(order.ord_type(), Some(OrdType::Unknown(b"X".as_slice())));
+    assert_eq!(
+        order.ord_type(),
+        Some(OrdType::Unrecognized(b"X".as_slice()))
+    );
 }
 
 #[test]
