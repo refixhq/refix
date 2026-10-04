@@ -93,6 +93,11 @@ pub(super) fn emit_accessor(field: &Field, lifetime: Lifetime) -> Result<String,
 
     if !field.values.is_empty() {
         let type_name = &field.name;
+        if field.data_type.is_multiple_value() {
+            return Ok(format!(
+                "    pub fn {name}(&self) -> Result<Option<MultipleValues<{type_lifetime}, {type_name}<{type_lifetime}>>>, InvalidValue> {{\n        self.0.get_multiple_values(Tag({tag}))\n    }}\n"
+            ));
+        }
         let (conversion, enum_type) = if field.data_type.is_int_based() {
             ("get_int", type_name.to_owned())
         } else {
@@ -177,6 +182,35 @@ mod tests {
         assert_eq!(
             scope_signature(&party_role),
             "pub fn party_role(&self) -> Result<Option<PartyRole>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn a_multiple_value_enum_reads_all_its_values() {
+        let exec_inst = with_value(field("ExecInst", 18, DataType::MultipleStringValue));
+        let accessor = emit_accessor(&exec_inst, Lifetime::Receiver).unwrap();
+
+        assert_eq!(
+            accessor,
+            "    pub fn exec_inst(&self) -> Result<Option<MultipleValues<'_, ExecInst<'_>>>, InvalidValue> {\n        self.0.get_multiple_values(Tag(18))\n    }\n"
+        );
+    }
+
+    #[test]
+    fn a_scope_multiple_value_enum_borrows_for_the_scope() {
+        let exec_inst = with_value(field("ExecInst", 18, DataType::MultipleCharValue));
+        assert_eq!(
+            scope_signature(&exec_inst),
+            "pub fn exec_inst(&self) -> Result<Option<MultipleValues<'a, ExecInst<'a>>>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn a_multiple_value_field_without_values_stays_raw() {
+        let exec_inst = field("ExecInst", 18, DataType::MultipleStringValue);
+        assert_eq!(
+            scope_signature(&exec_inst),
+            "pub fn exec_inst_raw(&self) -> Option<&'a [u8]> {"
         );
     }
 

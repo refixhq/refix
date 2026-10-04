@@ -10,7 +10,7 @@ use refix_dictionary::{Dictionary, dictionary};
 
 use enums::emit_enum;
 pub use error::Error;
-use groups::{emit_group_module, shared_groups};
+use groups::{emit_group_module, has_module, shared_groups};
 use messages::emit_message;
 pub use warning::Warning;
 
@@ -54,14 +54,33 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
             .members()
             .any(|member| matches!(member, dictionary::Member::Group(_)))
     });
-    let imports = if has_groups {
-        "use refix_message::{GroupTable, Instances, InvalidValue, KnownTags, RawMessage, Tag};"
-    } else {
-        "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
-    };
+    let mut imports = vec!["InvalidValue", "KnownTags", "RawMessage", "Tag"];
+    if has_groups {
+        imports.extend(["GroupTable", "Instances"]);
+    }
+    if dictionary
+        .messages()
+        .any(|message| reads_multiple_values(message.members()))
+    {
+        imports.push("MultipleValues");
+    }
+    imports.sort_unstable();
+    let imports = format!("use refix_message::{{{}}};", imports.join(", "));
     let code = format!("{header}\n{imports}\n\n{sections}");
 
     Ok(Generated { code, warnings })
+}
+
+/// Whether an accessor generated for `members` reads a multiple-value field.
+fn reads_multiple_values<'a>(mut members: impl Iterator<Item = dictionary::Member<'a>>) -> bool {
+    members.any(|member| match member {
+        dictionary::Member::Field { field, .. } => {
+            !field.values.is_empty() && field.data_type.is_multiple_value()
+        }
+        dictionary::Member::Group(group) => {
+            has_module(group) && reads_multiple_values(group.members())
+        }
+    })
 }
 
 #[cfg(test)]
@@ -214,6 +233,43 @@ impl NewOrderSingle {
         assert_eq!(
             generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code,
             expected
+        );
+    }
+
+    #[test]
+    fn imports_multiple_values_only_when_read() {
+        let mut exec_inst = field("ExecInst", 18, DataType::MultipleStringValue);
+        exec_inst.values = vec![EnumValue {
+            value: "1".to_owned(),
+            description: "NOT_HELD".to_owned(),
+        }];
+        let order = |members| Message {
+            name: "NewOrderSingle".to_owned(),
+            msg_type: "D".to_owned(),
+            members,
+            category: Category::App,
+        };
+        let reads = spec_of(
+            vec![order(vec![Member::Field(FieldRef {
+                tag: Tag(18),
+                is_required: false,
+            })])],
+            vec![exec_inst.clone()],
+        );
+        let unused = spec_of(vec![order(vec![])], vec![exec_inst]);
+
+        let imports = |spec: Spec| {
+            let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+            code.lines().nth(3).unwrap().to_owned()
+        };
+
+        assert_eq!(
+            imports(reads),
+            "use refix_message::{InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};"
+        );
+        assert_eq!(
+            imports(unused),
+            "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
         );
     }
 

@@ -156,6 +156,11 @@ impl DataType {
                 | Self::DayOfMonth
         )
     }
+
+    /// Whether the type holds space-delimited values, as `ExecInst(18)` does.
+    pub fn is_multiple_value(&self) -> bool {
+        matches!(self, Self::MultipleCharValue | Self::MultipleStringValue)
+    }
 }
 
 /// The FIX version a dictionary describes, e.g. FIX 4.4 or FIXT 1.1.
@@ -215,6 +220,14 @@ mod tests {
         ] {
             assert!(!data_type.is_int_based(), "{data_type:?}");
         }
+    }
+
+    #[test]
+    fn the_multiple_value_types_hold_multiple_values() {
+        assert!(DataType::MultipleCharValue.is_multiple_value());
+        assert!(DataType::MultipleStringValue.is_multiple_value());
+        assert!(!DataType::String.is_multiple_value());
+        assert!(!DataType::Char.is_multiple_value());
     }
 
     #[test]

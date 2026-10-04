@@ -48,7 +48,7 @@ fn collect_groups<'a>(
 
 /// Whether a group gets a module. Groups declared directly in another
 /// group's instance don't.
-fn has_module(group: dictionary::Group<'_>) -> bool {
+pub(super) fn has_module(group: dictionary::Group<'_>) -> bool {
     !matches!(group.declared_in(), MemberContext::Group { .. })
 }
 
