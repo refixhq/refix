@@ -133,8 +133,7 @@ pub enum Member<'a> {
     Field {
         /// The referenced field definition.
         field: &'a Field,
-        /// Whether the field is required, combined across every component
-        /// on the path to it: required only if required at every level.
+        /// Whether the field is required at every level on the path to it.
         is_required: bool,
     },
     Group(Group<'a>),
@@ -153,8 +152,10 @@ impl<'a> Group<'a> {
         &self.fields[self.resolved.count_field_index]
     }
 
-    /// The field every instance starts with: the instance's first field after
-    /// expansion, or a nested group's count field.
+    /// The field every instance starts with.
+    ///
+    /// That is the instance's first field after expansion, or a nested
+    /// group's count field.
     pub fn delimiter(&self) -> &'a Field {
         &self.fields[self.resolved.delimiter_index]
     }
@@ -165,8 +166,7 @@ impl<'a> Group<'a> {
         self.resolved.is_required
     }
 
-    /// Where the group's `<group>` element sits: a message, a component,
-    /// or another group's instance.
+    /// The message, component or group instance the `<group>` element sits in.
     pub fn declared_in(&self) -> &'a MemberContext {
         &self.resolved.declared_in
     }
@@ -613,6 +613,71 @@ mod tests {
             spec.resolve().unwrap_err(),
             Error::DuplicateTag { tag: Tag(11) }
         );
+    }
+
+    mod values {
+        use super::*;
+        use crate::EnumValue;
+
+        fn enum_field(data_type: DataType, values: &[&str]) -> Field {
+            Field {
+                name: "PartyRole".to_owned(),
+                tag: Tag(452),
+                data_type,
+                values: values
+                    .iter()
+                    .map(|value| EnumValue {
+                        value: (*value).to_owned(),
+                        description: format!("CODE_{value}"),
+                    })
+                    .collect(),
+            }
+        }
+
+        fn resolve(field: Field) -> Result<Dictionary, Error> {
+            spec_of(vec![field], vec![], vec![]).resolve()
+        }
+
+        #[test]
+        fn int_values_may_have_a_sign_and_leading_zeros() {
+            assert!(resolve(enum_field(DataType::Int, &["1", "-2", "007"])).is_ok());
+        }
+
+        #[test]
+        fn a_non_integer_value_of_an_int_field_is_an_error() {
+            assert_eq!(
+                resolve(enum_field(DataType::Int, &["1", "A"])).unwrap_err(),
+                Error::NonIntegerValue {
+                    field: "PartyRole".to_owned(),
+                    value: "A".to_owned(),
+                }
+            );
+        }
+
+        #[test]
+        fn every_int_based_type_is_checked() {
+            assert!(resolve(enum_field(DataType::NumInGroup, &["A"])).is_err());
+        }
+
+        #[test]
+        fn a_plus_sign_is_not_an_integer() {
+            assert!(resolve(enum_field(DataType::Int, &["+1"])).is_err());
+        }
+
+        #[test]
+        fn a_value_beyond_i64_is_not_an_integer() {
+            assert!(resolve(enum_field(DataType::Int, &["9223372036854775808"])).is_err());
+        }
+
+        #[test]
+        fn a_lone_minus_is_not_an_integer() {
+            assert!(resolve(enum_field(DataType::Int, &["-"])).is_err());
+        }
+
+        #[test]
+        fn values_of_other_types_are_not_checked() {
+            assert!(resolve(enum_field(DataType::Char, &["A"])).is_ok());
+        }
     }
 
     mod groups {

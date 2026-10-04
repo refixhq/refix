@@ -11,7 +11,7 @@ use refix_message::{InvalidValue, Tag, Tokenizer};
 #[path = "data/toy_generated.rs"]
 mod toy;
 
-use toy::{Logon, NewOrderSingle, OrdType};
+use toy::{ExecInst, Logon, NewOrderSingle, OrdType, PartyRole};
 
 const TOY_XML: &str = include_str!("data/toy.xml");
 const TOY_GENERATED: &str = include_str!("data/toy_generated.rs");
@@ -56,7 +56,7 @@ fn typed_reads_over_a_tokenized_frame() {
     assert_eq!(order.cl_ord_id(), Ok(Some("ORDER-1")));
     assert_eq!(order.order_qty(), Ok(Some(200)));
     assert_eq!(order.price_raw(), Some(b"101.5".as_slice()));
-    assert_eq!(order.ord_type(), Some(OrdType::Market));
+    assert_eq!(order.ord_type(), Ok(Some(OrdType::Market)));
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn an_absent_field_reads_as_none() {
 
     assert_eq!(order.order_qty(), Ok(None));
     assert_eq!(order.price_raw(), None);
-    assert_eq!(order.ord_type(), None);
+    assert_eq!(order.ord_type(), Ok(None));
 }
 
 #[test]
@@ -78,10 +78,7 @@ fn an_unrecognized_enum_value_is_representable() {
 
     let order = NewOrderSingle::from_raw(raw);
 
-    assert_eq!(
-        order.ord_type(),
-        Some(OrdType::Unrecognized(b"X".as_slice()))
-    );
+    assert_eq!(order.ord_type(), Ok(Some(OrdType::Unrecognized("X"))));
 }
 
 #[test]
@@ -157,4 +154,81 @@ fn reads_a_group_declared_in_its_message() {
         .map(|msg_type| msg_type.ref_msg_type().unwrap())
         .collect();
     assert_eq!(msg_types, [Some("D"), Some("8")]);
+}
+
+#[test]
+fn an_int_coded_enum_reads_by_value() {
+    let raw = Tokenizer::default()
+        .tokenize(frame(
+            "35=D|453=3|448=AL|452=3|448=BO|452=03|448=CY|452=99|",
+        ))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    let roles: Vec<Option<PartyRole>> = order
+        .parties()
+        .unwrap()
+        .iter()
+        .map(|party| party.party_role().unwrap())
+        .collect();
+    assert_eq!(
+        roles,
+        [
+            Some(PartyRole::ClientId),
+            Some(PartyRole::ClientId),
+            Some(PartyRole::Unrecognized(99)),
+        ]
+    );
+    assert_eq!(PartyRole::ClientId.value(), 3);
+}
+
+#[test]
+fn a_non_integer_int_coded_enum_is_an_error() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|453=1|448=AL|452=X|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+    let parties = order.parties().unwrap();
+
+    assert_eq!(
+        parties.get(0).unwrap().party_role(),
+        Err(InvalidValue { tag: Tag(452) })
+    );
+}
+
+#[test]
+fn a_multiple_value_field_reads_every_value() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|18=1 6 Z|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+    let exec_inst = order.exec_inst().unwrap().unwrap();
+
+    let values: Vec<ExecInst<'_>> = exec_inst.iter().collect();
+    assert_eq!(
+        values,
+        [
+            ExecInst::NotHeld,
+            ExecInst::ParticipateDontInitiate,
+            ExecInst::Unrecognized("Z"),
+        ]
+    );
+    assert!(exec_inst.contains(ExecInst::NotHeld));
+}
+
+#[test]
+fn badly_spaced_multiple_values_are_an_error() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|18=1  6|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(
+        order.exec_inst().unwrap_err(),
+        InvalidValue { tag: Tag(18) }
+    );
 }

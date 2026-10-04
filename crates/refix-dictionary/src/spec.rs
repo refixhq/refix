@@ -1,8 +1,8 @@
 use refix_message::Tag;
 use std::fmt;
 
-/// A FIX data dictionary as authored: the field, message and component
-/// definitions of one FIX version or venue dialect.
+/// The field, message and component definitions of one FIX version or venue
+/// dialect, as authored.
 ///
 /// A spec is plain data and makes no consistency guarantees. It is what
 /// frontends parse into and what dialect authors construct by hand.
@@ -82,8 +82,7 @@ pub struct Group {
     pub members: Vec<Member>,
 }
 
-/// The owner of a member list: the message, component or group instance a
-/// member appears in.
+/// The message, component or group instance a member appears in.
 ///
 /// Diagnostics use this to name the place a problem was found.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -131,8 +130,37 @@ pub struct EnumValue {
 pub enum DataType {
     String,
     Int,
+    Length,
+    NumInGroup,
+    SeqNum,
+    TagNum,
+    DayOfMonth,
+    Char,
+    MultipleCharValue,
+    /// Also FIX 4.4's `MultipleValueString`.
+    MultipleStringValue,
     /// A type no consumer interprets yet, e.g. `"PRICE"`.
     Other(String),
+}
+
+impl DataType {
+    /// Whether the type is `Int` or one of its subtypes.
+    pub fn is_int_based(&self) -> bool {
+        matches!(
+            self,
+            Self::Int
+                | Self::Length
+                | Self::NumInGroup
+                | Self::SeqNum
+                | Self::TagNum
+                | Self::DayOfMonth
+        )
+    }
+
+    /// Whether the type holds space-delimited values, as `ExecInst(18)` does.
+    pub fn is_multiple_value(&self) -> bool {
+        matches!(self, Self::MultipleCharValue | Self::MultipleStringValue)
+    }
 }
 
 /// The FIX version a dictionary describes, e.g. FIX 4.4 or FIXT 1.1.
@@ -167,6 +195,40 @@ pub enum Category {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_int_family_is_int_based() {
+        for data_type in [
+            DataType::Int,
+            DataType::Length,
+            DataType::NumInGroup,
+            DataType::SeqNum,
+            DataType::TagNum,
+            DataType::DayOfMonth,
+        ] {
+            assert!(data_type.is_int_based(), "{data_type:?}");
+        }
+    }
+
+    #[test]
+    fn other_types_are_not_int_based() {
+        for data_type in [
+            DataType::String,
+            DataType::Char,
+            DataType::MultipleStringValue,
+            DataType::Other("PRICE".to_owned()),
+        ] {
+            assert!(!data_type.is_int_based(), "{data_type:?}");
+        }
+    }
+
+    #[test]
+    fn the_multiple_value_types_hold_multiple_values() {
+        assert!(DataType::MultipleCharValue.is_multiple_value());
+        assert!(DataType::MultipleStringValue.is_multiple_value());
+        assert!(!DataType::String.is_multiple_value());
+        assert!(!DataType::Char.is_multiple_value());
+    }
 
     #[test]
     fn a_nested_group_context_names_its_whole_path() {

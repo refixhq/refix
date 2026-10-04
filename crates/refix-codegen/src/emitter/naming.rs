@@ -5,7 +5,7 @@ use crate::{pascal_case, snake_case};
 
 pub(super) fn method_name(field: &Field) -> Result<String, Error> {
     let mut name = snake_case(&field.name);
-    if field.values.is_empty() && matches!(field.data_type, DataType::Other(_)) {
+    if field.values.is_empty() && !matches!(field.data_type, DataType::String | DataType::Int) {
         name.push_str("_raw");
     }
     identifier(name).ok_or_else(|| Error::UnrepresentableName {
@@ -49,7 +49,7 @@ pub(super) fn message_module_name(message: &str) -> Result<String, Error> {
     })
 }
 
-/// Strips a `No` that starts a word: `NoPartyIDs`, but not `Notional`.
+/// Strips a `No` that starts a word, as in `NoPartyIDs` but not `Notional`.
 fn without_no_prefix(name: &str) -> Option<&str> {
     name.strip_prefix("No")
         .filter(|rest| rest.starts_with(|c: char| c.is_ascii_uppercase()))
@@ -99,10 +99,7 @@ mod tests {
             value: "1".to_owned(),
             description: description.to_owned(),
         };
-        variant_name(
-            &field("OrdType", 40, DataType::Other("CHAR".to_owned())),
-            &value,
-        )
+        variant_name(&field("OrdType", 40, DataType::Char), &value)
     }
 
     /// Names a group counted by `count_field`, declared inline in a message
@@ -143,7 +140,7 @@ mod tests {
                 category: Category::App,
             }],
             fields: vec![
-                field(count_field, 453, DataType::Other("NUMINGROUP".to_owned())),
+                field(count_field, 453, DataType::NumInGroup),
                 field("PartyID", 448, DataType::String),
             ],
             components,
@@ -183,6 +180,12 @@ mod tests {
                 field: "Self".to_owned(),
             }
         );
+    }
+
+    #[test]
+    fn an_unclaimed_type_takes_the_suffix_even_when_modelled() {
+        let name = method_name(&field("SettlType", 63, DataType::Char));
+        assert_eq!(name.unwrap(), "settl_type_raw");
     }
 
     #[test]
@@ -301,7 +304,7 @@ mod tests {
 
     #[test]
     fn an_enum_field_takes_the_plain_name() {
-        let mut enum_field = field("OrdType", 40, DataType::Other("CHAR".to_owned()));
+        let mut enum_field = field("OrdType", 40, DataType::Char);
         enum_field.values = vec![EnumValue {
             value: "1".to_owned(),
             description: "MARKET".to_owned(),

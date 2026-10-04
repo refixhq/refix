@@ -8,6 +8,11 @@ pub enum Error {
     DuplicateTag {
         tag: Tag,
     },
+    /// A value listed for an int-based field that is not a FIX integer.
+    NonIntegerValue {
+        field: String,
+        value: String,
+    },
     DuplicateComponent {
         component: String,
     },
@@ -37,6 +42,9 @@ impl fmt::Display for Error {
         match self {
             Error::DuplicateTag { tag } => {
                 write!(f, "tag {tag} is defined more than once")
+            }
+            Error::NonIntegerValue { field, value } => {
+                write!(f, "value '{value}' of field '{field}' is not an integer")
             }
             Error::DuplicateComponent { component } => {
                 write!(f, "component '{component}' is defined more than once")

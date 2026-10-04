@@ -10,12 +10,11 @@ use refix_dictionary::{Dictionary, dictionary};
 
 use enums::emit_enum;
 pub use error::Error;
-use groups::{emit_group_module, shared_groups};
+use groups::{emit_group_module, has_module, shared_groups};
 use messages::emit_message;
 pub use warning::Warning;
 
-/// The result of a successful generation: the generated module, plus any
-/// [`Warning`] produced along the way.
+/// The generated module and any [`Warning`] produced along the way.
 #[derive(Debug)]
 pub struct Generated {
     pub code: String,
@@ -55,14 +54,33 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
             .members()
             .any(|member| matches!(member, dictionary::Member::Group(_)))
     });
-    let imports = if has_groups {
-        "use refix_message::{GroupTable, Instances, InvalidValue, KnownTags, RawMessage, Tag};"
-    } else {
-        "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
-    };
+    let mut imports = vec!["InvalidValue", "KnownTags", "RawMessage", "Tag"];
+    if has_groups {
+        imports.extend(["GroupTable", "Instances"]);
+    }
+    if dictionary
+        .messages()
+        .any(|message| reads_multiple_values(message.members()))
+    {
+        imports.push("MultipleValues");
+    }
+    imports.sort_unstable();
+    let imports = format!("use refix_message::{{{}}};", imports.join(", "));
     let code = format!("{header}\n{imports}\n\n{sections}");
 
     Ok(Generated { code, warnings })
+}
+
+/// Whether an accessor generated for `members` reads a multiple-value field.
+fn reads_multiple_values<'a>(mut members: impl Iterator<Item = dictionary::Member<'a>>) -> bool {
+    members.any(|member| match member {
+        dictionary::Member::Field { field, .. } => {
+            !field.values.is_empty() && field.data_type.is_multiple_value()
+        }
+        dictionary::Member::Group(group) => {
+            has_module(group) && reads_multiple_values(group.members())
+        }
+    })
 }
 
 #[cfg(test)]
@@ -98,7 +116,7 @@ mod tests {
 
     #[test]
     fn generates_a_complete_module() {
-        let mut ord_type = field("OrdType", 40, DataType::Other("CHAR".to_owned()));
+        let mut ord_type = field("OrdType", 40, DataType::Char);
         ord_type.values = vec![
             EnumValue {
                 value: "1".to_owned(),
@@ -146,20 +164,34 @@ mod tests {
 
 use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrdType<'a> {
     Market,
     Limit,
-    Unrecognized(&'a [u8]),
+    Unrecognized(&'a str),
 }
 
 impl<'a> OrdType<'a> {
-    pub fn from_bytes(bytes: &'a [u8]) -> Self {
-        match bytes {
-            b"1" => Self::Market,
-            b"2" => Self::Limit,
+    pub fn from_value(value: &'a str) -> Self {
+        match value {
+            "1" => Self::Market,
+            "2" => Self::Limit,
             unrecognized => Self::Unrecognized(unrecognized),
         }
+    }
+
+    pub fn value(self) -> &'a str {
+        match self {
+            Self::Market => "1",
+            Self::Limit => "2",
+            Self::Unrecognized(value) => value,
+        }
+    }
+}
+
+impl<'a> From<&'a str> for OrdType<'a> {
+    fn from(value: &'a str) -> Self {
+        Self::from_value(value)
     }
 }
 
@@ -192,8 +224,8 @@ impl NewOrderSingle {
         self.0.get(Tag(44))
     }
 
-    pub fn ord_type(&self) -> Option<OrdType<'_>> {
-        self.0.get(Tag(40)).map(OrdType::from_bytes)
+    pub fn ord_type(&self) -> Result<Option<OrdType<'_>>, InvalidValue> {
+        Ok(self.0.get_str(Tag(40))?.map(OrdType::from_value))
     }
 }
 "#;
@@ -201,6 +233,43 @@ impl NewOrderSingle {
         assert_eq!(
             generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code,
             expected
+        );
+    }
+
+    #[test]
+    fn imports_multiple_values_only_when_read() {
+        let mut exec_inst = field("ExecInst", 18, DataType::MultipleStringValue);
+        exec_inst.values = vec![EnumValue {
+            value: "1".to_owned(),
+            description: "NOT_HELD".to_owned(),
+        }];
+        let order = |members| Message {
+            name: "NewOrderSingle".to_owned(),
+            msg_type: "D".to_owned(),
+            members,
+            category: Category::App,
+        };
+        let reads = spec_of(
+            vec![order(vec![Member::Field(FieldRef {
+                tag: Tag(18),
+                is_required: false,
+            })])],
+            vec![exec_inst.clone()],
+        );
+        let unused = spec_of(vec![order(vec![])], vec![exec_inst]);
+
+        let imports = |spec: Spec| {
+            let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+            code.lines().nth(3).unwrap().to_owned()
+        };
+
+        assert_eq!(
+            imports(reads),
+            "use refix_message::{InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};"
+        );
+        assert_eq!(
+            imports(unused),
+            "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
         );
     }
 
@@ -272,13 +341,9 @@ impl NewOrderSingle {
             let mut spec = spec_of(
                 messages,
                 vec![
-                    field("NoPartyIDs", 453, DataType::Other("NUMINGROUP".to_owned())),
+                    field("NoPartyIDs", 453, DataType::NumInGroup),
                     field("PartyID", 448, DataType::String),
-                    field(
-                        "NoPartySubIDs",
-                        802,
-                        DataType::Other("NUMINGROUP".to_owned()),
-                    ),
+                    field("NoPartySubIDs", 802, DataType::NumInGroup),
                     field("PartySubID", 523, DataType::String),
                 ],
             );
@@ -442,7 +507,7 @@ impl NewOrderSingle {
                     vec![group(384, vec![field_ref(372)])],
                 )],
                 vec![
-                    field("NoMsgTypes", 384, DataType::Other("NUMINGROUP".to_owned())),
+                    field("NoMsgTypes", 384, DataType::NumInGroup),
                     field("RefMsgType", 372, DataType::String),
                 ],
             );
