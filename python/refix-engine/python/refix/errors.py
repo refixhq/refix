@@ -45,3 +45,14 @@ class TrailingBytesError(TokenizeError):
 
 class TooLargeToIndexError(TokenizeError):
     """The frame is too long for the index's offsets to address."""
+
+
+class InvalidValueError(ValueError):
+    """A field's bytes cannot be read as its declared type."""
+
+    def __init__(self, tag: int) -> None:
+        super().__init__(tag)
+        self.tag = tag
+
+    def __str__(self) -> str:
+        return f"invalid value in field {self.tag}"
