@@ -56,7 +56,7 @@ fn typed_reads_over_a_tokenized_frame() {
     assert_eq!(order.cl_ord_id(), Ok(Some("ORDER-1")));
     assert_eq!(order.order_qty(), Ok(Some(200)));
     assert_eq!(order.price_raw(), Some(b"101.5".as_slice()));
-    assert_eq!(order.ord_type(), Some(OrdType::Market));
+    assert_eq!(order.ord_type(), Ok(Some(OrdType::Market)));
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn an_absent_field_reads_as_none() {
 
     assert_eq!(order.order_qty(), Ok(None));
     assert_eq!(order.price_raw(), None);
-    assert_eq!(order.ord_type(), None);
+    assert_eq!(order.ord_type(), Ok(None));
 }
 
 #[test]
@@ -78,10 +78,7 @@ fn an_unrecognized_enum_value_is_representable() {
 
     let order = NewOrderSingle::from_raw(raw);
 
-    assert_eq!(
-        order.ord_type(),
-        Some(OrdType::Unrecognized(b"X".as_slice()))
-    );
+    assert_eq!(order.ord_type(), Ok(Some(OrdType::Unrecognized("X"))));
 }
 
 #[test]

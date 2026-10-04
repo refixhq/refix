@@ -146,20 +146,34 @@ mod tests {
 
 use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrdType<'a> {
     Market,
     Limit,
-    Unrecognized(&'a [u8]),
+    Unrecognized(&'a str),
 }
 
 impl<'a> OrdType<'a> {
-    pub fn from_bytes(bytes: &'a [u8]) -> Self {
-        match bytes {
-            b"1" => Self::Market,
-            b"2" => Self::Limit,
+    pub fn from_value(value: &'a str) -> Self {
+        match value {
+            "1" => Self::Market,
+            "2" => Self::Limit,
             unrecognized => Self::Unrecognized(unrecognized),
         }
+    }
+
+    pub fn value(self) -> &'a str {
+        match self {
+            Self::Market => "1",
+            Self::Limit => "2",
+            Self::Unrecognized(value) => value,
+        }
+    }
+}
+
+impl<'a> From<&'a str> for OrdType<'a> {
+    fn from(value: &'a str) -> Self {
+        Self::from_value(value)
     }
 }
 
@@ -192,8 +206,8 @@ impl NewOrderSingle {
         self.0.get(Tag(44))
     }
 
-    pub fn ord_type(&self) -> Option<OrdType<'_>> {
-        self.0.get(Tag(40)).map(OrdType::from_bytes)
+    pub fn ord_type(&self) -> Result<Option<OrdType<'_>>, InvalidValue> {
+        Ok(self.0.get_str(Tag(40))?.map(OrdType::from_value))
     }
 }
 "#;

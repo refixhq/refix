@@ -93,8 +93,13 @@ pub(super) fn emit_accessor(field: &Field, lifetime: Lifetime) -> Result<String,
 
     if !field.values.is_empty() {
         let type_name = &field.name;
+        let (conversion, enum_type) = if field.data_type.is_int_based() {
+            ("get_int", type_name.to_owned())
+        } else {
+            ("get_str", format!("{type_name}<{type_lifetime}>"))
+        };
         return Ok(format!(
-            "    pub fn {name}(&self) -> Option<{type_name}<{type_lifetime}>> {{\n        self.0.get(Tag({tag})).map({type_name}::from_bytes)\n    }}\n"
+            "    pub fn {name}(&self) -> Result<Option<{enum_type}>, InvalidValue> {{\n        Ok(self.0.{conversion}(Tag({tag}))?.map({type_name}::from_value))\n    }}\n"
         ));
     }
 
@@ -149,16 +154,48 @@ mod tests {
         );
     }
 
+    fn with_value(mut field: Field) -> Field {
+        field.values = vec![EnumValue {
+            value: "1".to_owned(),
+            description: "FIRST".to_owned(),
+        }];
+        field
+    }
+
     #[test]
     fn a_scope_enum_borrows_for_the_scope() {
-        let mut party_role = field("PartyRole", 452, DataType::Int);
-        party_role.values = vec![EnumValue {
-            value: "1".to_owned(),
-            description: "EXECUTING_FIRM".to_owned(),
-        }];
+        let ord_type = with_value(field("OrdType", 40, DataType::Char));
+        assert_eq!(
+            scope_signature(&ord_type),
+            "pub fn ord_type(&self) -> Result<Option<OrdType<'a>>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn an_int_coded_enum_borrows_nothing() {
+        let party_role = with_value(field("PartyRole", 452, DataType::Int));
         assert_eq!(
             scope_signature(&party_role),
-            "pub fn party_role(&self) -> Option<PartyRole<'a>> {"
+            "pub fn party_role(&self) -> Result<Option<PartyRole>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn an_enum_reads_through_its_base_type() {
+        let party_role = with_value(field("PartyRole", 452, DataType::NumInGroup));
+        let ord_type = with_value(field("OrdType", 40, DataType::Char));
+        let body = |field: &Field| {
+            let accessor = emit_accessor(field, Lifetime::Receiver).unwrap();
+            accessor.lines().nth(1).unwrap().trim().to_owned()
+        };
+
+        assert_eq!(
+            body(&party_role),
+            "Ok(self.0.get_int(Tag(452))?.map(PartyRole::from_value))"
+        );
+        assert_eq!(
+            body(&ord_type),
+            "Ok(self.0.get_str(Tag(40))?.map(OrdType::from_value))"
         );
     }
 }
