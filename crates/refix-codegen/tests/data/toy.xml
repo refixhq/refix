@@ -6,6 +6,7 @@
       <component name="OrderQtyData" required="N"/>
       <field name="Price" required="N"/>
       <field name="OrdType" required="N"/>
+      <field name="ExecInst" required="N"/>
     </message>
     <message name="Logon" msgtype="A" msgcat="admin">
       <group name="NoMsgTypes" required="N">
@@ -17,6 +18,7 @@
     <component name="Parties">
       <group name="NoPartyIDs" required="N">
         <field name="PartyID" required="N"/>
+        <field name="PartyRole" required="N"/>
         <component name="PtysSubGrp" required="N"/>
       </group>
     </component>
@@ -37,8 +39,16 @@
       <value enum="1" description="MARKET"/>
       <value enum="2" description="LIMIT"/>
     </field>
+    <field number="18" name="ExecInst" type="MULTIPLEVALUESTRING">
+      <value enum="1" description="NOT_HELD"/>
+      <value enum="6" description="PARTICIPATE_DONT_INITIATE"/>
+    </field>
     <field number="453" name="NoPartyIDs" type="NUMINGROUP"/>
     <field number="448" name="PartyID" type="STRING"/>
+    <field number="452" name="PartyRole" type="INT">
+      <value enum="1" description="EXECUTING_FIRM"/>
+      <value enum="3" description="CLIENT_ID"/>
+    </field>
     <field number="802" name="NoPartySubIDs" type="NUMINGROUP"/>
     <field number="523" name="PartySubID" type="STRING"/>
     <field number="384" name="NoMsgTypes" type="NUMINGROUP"/>
