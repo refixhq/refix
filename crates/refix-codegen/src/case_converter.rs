@@ -2,8 +2,9 @@
 ///
 /// Acronym runs stay together, with the last capital starting the next
 /// word when lowercase follows (`ClOrdID` -> `cl_ord_id`, `MDEntryPx` ->
-/// `md_entry_px`). Digits attach to the preceding word (`Nested2PartyID`
-/// -> `nested2_party_id`).
+/// `md_entry_px`), and a lone `s` stays with the acronym it pluralises
+/// (`NoPartyIDs` -> `no_party_ids`). Digits attach to the preceding word
+/// (`Nested2PartyID` -> `nested2_party_id`).
 pub fn snake_case(name: &str) -> String {
     let mut converted = String::with_capacity(name.len() + 4);
     let mut chars = name.chars().peekable();
@@ -13,7 +14,8 @@ pub fn snake_case(name: &str) -> String {
         if current.is_ascii_uppercase() {
             let after_word = previous.is_some_and(|p| p.is_ascii_lowercase() || p.is_ascii_digit());
             let ends_acronym = previous.is_some_and(|p| p.is_ascii_uppercase())
-                && chars.peek().is_some_and(|n| n.is_ascii_lowercase());
+                && chars.peek().is_some_and(|n| n.is_ascii_lowercase())
+                && !pluralizes(chars.clone());
             if after_word || ends_acronym {
                 converted.push('_');
             }
@@ -25,6 +27,12 @@ pub fn snake_case(name: &str) -> String {
     }
 
     converted
+}
+
+/// Whether the rest of a name opens with a lone `s`, the plural of the
+/// acronym before it.
+fn pluralizes(mut rest: impl Iterator<Item = char>) -> bool {
+    rest.next() == Some('s') && !rest.next().is_some_and(|c| c.is_ascii_lowercase())
 }
 
 /// Converts a UPPER_CASE_SNAKE enum value description to a PascalCase
@@ -86,6 +94,16 @@ mod tests {
     #[test]
     fn splits_after_an_acronym_at_the_start() {
         assert_eq!(snake_case("XMLData"), "xml_data");
+    }
+
+    #[test]
+    fn keeps_a_plural_acronym_together() {
+        assert_eq!(snake_case("NoPartyIDs"), "no_party_ids");
+    }
+
+    #[test]
+    fn splits_a_plural_acronym_from_the_next_word() {
+        assert_eq!(snake_case("PartyIDsSource"), "party_ids_source");
     }
 
     #[test]
