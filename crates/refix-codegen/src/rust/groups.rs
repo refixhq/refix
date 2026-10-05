@@ -1,9 +1,10 @@
 use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
+use super::Error;
 use super::layout::{MAX_WIDTH, indent, slice};
 use super::messages::{Lifetime, emit_accessor};
 use super::naming::{group_name, message_module_name};
-use super::{Error, Warning};
+use crate::Warning;
 
 /// The groups declared in components, each once, in order of first
 /// appearance across the messages.

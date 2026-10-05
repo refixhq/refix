@@ -39,7 +39,7 @@ fn run(args: &Args) -> Result<(), String> {
         .file_name()
         .map(|name| name.to_string_lossy())
         .unwrap_or_else(|| args.dictionary.to_string_lossy());
-    let generated = refix_codegen::generate(&parsed.dictionary, &source)
+    let generated = refix_codegen::rust::generate(&parsed.dictionary, &source)
         .map_err(|error| format!("cannot generate from '{dictionary_path}': {error}"))?;
 
     for warning in &generated.warnings {

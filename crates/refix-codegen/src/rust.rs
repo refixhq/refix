@@ -4,22 +4,14 @@ mod groups;
 mod layout;
 mod messages;
 mod naming;
-mod warning;
 
 use refix_dictionary::{Dictionary, dictionary};
 
+use crate::Generated;
 use enums::emit_enum;
 pub use error::Error;
 use groups::{emit_group_module, has_module, shared_groups};
 use messages::emit_message;
-pub use warning::Warning;
-
-/// The generated module and any [`Warning`] produced along the way.
-#[derive(Debug)]
-pub struct Generated {
-    pub code: String,
-    pub warnings: Vec<Warning>,
-}
 
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Error> {
     let mut warnings = Vec::new();
@@ -86,6 +78,7 @@ fn reads_multiple_values<'a>(mut members: impl Iterator<Item = dictionary::Membe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Warning;
     use refix_dictionary::{
         Category, DataType, EnumValue, Field, FieldRef, Group, Member, MemberContext, Message,
         Protocol, Spec, Tag, Version,

@@ -2,7 +2,7 @@
 //! end to end: dictionary XML to generated code to reads over a frame.
 
 use bytes::Bytes;
-use refix_codegen::generate;
+use refix_codegen::rust::generate;
 use refix_dictionary::quickfix;
 use refix_message::{InvalidValue, Tag, Tokenizer};
 

@@ -3,7 +3,13 @@
 //! kept fresh by tests that regenerate and compare.
 
 mod case_converter;
-mod rust;
+mod generated;
+mod naming;
+pub mod rust;
+#[cfg(test)]
+mod test_utils;
+mod warning;
 
 pub use case_converter::{pascal_case, snake_case};
-pub use rust::{Error, Generated, Warning, generate};
+pub use generated::Generated;
+pub use warning::Warning;
