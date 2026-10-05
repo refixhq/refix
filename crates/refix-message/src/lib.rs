@@ -10,7 +10,9 @@ mod test_utils;
 mod tokenizer;
 mod value;
 
-pub use group::{Group, GroupLayout, GroupTable, Instances, KnownTags};
+pub use group::{
+    Group, GroupLayout, GroupTable, GroupTableError, Instances, KnownTags, OwnedGroupTable,
+};
 pub use message::{RawMessage, Scope};
 pub use multiple_values::MultipleValues;
 pub use stream::MessageStream;

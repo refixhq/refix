@@ -1,5 +1,8 @@
+mod error;
+
 use crate::message::{Scope, Slot};
 use crate::{InvalidValue, RawMessage, Tag};
+pub use error::GroupTableError;
 use layout::Layout;
 use std::fmt;
 use std::marker::PhantomData;
@@ -9,8 +12,8 @@ const CHECK_SUM: Tag = Tag(10);
 
 /// The structure of a repeating group.
 ///
-/// Codegen emits these as `const` items.
-/// A dictionary loaded at runtime can build them borrowing from itself.
+/// Codegen emits these as `const` items. Tables built at runtime are
+/// [`OwnedGroupTable`]s.
 #[derive(Clone, Copy, Debug)]
 pub struct GroupTable<'a> {
     count_tag: Tag,
@@ -59,7 +62,8 @@ impl<'a> GroupTable<'a> {
     }
 }
 
-/// A group table the walker can follow.
+/// A group table the walker can follow, a [`GroupTable`] or an
+/// [`OwnedGroupTable`].
 ///
 /// Sealed: only this crate implements it.
 pub trait GroupLayout: Layout {}
@@ -76,9 +80,72 @@ mod layout {
     }
 }
 
+/// A [`GroupTable`] that owns its tags, built at runtime.
+#[derive(Clone, Debug)]
+pub struct OwnedGroupTable {
+    count_tag: Tag,
+    delimiter: Tag,
+    members: Vec<Tag>,
+    nested: Vec<OwnedGroupTable>,
+}
+
+impl OwnedGroupTable {
+    /// A group counted by `count_tag`, whose instances start with
+    /// `delimiter` and directly contain `members`.
+    ///
+    /// Fails where [`GroupTable::new`] panics.
+    pub fn new(
+        count_tag: Tag,
+        delimiter: Tag,
+        members: Vec<Tag>,
+        nested: Vec<OwnedGroupTable>,
+    ) -> Result<Self, GroupTableError> {
+        if !is_sorted_set(&members) {
+            return Err(GroupTableError::UnsortedMembers);
+        }
+        if !contains(&members, delimiter) {
+            return Err(GroupTableError::DelimiterNotMember { delimiter });
+        }
+        if let Some(nested) = nested
+            .iter()
+            .find(|nested| !contains(&members, nested.count_tag))
+        {
+            return Err(GroupTableError::NestedCountNotMember {
+                count_tag: nested.count_tag,
+            });
+        }
+        Ok(Self {
+            count_tag,
+            delimiter,
+            members,
+            nested,
+        })
+    }
+}
+
 impl GroupLayout for GroupTable<'_> {}
 
+impl GroupLayout for OwnedGroupTable {}
+
 impl Layout for GroupTable<'_> {
+    fn count_tag(&self) -> Tag {
+        self.count_tag
+    }
+
+    fn delimiter(&self) -> Tag {
+        self.delimiter
+    }
+
+    fn is_member(&self, tag: Tag) -> bool {
+        self.members.binary_search(&tag).is_ok()
+    }
+
+    fn nested_counted_by(&self, tag: Tag) -> Option<&Self> {
+        self.nested.iter().find(|nested| nested.count_tag == tag)
+    }
+}
+
+impl Layout for OwnedGroupTable {
     fn count_tag(&self) -> Tag {
         self.count_tag
     }
@@ -809,6 +876,89 @@ mod tests {
         #[should_panic(expected = "known tags must be sorted and unique")]
         fn duplicate_known_tags_are_rejected() {
             KnownTags::new(&[Tag(35), Tag(35)]);
+        }
+    }
+
+    mod owned {
+        use super::*;
+
+        fn owned(
+            count_tag: u32,
+            delimiter: u32,
+            members: &[u32],
+            nested: Vec<OwnedGroupTable>,
+        ) -> Result<OwnedGroupTable, GroupTableError> {
+            let members = members.iter().map(|&tag| Tag(tag)).collect();
+            OwnedGroupTable::new(Tag(count_tag), Tag(delimiter), members, nested)
+        }
+
+        fn party_sub_ids() -> OwnedGroupTable {
+            owned(802, 523, &[523, 803], vec![]).unwrap()
+        }
+
+        fn parties() -> OwnedGroupTable {
+            owned(453, 448, &[447, 448, 452, 802], vec![party_sub_ids()]).unwrap()
+        }
+
+        #[test]
+        fn walks_like_its_const_twin() {
+            fn ids<'a>(group: &Group<'a>) -> Vec<Option<&'a str>> {
+                group.iter().map(|party| text(&party, 448)).collect()
+            }
+            let message = message("35=D|453=2|448=AL|802=2|523=S1|523=S2|448=BOB|54=1|");
+
+            let owned = message.get_group(&parties(), &KNOWN).unwrap().unwrap();
+            let borrowed = message.get_group(&NO_PARTY_IDS, &KNOWN).unwrap().unwrap();
+            assert_eq!(ids(&owned), ids(&borrowed));
+            assert_eq!(ids(&owned), [Some("AL"), Some("BOB")]);
+
+            let first = owned.iter().next().unwrap();
+            let sub_ids = first.get_group(&party_sub_ids(), &KNOWN).unwrap().unwrap();
+            let sub_ids: Vec<Option<&str>> = sub_ids.iter().map(|sub| text(&sub, 523)).collect();
+            assert_eq!(sub_ids, [Some("S1"), Some("S2")]);
+        }
+
+        #[test]
+        fn unsorted_or_duplicate_members_are_an_error() {
+            assert_eq!(
+                owned(453, 448, &[448, 447], vec![]).unwrap_err(),
+                GroupTableError::UnsortedMembers
+            );
+            assert_eq!(
+                owned(453, 448, &[448, 448], vec![]).unwrap_err(),
+                GroupTableError::UnsortedMembers
+            );
+        }
+
+        #[test]
+        fn a_delimiter_outside_the_members_is_an_error() {
+            assert_eq!(
+                owned(453, 448, &[447], vec![]).unwrap_err(),
+                GroupTableError::DelimiterNotMember {
+                    delimiter: Tag(448)
+                }
+            );
+        }
+
+        #[test]
+        fn a_nested_count_tag_outside_the_members_is_an_error() {
+            assert_eq!(
+                owned(453, 448, &[448], vec![party_sub_ids()]).unwrap_err(),
+                GroupTableError::NestedCountNotMember {
+                    count_tag: Tag(802)
+                }
+            );
+        }
+
+        #[test]
+        fn errors_name_the_broken_rule() {
+            assert_eq!(
+                GroupTableError::NestedCountNotMember {
+                    count_tag: Tag(802)
+                }
+                .to_string(),
+                "group members must include the nested count tag 802"
+            );
         }
     }
 }
