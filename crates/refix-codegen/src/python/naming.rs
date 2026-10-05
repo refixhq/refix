@@ -1,10 +1,14 @@
-use refix_dictionary::{EnumValue, Field};
+use refix_dictionary::{EnumValue, Field, dictionary};
 
-use crate::naming::field_base_name;
+use crate::naming::{field_base_name, group_base_name};
 use crate::python::Error;
 
 pub(super) fn property_name(field: &Field) -> String {
     identifier(field_base_name(field))
+}
+
+pub(super) fn group_property_name(group: dictionary::Group<'_>) -> String {
+    identifier(group_base_name(group))
 }
 
 pub(super) fn member_name(field: &Field, value: &EnumValue) -> Result<String, Error> {

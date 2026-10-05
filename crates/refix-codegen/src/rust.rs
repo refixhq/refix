@@ -8,9 +8,10 @@ mod naming;
 use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Generated;
+use crate::groups::is_generated;
 use enums::emit_enum;
 pub use error::Error;
-use groups::{emit_group_module, has_module, shared_groups};
+use groups::{emit_group_module, shared_groups};
 use messages::emit_message;
 
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Error> {
@@ -70,7 +71,7 @@ fn reads_multiple_values<'a>(mut members: impl Iterator<Item = dictionary::Membe
             !field.values.is_empty() && field.data_type.is_multiple_value()
         }
         dictionary::Member::Group(group) => {
-            has_module(group) && reads_multiple_values(group.members())
+            is_generated(group) && reads_multiple_values(group.members())
         }
     })
 }

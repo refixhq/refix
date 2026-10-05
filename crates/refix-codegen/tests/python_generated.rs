@@ -15,16 +15,9 @@ fn the_checked_in_module_is_fresh() {
 }
 
 #[test]
-fn the_toy_groups_are_reported_as_not_generated() {
+fn the_toy_generates_without_warnings() {
     let parsed = quickfix::parse(TOY_XML).unwrap();
     let generated = generate(&parsed.dictionary, "toy.xml").unwrap();
 
-    let warnings: Vec<String> = generated.warnings.iter().map(ToString::to_string).collect();
-    assert_eq!(
-        warnings,
-        [
-            "group 'NoPartyIDs' in component 'Parties' is not generated yet",
-            "group 'NoMsgTypes' in message 'Logon' is not generated yet",
-        ]
-    );
+    assert!(generated.warnings.is_empty());
 }

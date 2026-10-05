@@ -4,6 +4,7 @@
 
 mod case_converter;
 mod generated;
+mod groups;
 mod literal;
 mod naming;
 pub mod python;

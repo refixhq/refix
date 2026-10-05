@@ -5,6 +5,7 @@ use super::layout::{MAX_WIDTH, indent, slice};
 use super::messages::{Lifetime, emit_accessor};
 use super::naming::{group_name, message_module_name};
 use crate::Warning;
+use crate::groups::{is_generated, known_tags, member_tags};
 
 /// The groups declared in components, each once, in order of first
 /// appearance across the messages.
@@ -47,12 +48,6 @@ fn collect_groups<'a>(
     }
 }
 
-/// Whether a group gets a module. Groups declared directly in another
-/// group's instance don't.
-pub(super) fn has_module(group: dictionary::Group<'_>) -> bool {
-    !matches!(group.declared_in(), MemberContext::Group { .. })
-}
-
 /// The path of a group's module from the generated root.
 fn module_path(group: dictionary::Group<'_>) -> Result<String, Error> {
     let name = group_name(group)?;
@@ -89,7 +84,7 @@ fn emit_instance_impl(group: dictionary::Group<'_>) -> Result<String, Error> {
             dictionary::Member::Field { field, .. } => {
                 members.push(emit_accessor(field, Lifetime::Scope)?)
             }
-            dictionary::Member::Group(nested) if has_module(nested) => {
+            dictionary::Member::Group(nested) if is_generated(nested) => {
                 members.push(emit_group_accessor(nested, Lifetime::Scope, "KNOWN_TAGS")?)
             }
             dictionary::Member::Group(_) => {}
@@ -145,19 +140,17 @@ fn emit_table(group: dictionary::Group<'_>, width: usize) -> Result<String, Erro
 fn table_arguments(
     group: dictionary::Group<'_>,
 ) -> Result<(Tag, Tag, Vec<String>, Vec<String>), Error> {
-    let mut members = Vec::new();
-    let mut nested = Vec::new();
-    for member in group.members() {
-        match member {
-            dictionary::Member::Field { field, .. } => members.push(field.tag),
-            dictionary::Member::Group(child) => {
-                members.push(child.count_field().tag);
-                nested.push(table_reference(child)?);
-            }
-        }
-    }
-    members.sort();
-    let members = members.iter().map(|tag| format!("Tag({tag})")).collect();
+    let nested = group
+        .members()
+        .filter_map(|member| match member {
+            dictionary::Member::Group(child) => Some(table_reference(child)),
+            dictionary::Member::Field { .. } => None,
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let members = member_tags(group)
+        .iter()
+        .map(|tag| format!("Tag({tag})"))
+        .collect();
     Ok((
         group.count_field().tag,
         group.delimiter().tag,
@@ -168,7 +161,7 @@ fn table_arguments(
 
 /// A nested group's `TABLE`, written out in place for a group without a module.
 fn table_reference(group: dictionary::Group<'_>) -> Result<String, Error> {
-    if has_module(group) {
+    if is_generated(group) {
         return Ok(format!("{}::TABLE", module_path(group)?));
     }
     let (count_tag, delimiter, members, nested) = table_arguments(group)?;
@@ -188,24 +181,4 @@ pub(super) fn emit_known_tags(tags: &[Tag], width: usize) -> String {
         ");",
         width,
     )
-}
-
-/// Every tag in `members` at any depth, group count tags included, sorted.
-pub(super) fn known_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a>>) -> Vec<Tag> {
-    let mut tags = Vec::new();
-    collect_tags(members, &mut tags);
-    tags.sort();
-    tags
-}
-
-fn collect_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a>>, tags: &mut Vec<Tag>) {
-    for member in members {
-        match member {
-            dictionary::Member::Field { field, .. } => tags.push(field.tag),
-            dictionary::Member::Group(group) => {
-                tags.push(group.count_field().tag);
-                collect_tags(group.members(), tags);
-            }
-        }
-    }
 }
