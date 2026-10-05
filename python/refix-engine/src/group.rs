@@ -5,6 +5,12 @@ use refix_message::{OwnedGroupTable, Tag};
 #[pyclass(frozen, module = "refix._core")]
 pub(crate) struct GroupTable(OwnedGroupTable);
 
+impl GroupTable {
+    pub(crate) fn table(&self) -> &OwnedGroupTable {
+        &self.0
+    }
+}
+
 #[pymethods]
 impl GroupTable {
     #[new]
@@ -24,6 +30,13 @@ impl GroupTable {
 
 #[pyclass(frozen, module = "refix._core")]
 pub(crate) struct KnownTags(Vec<Tag>);
+
+impl KnownTags {
+    /// The tags as the walker takes them, checked sorted when built.
+    pub(crate) fn known(&self) -> refix_message::KnownTags<'_> {
+        refix_message::KnownTags::new(&self.0)
+    }
+}
 
 #[pymethods]
 impl KnownTags {

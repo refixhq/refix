@@ -5,6 +5,7 @@ from refix._core import (
     KnownTags,
     MessageStream,
     RawMessage,
+    Scope,
     Tokenizer,
     version,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "KnownTags",
     "MessageStream",
     "RawMessage",
+    "Scope",
     "Tokenizer",
     "__version__",
     "read_log",
