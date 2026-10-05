@@ -4,7 +4,7 @@ import pytest
 from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
 from test_tokenizer import tokenize_body
-from toy_generated import ExecInst, NewOrderSingle, OrdType
+from toy_generated import ExecInst, Logon, NewOrderSingle, OrdType, PartyRole
 
 
 def order(body: str) -> NewOrderSingle:
@@ -73,3 +73,55 @@ class TestEnums:
             _ = order("35=D|18=1  6|").exec_inst
 
         assert excinfo.value.tag == 18
+
+
+class TestGroups:
+    def test_typed_reads_over_groups(self):
+        new_order = order(
+            "35=D|11=ORDER-1|453=2|448=AL|452=1|802=2|523=S1|523=S2|448=BOB|452=03|38=200|"
+        )
+
+        parties = new_order.parties
+        assert [party.party_id for party in parties] == ["AL", "BOB"]
+        assert [party.party_role for party in parties] == [
+            PartyRole.EXECUTING_FIRM,
+            PartyRole.CLIENT_ID,
+        ]
+        assert [sub_id.party_sub_id for sub_id in parties[0].ptys_sub_grp] == [
+            "S1",
+            "S2",
+        ]
+        assert parties[1].ptys_sub_grp == ()
+        assert new_order.order_qty == 200
+
+    def test_an_absent_group_reads_as_empty(self):
+        assert order("35=D|11=ORDER-1|").parties == ()
+
+    def test_a_malformed_group_raises(self):
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = order("35=D|453=2|448=AL|38=200|").parties
+
+        assert excinfo.value.tag == 453
+
+    def test_an_unrecognized_int_code_is_representable(self):
+        party = order("35=D|453=1|448=AL|452=99|").parties[0]
+
+        assert party.party_role == Unrecognized(99)
+
+    def test_a_non_integer_int_code_raises(self):
+        party = order("35=D|453=1|448=AL|452=X|").parties[0]
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = party.party_role
+
+        assert excinfo.value.tag == 452
+
+    def test_reads_a_group_declared_in_its_message(self):
+        logon = Logon(tokenize_body("35=A|384=2|372=D|372=8|"))
+
+        assert [msg_type.ref_msg_type for msg_type in logon.msg_types] == ["D", "8"]
+
+    def test_a_group_read_is_cached(self):
+        new_order = order("35=D|453=1|448=AL|")
+
+        assert new_order.parties is new_order.parties
