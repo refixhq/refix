@@ -229,11 +229,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "refix-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "refix-codegen",
+ "refix-dictionary",
+]
+
+[[package]]
 name = "refix-codegen"
 version = "0.1.0"
 dependencies = [
  "bytes",
- "clap",
  "refix-dictionary",
  "refix-message",
 ]
