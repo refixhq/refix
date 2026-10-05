@@ -1,6 +1,6 @@
 [package]
-name = "refix-codegen"
-description = "Typed message code generator for the ReFIX engine"
+name = "refix-cli"
+description = "Command-line tools for the ReFIX engine"
 version = "0.1.0"
 publish = false
 authors.workspace = true
@@ -10,9 +10,11 @@ readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
-[dependencies]
-refix-dictionary = { workspace = true }
+[[bin]]
+name = "refix"
+path = "src/main.rs"
 
-[dev-dependencies]
-bytes = { workspace = true }
-refix-message = { workspace = true }
+[dependencies]
+clap = { workspace = true }
+refix-codegen = { workspace = true }
+refix-dictionary = { workspace = true }
