@@ -3,7 +3,7 @@
 //! kept fresh by tests that regenerate and compare.
 
 mod case_converter;
-mod emitter;
+mod rust;
 
 pub use case_converter::{pascal_case, snake_case};
-pub use emitter::{Error, Generated, Warning, generate};
+pub use rust::{Error, Generated, Warning, generate};

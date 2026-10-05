@@ -1,6 +1,6 @@
 use refix_dictionary::{DataType, EnumValue, Field, dictionary};
 
-use crate::emitter::Error;
+use crate::rust::Error;
 use crate::{pascal_case, snake_case};
 
 pub(super) fn method_name(field: &Field) -> Result<String, Error> {
@@ -79,7 +79,7 @@ const RESERVED_WORDS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::{group_name, message_module_name, method_name, variant_name};
-    use crate::emitter::Error;
+    use crate::rust::Error;
     use refix_dictionary::{
         Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Group, Member,
         MemberContext, Message, Protocol, Spec, Tag, Version, dictionary,
