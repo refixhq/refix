@@ -1,6 +1,8 @@
 from refix._core import (
     MALFORMED_TAG,
     Garble,
+    GroupTable,
+    KnownTags,
     MessageStream,
     RawMessage,
     Tokenizer,
@@ -13,6 +15,8 @@ __version__ = version()
 __all__ = [
     "MALFORMED_TAG",
     "Garble",
+    "GroupTable",
+    "KnownTags",
     "MessageStream",
     "RawMessage",
     "Tokenizer",
