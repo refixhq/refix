@@ -13,7 +13,7 @@ mod value;
 pub use group::{
     Group, GroupLayout, GroupTable, GroupTableError, Instances, KnownTags, OwnedGroupTable,
 };
-pub use message::{RawMessage, Scope};
+pub use message::{RawMessage, Scope, Slot};
 pub use multiple_values::MultipleValues;
 pub use stream::MessageStream;
 pub use tag::Tag;
