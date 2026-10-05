@@ -1,6 +1,7 @@
 use refix_dictionary::Field;
 
 use super::{Error, naming::variant_name};
+use crate::literal::int_literal;
 
 pub(super) fn emit_enum(field: &Field) -> Result<String, Error> {
     let name = &field.name;
@@ -57,20 +58,6 @@ pub(super) fn emit_enum(field: &Field) -> Result<String, Error> {
     }
 
     Ok(items.join("\n"))
-}
-
-/// An int-based value as a canonical Rust literal, leading zeros dropped.
-///
-/// The resolver guarantees an optional `-` followed by digits.
-fn int_literal(value: &str) -> String {
-    let (sign, digits) = match value.strip_prefix('-') {
-        Some(digits) => ("-", digits),
-        None => ("", value),
-    };
-    match digits.trim_start_matches('0') {
-        "" => "0".to_owned(),
-        digits => format!("{sign}{digits}"),
-    }
 }
 
 #[cfg(test)]
