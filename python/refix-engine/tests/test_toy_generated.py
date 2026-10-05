@@ -1,0 +1,75 @@
+from typing import assert_never
+
+import pytest
+from refix.enums import Unrecognized
+from refix.errors import InvalidValueError
+from test_tokenizer import tokenize_body
+from toy_generated import ExecInst, NewOrderSingle, OrdType
+
+
+def order(body: str) -> NewOrderSingle:
+    return NewOrderSingle(tokenize_body(body))
+
+
+class TestReads:
+    def test_typed_reads_over_a_tokenized_frame(self):
+        new_order = order("35=D|11=ORDER-1|38=200|44=101.5|40=1|")
+
+        assert NewOrderSingle.MSG_TYPE == b"D"
+        assert new_order.raw.get(35) == NewOrderSingle.MSG_TYPE
+        assert new_order.cl_ord_id == "ORDER-1"
+        assert new_order.order_qty == 200
+        assert new_order.price_raw == b"101.5"
+        assert new_order.ord_type is OrdType.MARKET
+
+    def test_an_absent_field_reads_as_none(self):
+        new_order = order("35=D|11=ORDER-1|")
+
+        assert new_order.order_qty is None
+        assert new_order.price_raw is None
+        assert new_order.ord_type is None
+        assert new_order.exec_inst is None
+
+    def test_a_malformed_value_raises(self):
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = order("35=D|38=12x3|").order_qty
+
+        assert excinfo.value.tag == 38
+
+    def test_a_read_is_cached(self):
+        new_order = order("35=D|11=ORDER-1|")
+
+        assert new_order.cl_ord_id is new_order.cl_ord_id
+
+
+class TestEnums:
+    def test_an_unrecognized_value_is_representable(self):
+        assert order("35=D|40=X|").ord_type == Unrecognized("X")
+
+    def test_a_match_handles_every_value(self):
+        def describe(ord_type: OrdType | Unrecognized[str]) -> str:
+            match ord_type:
+                case OrdType.MARKET:
+                    return "market"
+                case OrdType.LIMIT:
+                    return "limit"
+                case Unrecognized(value):
+                    return f"unrecognized {value}"
+                case _:
+                    assert_never(ord_type)
+
+        assert describe(OrdType.LIMIT) == "limit"
+        assert describe(Unrecognized("X")) == "unrecognized X"
+
+    def test_a_multiple_value_field_reads_every_value(self):
+        assert order("35=D|18=1 6 Z|").exec_inst == (
+            ExecInst.NOT_HELD,
+            ExecInst.PARTICIPATE_DONT_INITIATE,
+            Unrecognized("Z"),
+        )
+
+    def test_badly_spaced_multiple_values_raise(self):
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = order("35=D|18=1  6|").exec_inst
+
+        assert excinfo.value.tag == 18
