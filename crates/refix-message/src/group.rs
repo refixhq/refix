@@ -1,5 +1,9 @@
+mod error;
+
 use crate::message::{Scope, Slot};
 use crate::{InvalidValue, RawMessage, Tag};
+pub use error::GroupTableError;
+use layout::Layout;
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -8,8 +12,8 @@ const CHECK_SUM: Tag = Tag(10);
 
 /// The structure of a repeating group.
 ///
-/// Codegen emits these as `const` items.
-/// A dictionary loaded at runtime can build them borrowing from itself.
+/// Codegen emits these as `const` items. Tables built at runtime are
+/// [`OwnedGroupTable`]s.
 #[derive(Clone, Copy, Debug)]
 pub struct GroupTable<'a> {
     count_tag: Tag,
@@ -56,12 +60,105 @@ impl<'a> GroupTable<'a> {
             nested,
         }
     }
+}
+
+/// A group table the walker can follow, a [`GroupTable`] or an
+/// [`OwnedGroupTable`].
+///
+/// Sealed: only this crate implements it.
+pub trait GroupLayout: Layout {}
+
+mod layout {
+    use crate::Tag;
+
+    /// What the walker asks of a group table.
+    pub trait Layout {
+        fn count_tag(&self) -> Tag;
+        fn delimiter(&self) -> Tag;
+        fn is_member(&self, tag: Tag) -> bool;
+        fn nested_counted_by(&self, tag: Tag) -> Option<&Self>;
+    }
+}
+
+/// A [`GroupTable`] that owns its tags, built at runtime.
+#[derive(Clone, Debug)]
+pub struct OwnedGroupTable {
+    count_tag: Tag,
+    delimiter: Tag,
+    members: Vec<Tag>,
+    nested: Vec<OwnedGroupTable>,
+}
+
+impl OwnedGroupTable {
+    /// A group counted by `count_tag`, whose instances start with
+    /// `delimiter` and directly contain `members`.
+    ///
+    /// Fails where [`GroupTable::new`] panics.
+    pub fn new(
+        count_tag: Tag,
+        delimiter: Tag,
+        members: Vec<Tag>,
+        nested: Vec<OwnedGroupTable>,
+    ) -> Result<Self, GroupTableError> {
+        if !is_sorted_set(&members) {
+            return Err(GroupTableError::UnsortedMembers);
+        }
+        if !contains(&members, delimiter) {
+            return Err(GroupTableError::DelimiterNotMember { delimiter });
+        }
+        if let Some(nested) = nested
+            .iter()
+            .find(|nested| !contains(&members, nested.count_tag))
+        {
+            return Err(GroupTableError::NestedCountNotMember {
+                count_tag: nested.count_tag,
+            });
+        }
+        Ok(Self {
+            count_tag,
+            delimiter,
+            members,
+            nested,
+        })
+    }
+}
+
+impl GroupLayout for GroupTable<'_> {}
+
+impl GroupLayout for OwnedGroupTable {}
+
+impl Layout for GroupTable<'_> {
+    fn count_tag(&self) -> Tag {
+        self.count_tag
+    }
+
+    fn delimiter(&self) -> Tag {
+        self.delimiter
+    }
 
     fn is_member(&self, tag: Tag) -> bool {
         self.members.binary_search(&tag).is_ok()
     }
 
-    fn nested_counted_by(&self, tag: Tag) -> Option<&GroupTable<'a>> {
+    fn nested_counted_by(&self, tag: Tag) -> Option<&Self> {
+        self.nested.iter().find(|nested| nested.count_tag == tag)
+    }
+}
+
+impl Layout for OwnedGroupTable {
+    fn count_tag(&self) -> Tag {
+        self.count_tag
+    }
+
+    fn delimiter(&self) -> Tag {
+        self.delimiter
+    }
+
+    fn is_member(&self, tag: Tag) -> bool {
+        self.members.binary_search(&tag).is_ok()
+    }
+
+    fn nested_counted_by(&self, tag: Tag) -> Option<&Self> {
         self.nested.iter().find(|nested| nested.count_tag == tag)
     }
 }
@@ -248,7 +345,7 @@ impl RawMessage {
     /// The group `table` describes, read from the whole frame.
     pub fn get_group(
         &self,
-        table: &GroupTable<'_>,
+        table: &impl GroupLayout,
         known: &KnownTags<'_>,
     ) -> Result<Option<Group<'_>>, InvalidValue> {
         self.scope().get_group(table, known)
@@ -263,8 +360,8 @@ impl<'a> Scope<'a> {
     /// repeats. A tag the message does not know stays in its instance; any
     /// other tag outside the table, or CheckSum, ends the group. Nothing is
     /// rejected, and malformed groups are reported as anomalies.
-    pub fn walk_group(&self, table: &GroupTable<'_>, known: &KnownTags<'_>) -> Option<Walk<'a>> {
-        let (count_slot, _) = self.find(table.count_tag, self.start())?;
+    pub fn walk_group(&self, table: &impl GroupLayout, known: &KnownTags<'_>) -> Option<Walk<'a>> {
+        let (count_slot, _) = self.find(table.count_tag(), self.start())?;
         Some(walk(self, count_slot, table, known).0)
     }
 
@@ -275,7 +372,7 @@ impl<'a> Scope<'a> {
     /// zero is an empty group.
     pub fn get_group(
         &self,
-        table: &GroupTable<'_>,
+        table: &impl GroupLayout,
         known: &KnownTags<'_>,
     ) -> Result<Option<Group<'a>>, InvalidValue> {
         let Some(walk) = self.walk_group(table, known) else {
@@ -283,7 +380,7 @@ impl<'a> Scope<'a> {
         };
         if !walk.anomalies.is_empty() {
             return Err(InvalidValue {
-                tag: table.count_tag,
+                tag: table.count_tag(),
             });
         }
         Ok(Some(Group {
@@ -294,10 +391,10 @@ impl<'a> Scope<'a> {
 
 /// Walks the group whose count field sits at `count_slot`, returning what
 /// it found and the slot where the group ends.
-fn walk<'a>(
+fn walk<'a, L: GroupLayout>(
     scope: &Scope<'a>,
     count_slot: Slot,
-    table: &GroupTable<'_>,
+    table: &L,
     known: &KnownTags<'_>,
 ) -> (Walk<'a>, Slot) {
     let declared_count = parse_count(scope.value_at(count_slot));
@@ -320,7 +417,7 @@ fn walk<'a>(
                 if let Some(start) = instance_start {
                     instances.push(scope.narrow(start, slot));
                 }
-                if tag != table.delimiter {
+                if tag != table.delimiter() {
                     anomalies.push(Anomaly::MissingDelimiter { tag });
                 }
                 instance_start = Some(slot);
@@ -779,6 +876,89 @@ mod tests {
         #[should_panic(expected = "known tags must be sorted and unique")]
         fn duplicate_known_tags_are_rejected() {
             KnownTags::new(&[Tag(35), Tag(35)]);
+        }
+    }
+
+    mod owned {
+        use super::*;
+
+        fn owned(
+            count_tag: u32,
+            delimiter: u32,
+            members: &[u32],
+            nested: Vec<OwnedGroupTable>,
+        ) -> Result<OwnedGroupTable, GroupTableError> {
+            let members = members.iter().map(|&tag| Tag(tag)).collect();
+            OwnedGroupTable::new(Tag(count_tag), Tag(delimiter), members, nested)
+        }
+
+        fn party_sub_ids() -> OwnedGroupTable {
+            owned(802, 523, &[523, 803], vec![]).unwrap()
+        }
+
+        fn parties() -> OwnedGroupTable {
+            owned(453, 448, &[447, 448, 452, 802], vec![party_sub_ids()]).unwrap()
+        }
+
+        #[test]
+        fn walks_like_its_const_twin() {
+            fn ids<'a>(group: &Group<'a>) -> Vec<Option<&'a str>> {
+                group.iter().map(|party| text(&party, 448)).collect()
+            }
+            let message = message("35=D|453=2|448=AL|802=2|523=S1|523=S2|448=BOB|54=1|");
+
+            let owned = message.get_group(&parties(), &KNOWN).unwrap().unwrap();
+            let borrowed = message.get_group(&NO_PARTY_IDS, &KNOWN).unwrap().unwrap();
+            assert_eq!(ids(&owned), ids(&borrowed));
+            assert_eq!(ids(&owned), [Some("AL"), Some("BOB")]);
+
+            let first = owned.iter().next().unwrap();
+            let sub_ids = first.get_group(&party_sub_ids(), &KNOWN).unwrap().unwrap();
+            let sub_ids: Vec<Option<&str>> = sub_ids.iter().map(|sub| text(&sub, 523)).collect();
+            assert_eq!(sub_ids, [Some("S1"), Some("S2")]);
+        }
+
+        #[test]
+        fn unsorted_or_duplicate_members_are_an_error() {
+            assert_eq!(
+                owned(453, 448, &[448, 447], vec![]).unwrap_err(),
+                GroupTableError::UnsortedMembers
+            );
+            assert_eq!(
+                owned(453, 448, &[448, 448], vec![]).unwrap_err(),
+                GroupTableError::UnsortedMembers
+            );
+        }
+
+        #[test]
+        fn a_delimiter_outside_the_members_is_an_error() {
+            assert_eq!(
+                owned(453, 448, &[447], vec![]).unwrap_err(),
+                GroupTableError::DelimiterNotMember {
+                    delimiter: Tag(448)
+                }
+            );
+        }
+
+        #[test]
+        fn a_nested_count_tag_outside_the_members_is_an_error() {
+            assert_eq!(
+                owned(453, 448, &[448], vec![party_sub_ids()]).unwrap_err(),
+                GroupTableError::NestedCountNotMember {
+                    count_tag: Tag(802)
+                }
+            );
+        }
+
+        #[test]
+        fn errors_name_the_broken_rule() {
+            assert_eq!(
+                GroupTableError::NestedCountNotMember {
+                    count_tag: Tag(802)
+                }
+                .to_string(),
+                "group members must include the nested count tag 802"
+            );
         }
     }
 }

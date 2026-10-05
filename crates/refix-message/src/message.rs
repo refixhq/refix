@@ -54,6 +54,16 @@ impl RawMessage {
         }
     }
 
+    /// The scope over the fields from `start` up to `end`, or `None` if
+    /// they don't fit this message.
+    pub fn scope_between(&self, start: Slot, end: Slot) -> Option<Scope<'_>> {
+        (start <= end && end.index() <= self.fields.len()).then_some(Scope {
+            message: self,
+            start,
+            end,
+        })
+    }
+
     /// Value of the first occurrence of `tag`, scanning from the start.
     pub fn get(&self, tag: Tag) -> Option<&[u8]> {
         self.scope().get(tag)
@@ -145,11 +155,13 @@ impl<'a> Scope<'a> {
         }
     }
 
-    pub(crate) fn start(&self) -> Slot {
+    /// The slot of this scope's first field.
+    pub fn start(&self) -> Slot {
         self.start
     }
 
-    pub(crate) fn end(&self) -> Slot {
+    /// The slot just past this scope's last field.
+    pub fn end(&self) -> Slot {
         self.end
     }
 
@@ -268,6 +280,25 @@ mod tests {
                 start: Slot(start),
                 end: Slot(end),
             }
+        }
+
+        #[test]
+        fn a_scope_rebuilds_from_its_bounds() {
+            let message = message_of(&[(38, "100"), (58, "first"), (38, "x"), (58, "second")]);
+            let tail = scope_of(&message, 2, 4);
+
+            let rebuilt = message.scope_between(tail.start(), tail.end()).unwrap();
+
+            assert_eq!(rebuilt.get_str(Tag(58)), Ok(Some("second")));
+        }
+
+        #[test]
+        fn bounds_that_do_not_fit_the_message_are_rejected() {
+            let message = message_of(&[(38, "100"), (58, "first")]);
+
+            assert!(message.scope_between(Slot(0), Slot(3)).is_none());
+            assert!(message.scope_between(Slot(2), Slot(1)).is_none());
+            assert!(message.scope_between(Slot(2), Slot(2)).is_some());
         }
 
         #[test]
