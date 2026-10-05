@@ -1,5 +1,6 @@
 use crate::message::{Scope, Slot};
 use crate::{InvalidValue, RawMessage, Tag};
+use layout::Layout;
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -56,12 +57,41 @@ impl<'a> GroupTable<'a> {
             nested,
         }
     }
+}
+
+/// A group table the walker can follow.
+///
+/// Sealed: only this crate implements it.
+pub trait GroupLayout: Layout {}
+
+mod layout {
+    use crate::Tag;
+
+    /// What the walker asks of a group table.
+    pub trait Layout {
+        fn count_tag(&self) -> Tag;
+        fn delimiter(&self) -> Tag;
+        fn is_member(&self, tag: Tag) -> bool;
+        fn nested_counted_by(&self, tag: Tag) -> Option<&Self>;
+    }
+}
+
+impl GroupLayout for GroupTable<'_> {}
+
+impl Layout for GroupTable<'_> {
+    fn count_tag(&self) -> Tag {
+        self.count_tag
+    }
+
+    fn delimiter(&self) -> Tag {
+        self.delimiter
+    }
 
     fn is_member(&self, tag: Tag) -> bool {
         self.members.binary_search(&tag).is_ok()
     }
 
-    fn nested_counted_by(&self, tag: Tag) -> Option<&GroupTable<'a>> {
+    fn nested_counted_by(&self, tag: Tag) -> Option<&Self> {
         self.nested.iter().find(|nested| nested.count_tag == tag)
     }
 }
@@ -248,7 +278,7 @@ impl RawMessage {
     /// The group `table` describes, read from the whole frame.
     pub fn get_group(
         &self,
-        table: &GroupTable<'_>,
+        table: &impl GroupLayout,
         known: &KnownTags<'_>,
     ) -> Result<Option<Group<'_>>, InvalidValue> {
         self.scope().get_group(table, known)
@@ -263,8 +293,8 @@ impl<'a> Scope<'a> {
     /// repeats. A tag the message does not know stays in its instance; any
     /// other tag outside the table, or CheckSum, ends the group. Nothing is
     /// rejected, and malformed groups are reported as anomalies.
-    pub fn walk_group(&self, table: &GroupTable<'_>, known: &KnownTags<'_>) -> Option<Walk<'a>> {
-        let (count_slot, _) = self.find(table.count_tag, self.start())?;
+    pub fn walk_group(&self, table: &impl GroupLayout, known: &KnownTags<'_>) -> Option<Walk<'a>> {
+        let (count_slot, _) = self.find(table.count_tag(), self.start())?;
         Some(walk(self, count_slot, table, known).0)
     }
 
@@ -275,7 +305,7 @@ impl<'a> Scope<'a> {
     /// zero is an empty group.
     pub fn get_group(
         &self,
-        table: &GroupTable<'_>,
+        table: &impl GroupLayout,
         known: &KnownTags<'_>,
     ) -> Result<Option<Group<'a>>, InvalidValue> {
         let Some(walk) = self.walk_group(table, known) else {
@@ -283,7 +313,7 @@ impl<'a> Scope<'a> {
         };
         if !walk.anomalies.is_empty() {
             return Err(InvalidValue {
-                tag: table.count_tag,
+                tag: table.count_tag(),
             });
         }
         Ok(Some(Group {
@@ -294,10 +324,10 @@ impl<'a> Scope<'a> {
 
 /// Walks the group whose count field sits at `count_slot`, returning what
 /// it found and the slot where the group ends.
-fn walk<'a>(
+fn walk<'a, L: GroupLayout>(
     scope: &Scope<'a>,
     count_slot: Slot,
-    table: &GroupTable<'_>,
+    table: &L,
     known: &KnownTags<'_>,
 ) -> (Walk<'a>, Slot) {
     let declared_count = parse_count(scope.value_at(count_slot));
@@ -320,7 +350,7 @@ fn walk<'a>(
                 if let Some(start) = instance_start {
                     instances.push(scope.narrow(start, slot));
                 }
-                if tag != table.delimiter {
+                if tag != table.delimiter() {
                     anomalies.push(Anomaly::MissingDelimiter { tag });
                 }
                 instance_start = Some(slot);
