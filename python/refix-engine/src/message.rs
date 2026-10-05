@@ -1,4 +1,4 @@
-use pyo3::types::{PyBytes, PyString};
+use pyo3::types::{PyBytes, PyString, PyTuple};
 use pyo3::{Bound, PyErr, PyResult, Python, import_exception, pyclass, pymethods};
 use refix_message::{InvalidValue, RawMessage as CoreRawMessage, Tag};
 
@@ -31,6 +31,22 @@ impl RawMessage {
 
     fn get_int(&self, tag: u32) -> PyResult<Option<i64>> {
         self.0.get_int(Tag(tag)).map_err(to_py_err)
+    }
+
+    fn get_multiple_values<'py>(
+        &self,
+        py: Python<'py>,
+        tag: u32,
+    ) -> PyResult<Option<Bound<'py, PyTuple>>> {
+        let Some(values) = self
+            .0
+            .get_multiple_values::<&str>(Tag(tag))
+            .map_err(to_py_err)?
+        else {
+            return Ok(None);
+        };
+        let values: Vec<&str> = values.iter().collect();
+        PyTuple::new(py, values).map(Some)
     }
 
     fn entries<'py>(&self, py: Python<'py>) -> Vec<(u32, Bound<'py, PyBytes>)> {

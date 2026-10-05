@@ -49,6 +49,31 @@ class TestGetInt:
         assert excinfo.value.tag == 38
 
 
+class TestGetMultipleValues:
+    def test_reads_values_in_wire_order_with_duplicates(self):
+        message = tokenize_body("35=D|18=1 6 1|")
+        assert message.get_multiple_values(18) == ("1", "6", "1")
+
+    def test_reads_a_single_value(self):
+        assert tokenize_body("35=D|18=G|").get_multiple_values(18) == ("G",)
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=D|").get_multiple_values(18) is None
+
+    @pytest.mark.parametrize("value", ["", " 1", "1 ", "1  6"])
+    def test_anything_but_single_spaces_between_values_raises(self, value: str):
+        message = tokenize_body(f"35=D|18={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_multiple_values(18)
+
+        assert excinfo.value.tag == 18
+
+    def test_invalid_utf8_raises(self):
+        with pytest.raises(InvalidValueError):
+            tokenize_bytes(b"35=D|18=1 \xe9|").get_multiple_values(18)
+
+
 class TestInvalidValueError:
     def test_is_a_value_error(self):
         assert issubclass(InvalidValueError, ValueError)
