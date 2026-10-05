@@ -14,16 +14,20 @@ pub(crate) fn field_base_name(field: &Field) -> String {
 }
 
 /// The accessor and module name of a group, before escaping.
+pub(crate) fn group_base_name(group: dictionary::Group<'_>) -> String {
+    snake_case(group_source_name(group))
+}
+
+/// A group's name as the dictionary gives it, before snake-casing.
 ///
 /// The component it makes up, else its count field's name without the `No` prefix,
 /// else its count field's name.
-pub(crate) fn group_base_name(group: dictionary::Group<'_>) -> String {
+pub(crate) fn group_source_name(group: dictionary::Group<'_>) -> &str {
     let count_field = group.count_field().name.as_str();
-    let name = group
+    group
         .component()
         .or_else(|| without_no_prefix(count_field))
-        .unwrap_or(count_field);
-    snake_case(name)
+        .unwrap_or(count_field)
 }
 
 /// Strips a `No` that starts a word, as in `NoPartyIDs` but not `Notional`.
@@ -34,7 +38,7 @@ fn without_no_prefix(name: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{field_base_name, group_base_name};
+    use super::{field_base_name, group_base_name, group_source_name};
     use crate::test_utils::with_group;
     use refix_dictionary::{DataType, EnumValue, Field, Tag};
 
@@ -79,6 +83,17 @@ mod tests {
             description: "MARKET".to_owned(),
         }];
         assert_eq!(field_base_name(&ord_type), "ord_type");
+    }
+
+    #[test]
+    fn a_source_name_keeps_the_dictionary_spelling() {
+        let source_name = |component, count_field| {
+            with_group(component, count_field, |group| {
+                group_source_name(group).to_owned()
+            })
+        };
+        assert_eq!(source_name(Some("Parties"), "NoPartyIDs"), "Parties");
+        assert_eq!(source_name(None, "NoMsgTypes"), "MsgTypes");
     }
 
     #[test]

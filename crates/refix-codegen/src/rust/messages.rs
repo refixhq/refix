@@ -1,9 +1,10 @@
 use refix_dictionary::{DataType, Field, MemberContext, dictionary};
 
 use super::Error;
-use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags, known_tags};
+use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::naming::{message_module_name, method_name};
+use crate::groups::known_tags;
 
 pub(super) fn emit_message(message: dictionary::Message<'_>) -> Result<String, Error> {
     let mut items = vec![emit_message_struct(message), emit_message_impl(message)?];
