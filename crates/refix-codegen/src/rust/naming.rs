@@ -18,7 +18,13 @@ pub(super) fn group_name(group: dictionary::Group<'_>) -> Result<String, Error> 
 }
 
 pub(super) fn variant_name(field: &Field, value: &EnumValue) -> Result<String, Error> {
-    let name = pascal_case(&value.description);
+    let mut name = pascal_case(&value.description);
+
+    // A name cannot start with a digit, so `5YR` becomes `N5yr`.
+    if name.starts_with(|c: char| c.is_ascii_digit()) {
+        name.insert(0, 'N');
+    }
+
     let starts_with_letter = name.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
     let alphanumeric = name.chars().all(|c| c.is_ascii_alphanumeric());
     // `Unrecognized` is taken by the catch-all variant.
@@ -153,13 +159,18 @@ mod tests {
     }
 
     #[test]
-    fn a_digit_leading_description_is_an_error() {
+    fn a_digit_leading_description_takes_a_prefix() {
+        assert_eq!(variant_of("5YR").unwrap(), "N5yr");
+        assert_eq!(variant_of("5_YR").unwrap(), "N5Yr");
+        assert_eq!(variant_of("401K").unwrap(), "N401k");
+        assert_eq!(variant_of("3").unwrap(), "N3");
+    }
+
+    #[test]
+    fn leading_underscores_are_dropped_before_the_prefix() {
         assert_eq!(
-            variant_of("5DAY").unwrap_err(),
-            Error::UnrepresentableValue {
-                field: "OrdType".to_owned(),
-                description: "5DAY".to_owned(),
-            }
+            variant_of("_5_DAY_MOVING_AVERAGE").unwrap(),
+            "N5DayMovingAverage"
         );
     }
 
@@ -170,7 +181,18 @@ mod tests {
 
     #[test]
     fn punctuation_in_a_description_is_an_error() {
-        assert!(variant_of("W/AVG").is_err());
+        assert_eq!(
+            variant_of("W/AVG").unwrap_err(),
+            Error::UnrepresentableValue {
+                field: "OrdType".to_owned(),
+                description: "W/AVG".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_prefixed_name_still_passes_the_gate() {
+        assert!(variant_of("5/YR").is_err());
     }
 
     #[test]
