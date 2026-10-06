@@ -1,25 +1,25 @@
 use refix_dictionary::Field;
 
-use super::Error;
-use super::naming::member_name;
+use super::names::Names;
 use crate::literal::int_literal;
 
-pub(super) fn emit_enum(field: &Field) -> Result<String, Error> {
+pub(super) fn emit_enum(field: &Field, names: &Names) -> String {
     let int_based = field.data_type.is_int_based();
     let base = if int_based { "IntEnum" } else { "StrEnum" };
-    let members = field
+    let members: String = field
         .values
         .iter()
-        .map(|value| {
+        .zip(names.enum_members(field))
+        .map(|(value, member)| {
             let code = if int_based {
                 int_literal(&value.value)
             } else {
                 str_literal(&value.value)
             };
-            Ok(format!("    {} = {code}\n", member_name(field, value)?))
+            format!("    {member} = {code}\n")
         })
-        .collect::<Result<String, Error>>()?;
-    Ok(format!("class {}(enum.{base}):\n{members}", field.name))
+        .collect();
+    format!("class {}(enum.{base}):\n{members}", names.enum_class(field))
 }
 
 /// A Python string literal of `value`, escaping quotes, backslashes and
@@ -44,7 +44,14 @@ pub(super) fn str_literal(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{emit_enum, str_literal};
+    use crate::python::names::Names;
+    use crate::test_utils::message_with;
     use refix_dictionary::{DataType, EnumValue, Field, Tag};
+
+    fn emitted(field: Field) -> String {
+        let dictionary = message_with(vec![field.clone()]);
+        emit_enum(&field, &Names::new(&dictionary).unwrap())
+    }
 
     fn enum_field(name: &str, data_type: DataType, values: &[(&str, &str)]) -> Field {
         Field {
@@ -70,7 +77,7 @@ mod tests {
         );
 
         assert_eq!(
-            emit_enum(&field).unwrap(),
+            emitted(field),
             "class PartyRole(enum.IntEnum):\n    EXECUTING_FIRM = 1\n    CLIENT_ID = 3\n"
         );
     }
@@ -84,7 +91,7 @@ mod tests {
         );
 
         assert_eq!(
-            emit_enum(&field).unwrap(),
+            emitted(field),
             "class OrdType(enum.StrEnum):\n    MARKET = \"1\"\n    LIMIT = \"2\"\n"
         );
     }

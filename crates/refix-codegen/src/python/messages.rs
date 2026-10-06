@@ -3,10 +3,10 @@ use refix_dictionary::{DataType, Field, MemberContext, dictionary};
 use super::enums::str_literal;
 use super::groups::{emit_group_class, emit_group_property, tags};
 use super::layout::{MAX_WIDTH, indent, tuple_lines};
-use super::naming::property_name;
+use super::names::Names;
 use crate::groups::known_tags;
 
-pub(super) fn emit_message(message: dictionary::Message<'_>) -> String {
+pub(super) fn emit_message(message: dictionary::Message<'_>, names: &Names) -> String {
     let name = message.name();
     let mut members = vec![
         format!(
@@ -27,7 +27,7 @@ pub(super) fn emit_message(message: dictionary::Message<'_>) -> String {
         dictionary::Member::Group(group)
             if matches!(group.declared_in(), MemberContext::Message(_)) =>
         {
-            Some(indent(&emit_group_class(group, 1), 1))
+            Some(indent(&emit_group_class(group, 1, names), 1))
         }
         _ => None,
     }));
@@ -39,17 +39,18 @@ pub(super) fn emit_message(message: dictionary::Message<'_>) -> String {
     );
     let known_tags = format!("{name}.KNOWN_TAGS");
     members.extend(message.members().map(|member| match member {
-        dictionary::Member::Field { field, .. } => emit_property(field, "self._raw"),
-        dictionary::Member::Group(group) => emit_group_property(group, "self._raw", &known_tags),
+        dictionary::Member::Field { field, .. } => emit_property(field, names, "self._raw"),
+        dictionary::Member::Group(group) => {
+            emit_group_property(group, names, "self._raw", &known_tags)
+        }
     }));
     format!("class {name}:\n{}", members.join("\n"))
 }
 
 /// The property reading `field` from `receiver`, the message or the instance's scope.
-pub(super) fn emit_property(field: &Field, receiver: &str) -> String {
-    let name = property_name(field);
+pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> String {
+    let name = names.property(field);
     let tag = field.tag;
-    let type_name = &field.name;
     let (return_type, body) = if field.values.is_empty() {
         match field.data_type {
             DataType::String => (
@@ -66,6 +67,7 @@ pub(super) fn emit_property(field: &Field, receiver: &str) -> String {
             ),
         }
     } else if field.data_type.is_multiple_value() {
+        let type_name = names.enum_class(field);
         (
             format!("tuple[{type_name} | Unrecognized[str], ...] | None"),
             format!(
@@ -73,6 +75,7 @@ pub(super) fn emit_property(field: &Field, receiver: &str) -> String {
             ),
         )
     } else {
+        let type_name = names.enum_class(field);
         let (conversion, value_type) = if field.data_type.is_int_based() {
             ("get_int", "int")
         } else {

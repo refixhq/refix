@@ -1,16 +1,12 @@
 use refix_dictionary::Field;
 
-use super::{Error, naming::variant_name};
+use super::names::Names;
 use crate::literal::int_literal;
 
-pub(super) fn emit_enum(field: &Field) -> Result<String, Error> {
-    let name = &field.name;
+pub(super) fn emit_enum(field: &Field, names: &Names) -> String {
+    let name = names.enum_type(field);
     let int_based = field.data_type.is_int_based();
-    let variants = field
-        .values
-        .iter()
-        .map(|value| variant_name(field, value))
-        .collect::<Result<Vec<_>, _>>()?;
+    let variants = names.variants(field);
     let codes: Vec<String> = field
         .values
         .iter()
@@ -34,12 +30,12 @@ pub(super) fn emit_enum(field: &Field) -> Result<String, Error> {
         .collect();
     let from_arms: String = codes
         .iter()
-        .zip(&variants)
+        .zip(variants)
         .map(|(code, variant)| format!("            {code} => Self::{variant},\n"))
         .collect();
     let value_arms: String = codes
         .iter()
-        .zip(&variants)
+        .zip(variants)
         .map(|(code, variant)| format!("            Self::{variant} => {code},\n"))
         .collect();
 
@@ -57,13 +53,20 @@ pub(super) fn emit_enum(field: &Field) -> Result<String, Error> {
         ));
     }
 
-    Ok(items.join("\n"))
+    items.join("\n")
 }
 
 #[cfg(test)]
 mod tests {
     use super::emit_enum;
+    use crate::rust::names::Names;
+    use crate::test_utils::message_with;
     use refix_dictionary::{DataType, EnumValue, Field, Tag};
+
+    fn emitted(field: Field) -> String {
+        let dictionary = message_with(vec![field.clone()]);
+        emit_enum(&field, &Names::new(&dictionary).unwrap())
+    }
 
     fn enum_field(name: &str, data_type: DataType, values: &[(&str, &str)]) -> Field {
         Field {
@@ -114,7 +117,7 @@ impl PartyRole {
     }
 }
 ";
-        assert_eq!(emit_enum(&field).unwrap(), expected);
+        assert_eq!(emitted(field), expected);
     }
 
     #[test]
@@ -125,7 +128,7 @@ impl PartyRole {
             &[("007", "SEVEN"), ("-02", "MINUS_TWO"), ("000", "ZERO")],
         );
 
-        let code = emit_enum(&field).unwrap();
+        let code = emitted(field);
 
         assert!(code.contains("            7 => Self::Seven,\n"));
         assert!(code.contains("            -2 => Self::MinusTwo,\n"));
@@ -136,7 +139,7 @@ impl PartyRole {
     fn string_codes_are_escaped() {
         let field = enum_field("Code", DataType::String, &[("a\"b\\", "ODD")]);
 
-        let code = emit_enum(&field).unwrap();
+        let code = emitted(field);
 
         assert!(code.contains("            \"a\\\"b\\\\\" => Self::Odd,\n"));
     }

@@ -1,9 +1,8 @@
 use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
-use super::Error;
 use super::layout::{MAX_WIDTH, indent, slice};
 use super::messages::{Lifetime, emit_accessor};
-use super::naming::{group_name, message_module_name};
+use super::names::Names;
 use crate::Warning;
 use crate::groups::{is_generated, known_tags, member_tags};
 
@@ -48,73 +47,62 @@ fn collect_groups<'a>(
     }
 }
 
-/// The path of a group's module from the generated root.
-fn module_path(group: dictionary::Group<'_>) -> Result<String, Error> {
-    let name = group_name(group)?;
-    match group.declared_in() {
-        MemberContext::Message(message) => Ok(format!("{}::{name}", message_module_name(message)?)),
-        _ => Ok(name),
-    }
-}
-
-pub(super) fn emit_group_module(group: dictionary::Group<'_>) -> Result<String, Error> {
-    let name = group_name(group)?;
-    let depth = module_path(group)?.split("::").count();
+pub(super) fn emit_group_module(group: dictionary::Group<'_>, names: &Names) -> String {
+    let depth = names.group_path(group).split("::").count();
     let width = MAX_WIDTH - 4 * depth;
     let items = [
         format!("use {}*;\n", "super::".repeat(depth)),
-        emit_table(group, width)?,
+        emit_table(group, names, width),
         emit_known_tags(&known_tags(group.members()), width),
         "#[derive(Clone, Copy, Debug)]\npub struct Instance<'a>(refix_message::Scope<'a>);\n".to_owned(),
         "impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {\n    fn from(scope: refix_message::Scope<'a>) -> Self {\n        Self(scope)\n    }\n}\n".to_owned(),
-        emit_instance_impl(group)?,
+        emit_instance_impl(group, names),
     ];
-    Ok(format!(
-        "pub mod {name} {{\n{}}}\n",
+    format!(
+        "pub mod {} {{\n{}}}\n",
+        names.group(group),
         indent(&items.join("\n"), 1)
-    ))
+    )
 }
 
-fn emit_instance_impl(group: dictionary::Group<'_>) -> Result<String, Error> {
+fn emit_instance_impl(group: dictionary::Group<'_>, names: &Names) -> String {
     let mut members = vec![
         "    pub fn raw(&self) -> refix_message::Scope<'a> {\n        self.0\n    }\n".to_owned(),
     ];
     for member in group.members() {
         match member {
             dictionary::Member::Field { field, .. } => {
-                members.push(emit_accessor(field, Lifetime::Scope)?)
+                members.push(emit_accessor(field, names, Lifetime::Scope))
             }
-            dictionary::Member::Group(nested) if is_generated(nested) => {
-                members.push(emit_group_accessor(nested, Lifetime::Scope, "KNOWN_TAGS")?)
-            }
+            dictionary::Member::Group(nested) if is_generated(nested) => members.push(
+                emit_group_accessor(nested, names, Lifetime::Scope, "KNOWN_TAGS"),
+            ),
             dictionary::Member::Group(_) => {}
         }
     }
-    Ok(format!(
-        "impl<'a> Instance<'a> {{\n{}}}\n",
-        members.join("\n")
-    ))
+    format!("impl<'a> Instance<'a> {{\n{}}}\n", members.join("\n"))
 }
 
 /// The accessor reading a group's instances, walking with `known_tags`.
 pub(super) fn emit_group_accessor(
     group: dictionary::Group<'_>,
+    names: &Names,
     lifetime: Lifetime,
     known_tags: &str,
-) -> Result<String, Error> {
-    let name = group_name(group)?;
-    let path = module_path(group)?;
+) -> String {
+    let name = names.group(group);
+    let path = names.group_path(group);
     let lifetime = match lifetime {
         Lifetime::Receiver => "'_",
         Lifetime::Scope => "'a",
     };
-    Ok(format!(
+    format!(
         "    pub fn {name}(&self) -> Result<Instances<{lifetime}, {path}::Instance<{lifetime}>>, InvalidValue> {{\n        self.0.get_group(&{path}::TABLE, &{known_tags}).map(Instances::from)\n    }}\n"
-    ))
+    )
 }
 
-fn emit_table(group: dictionary::Group<'_>, width: usize) -> Result<String, Error> {
-    let (count_tag, delimiter, members, nested) = table_arguments(group)?;
+fn emit_table(group: dictionary::Group<'_>, names: &Names, width: usize) -> String {
+    let (count_tag, delimiter, members, nested) = table_arguments(group, names);
     let head = "pub const TABLE: GroupTable<'static> = GroupTable::new(";
     let one_line = format!(
         "{head}Tag({count_tag}), Tag({delimiter}), &[{}], &[{}]);",
@@ -122,7 +110,7 @@ fn emit_table(group: dictionary::Group<'_>, width: usize) -> Result<String, Erro
         nested.join(", ")
     );
     if one_line.len() <= width {
-        return Ok(format!("{one_line}\n"));
+        return format!("{one_line}\n");
     }
     let arguments = [
         format!("Tag({count_tag}),\n"),
@@ -130,7 +118,7 @@ fn emit_table(group: dictionary::Group<'_>, width: usize) -> Result<String, Erro
         slice("", &members, ",", width - 4),
         slice("", &nested, ",", width - 4),
     ];
-    Ok(format!("{head}\n{});\n", indent(&arguments.concat(), 1)))
+    format!("{head}\n{});\n", indent(&arguments.concat(), 1))
 }
 
 /// The arguments of a group's `GroupTable::new`.
@@ -139,37 +127,38 @@ fn emit_table(group: dictionary::Group<'_>, width: usize) -> Result<String, Erro
 /// contain and the tables of its nested groups.
 fn table_arguments(
     group: dictionary::Group<'_>,
-) -> Result<(Tag, Tag, Vec<String>, Vec<String>), Error> {
+    names: &Names,
+) -> (Tag, Tag, Vec<String>, Vec<String>) {
     let nested = group
         .members()
         .filter_map(|member| match member {
-            dictionary::Member::Group(child) => Some(table_reference(child)),
+            dictionary::Member::Group(child) => Some(table_reference(child, names)),
             dictionary::Member::Field { .. } => None,
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect();
     let members = member_tags(group)
         .iter()
         .map(|tag| format!("Tag({tag})"))
         .collect();
-    Ok((
+    (
         group.count_field().tag,
         group.delimiter().tag,
         members,
         nested,
-    ))
+    )
 }
 
 /// A nested group's `TABLE`, written out in place for a group without a module.
-fn table_reference(group: dictionary::Group<'_>) -> Result<String, Error> {
+fn table_reference(group: dictionary::Group<'_>, names: &Names) -> String {
     if is_generated(group) {
-        return Ok(format!("{}::TABLE", module_path(group)?));
+        return format!("{}::TABLE", names.group_path(group));
     }
-    let (count_tag, delimiter, members, nested) = table_arguments(group)?;
-    Ok(format!(
+    let (count_tag, delimiter, members, nested) = table_arguments(group, names);
+    format!(
         "GroupTable::new(Tag({count_tag}), Tag({delimiter}), &[{}], &[{}])",
         members.join(", "),
         nested.join(", ")
-    ))
+    )
 }
 
 /// The `KNOWN_TAGS` constant listing `tags`.

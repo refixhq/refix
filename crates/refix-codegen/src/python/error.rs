@@ -1,6 +1,15 @@
+use crate::NameClash;
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Error {
     UnrepresentableValue { field: String, description: String },
+    NameClash(Box<NameClash>),
+}
+
+impl From<Box<NameClash>> for Error {
+    fn from(clash: Box<NameClash>) -> Self {
+        Error::NameClash(clash)
+    }
 }
 
 impl std::fmt::Display for Error {
@@ -12,6 +21,7 @@ impl std::fmt::Display for Error {
                     "value '{description}' of field '{field}' cannot be a python enum member name"
                 )
             }
+            Error::NameClash(clash) => write!(f, "python name {clash}"),
         }
     }
 }

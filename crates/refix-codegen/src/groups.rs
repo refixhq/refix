@@ -1,9 +1,42 @@
-use refix_dictionary::{MemberContext, Tag, dictionary};
+use std::collections::HashSet;
+
+use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
 /// Whether a group gets generated types. Groups declared directly in
 /// another group's instance don't.
 pub(crate) fn is_generated(group: dictionary::Group<'_>) -> bool {
     !matches!(group.declared_in(), MemberContext::Group { .. })
+}
+
+/// The context of a group's instances, which identifies its declaration.
+pub(crate) fn instance_context(group: dictionary::Group<'_>) -> MemberContext {
+    group.declared_in().group(&group.count_field().name)
+}
+
+/// Every group declaration the messages reach, each once, in order of first
+/// appearance.
+pub(crate) fn declared_groups(dictionary: &Dictionary) -> Vec<dictionary::Group<'_>> {
+    let mut groups = Vec::new();
+    let mut seen = HashSet::new();
+    for message in dictionary.messages() {
+        collect_declared(message.members(), &mut groups, &mut seen);
+    }
+    groups
+}
+
+fn collect_declared<'a>(
+    members: impl Iterator<Item = dictionary::Member<'a>>,
+    groups: &mut Vec<dictionary::Group<'a>>,
+    seen: &mut HashSet<MemberContext>,
+) {
+    for member in members {
+        if let dictionary::Member::Group(group) = member
+            && seen.insert(instance_context(group))
+        {
+            groups.push(group);
+            collect_declared(group.members(), groups, seen);
+        }
+    }
 }
 
 /// The tags a group's instances directly contain, sorted.
@@ -43,7 +76,7 @@ fn collect_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a>>, tags:
 
 #[cfg(test)]
 mod tests {
-    use super::{is_generated, known_tags, member_tags};
+    use super::{declared_groups, instance_context, is_generated, known_tags, member_tags};
     use refix_dictionary::{
         Category, DataType, Field, FieldRef, Group, Member, Message, Protocol, Spec, Tag, Version,
         dictionary,
@@ -134,6 +167,23 @@ mod tests {
         assert_eq!(
             known_tags(message.members()),
             [Tag(448), Tag(452), Tag(453), Tag(523), Tag(802)]
+        );
+    }
+
+    #[test]
+    fn every_declaration_is_found_once_outermost_first() {
+        let dictionary = dictionary();
+        let contexts: Vec<String> = declared_groups(&dictionary)
+            .into_iter()
+            .map(|group| instance_context(group).to_string())
+            .collect();
+
+        assert_eq!(
+            contexts,
+            [
+                "group 'NoPartyIDs' in message 'NewOrderSingle'",
+                "group 'NoPartySubIDs' in group 'NoPartyIDs' in message 'NewOrderSingle'",
+            ]
         );
     }
 
