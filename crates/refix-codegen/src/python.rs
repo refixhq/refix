@@ -3,6 +3,7 @@ mod error;
 mod groups;
 mod layout;
 mod messages;
+mod names;
 mod naming;
 
 use refix_dictionary::{Dictionary, dictionary};
@@ -13,8 +14,10 @@ use enums::emit_enum;
 pub use error::Error;
 use groups::{emit_group_class, shared_groups};
 use messages::emit_message;
+use names::Names;
 
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Error> {
+    let names = Names::new(dictionary)?;
     let mut warnings = Vec::new();
 
     // The layout is the emitter's own, so formatters leave it alone.
@@ -23,13 +26,16 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .fields()
         .iter()
         .filter(|field| !field.values.is_empty())
-        .map(emit_enum)
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|field| emit_enum(field, &names))
+        .collect();
     let groups: Vec<String> = shared_groups(dictionary, &mut warnings)
         .into_iter()
-        .map(|group| emit_group_class(group, 0))
+        .map(|group| emit_group_class(group, 0, &names))
         .collect();
-    let messages: Vec<String> = dictionary.messages().map(emit_message).collect();
+    let messages: Vec<String> = dictionary
+        .messages()
+        .map(|message| emit_message(message, &names))
+        .collect();
     let imports = emit_imports(dictionary, !enums.is_empty());
     let sections = imports
         .into_iter()
