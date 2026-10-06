@@ -1,7 +1,38 @@
 use refix_dictionary::{
-    Category, Component, ComponentRef, DataType, Field, FieldRef, Group, Member, Message, Protocol,
-    Spec, Tag, Version, dictionary,
+    Category, Component, ComponentRef, DataType, Dictionary, Field, FieldRef, Group, Member,
+    Message, Protocol, Spec, Tag, Version, dictionary,
 };
+
+/// A dictionary whose one message, `NewOrderSingle`, holds each of `fields`.
+pub fn message_with(fields: Vec<Field>) -> Dictionary {
+    let members = fields
+        .iter()
+        .map(|field| {
+            Member::Field(FieldRef {
+                tag: field.tag,
+                is_required: false,
+            })
+        })
+        .collect();
+    Spec {
+        version: Version {
+            protocol: Protocol::Fix,
+            major: 4,
+            minor: 4,
+            service_pack: 0,
+        },
+        messages: vec![Message {
+            name: "NewOrderSingle".to_owned(),
+            msg_type: "D".to_owned(),
+            members,
+            category: Category::App,
+        }],
+        fields,
+        components: vec![],
+    }
+    .resolve()
+    .unwrap()
+}
 
 /// Runs `read` on a group counted by `count_field`, declared inline in a
 /// message or as the sole member of `component`.

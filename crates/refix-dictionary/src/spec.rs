@@ -85,7 +85,7 @@ pub struct Group {
 /// The message, component or group instance a member appears in.
 ///
 /// Diagnostics use this to name the place a problem was found.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum MemberContext {
     Message(String),
     Component(String),

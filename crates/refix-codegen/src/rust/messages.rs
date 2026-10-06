@@ -1,24 +1,26 @@
 use refix_dictionary::{DataType, Field, MemberContext, dictionary};
 
-use super::Error;
 use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
-use super::naming::{message_module_name, method_name};
+use super::names::Names;
 use crate::groups::known_tags;
 
-pub(super) fn emit_message(message: dictionary::Message<'_>) -> Result<String, Error> {
-    let mut items = vec![emit_message_struct(message), emit_message_impl(message)?];
-    if let Some(module) = emit_message_module(message)? {
+pub(super) fn emit_message(message: dictionary::Message<'_>, names: &Names) -> String {
+    let mut items = vec![
+        emit_message_struct(message),
+        emit_message_impl(message, names),
+    ];
+    if let Some(module) = emit_message_module(message, names) {
         items.push(module);
     }
-    Ok(items.join("\n"))
+    items.join("\n")
 }
 
 fn emit_message_struct(message: dictionary::Message<'_>) -> String {
     format!("pub struct {}(RawMessage);\n", message.name())
 }
 
-fn emit_message_impl(message: dictionary::Message<'_>) -> Result<String, Error> {
+fn emit_message_impl(message: dictionary::Message<'_>, names: &Names) -> String {
     let mut members = vec![
         format!(
             "    pub const MSG_TYPE: &[u8] = b\"{}\";\n",
@@ -34,45 +36,42 @@ fn emit_message_impl(message: dictionary::Message<'_>) -> Result<String, Error> 
     for member in message.members() {
         match member {
             dictionary::Member::Field { field, .. } => {
-                members.push(emit_accessor(field, Lifetime::Receiver)?)
+                members.push(emit_accessor(field, names, Lifetime::Receiver))
             }
             dictionary::Member::Group(group) => members.push(emit_group_accessor(
                 group,
+                names,
                 Lifetime::Receiver,
                 "Self::KNOWN_TAGS",
-            )?),
+            )),
         }
     }
 
-    Ok(format!(
-        "impl {} {{\n{}}}\n",
-        message.name(),
-        members.join("\n")
-    ))
+    format!("impl {} {{\n{}}}\n", message.name(), members.join("\n"))
 }
 
 /// The module holding the groups declared directly in a message, if it
 /// declares any.
-fn emit_message_module(message: dictionary::Message<'_>) -> Result<Option<String>, Error> {
-    let modules = message
+fn emit_message_module(message: dictionary::Message<'_>, names: &Names) -> Option<String> {
+    let modules: Vec<String> = message
         .members()
         .filter_map(|member| match member {
             dictionary::Member::Group(group)
                 if matches!(group.declared_in(), MemberContext::Message(_)) =>
             {
-                Some(emit_group_module(group))
+                Some(emit_group_module(group, names))
             }
             _ => None,
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect();
     if modules.is_empty() {
-        return Ok(None);
+        return None;
     }
-    Ok(Some(format!(
+    Some(format!(
         "pub mod {} {{\n{}}}\n",
-        message_module_name(message.name())?,
+        names.message_module(message.name()),
         indent(&modules.join("\n"), 1)
-    )))
+    ))
 }
 
 /// The lifetime an accessor's borrowed results live for.
@@ -84,8 +83,8 @@ pub(super) enum Lifetime {
     Scope,
 }
 
-pub(super) fn emit_accessor(field: &Field, lifetime: Lifetime) -> Result<String, Error> {
-    let name = method_name(field)?;
+pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) -> String {
+    let name = names.accessor(field);
     let tag = field.tag;
     let (reference, type_lifetime) = match lifetime {
         Lifetime::Receiver => ("&", "'_"),
@@ -93,23 +92,23 @@ pub(super) fn emit_accessor(field: &Field, lifetime: Lifetime) -> Result<String,
     };
 
     if !field.values.is_empty() {
-        let type_name = &field.name;
+        let type_name = names.enum_type(field);
         if field.data_type.is_multiple_value() {
-            return Ok(format!(
+            return format!(
                 "    pub fn {name}(&self) -> Result<Option<MultipleValues<{type_lifetime}, {type_name}<{type_lifetime}>>>, InvalidValue> {{\n        self.0.get_multiple_values(Tag({tag}))\n    }}\n"
-            ));
+            );
         }
         let (conversion, enum_type) = if field.data_type.is_int_based() {
             ("get_int", type_name.to_owned())
         } else {
             ("get_str", format!("{type_name}<{type_lifetime}>"))
         };
-        return Ok(format!(
+        return format!(
             "    pub fn {name}(&self) -> Result<Option<{enum_type}>, InvalidValue> {{\n        Ok(self.0.{conversion}(Tag({tag}))?.map({type_name}::from_value))\n    }}\n"
-        ));
+        );
     }
 
-    let accessor = match &field.data_type {
+    match &field.data_type {
         DataType::String => format!(
             "    pub fn {name}(&self) -> Result<Option<{reference}str>, InvalidValue> {{\n        self.0.get_str(Tag({tag}))\n    }}\n"
         ),
@@ -119,14 +118,14 @@ pub(super) fn emit_accessor(field: &Field, lifetime: Lifetime) -> Result<String,
         _ => format!(
             "    pub fn {name}(&self) -> Option<{reference}[u8]> {{\n        self.0.get(Tag({tag}))\n    }}\n"
         ),
-    };
-
-    Ok(accessor)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Lifetime, emit_accessor};
+    use crate::rust::names::Names;
+    use crate::test_utils::message_with;
     use refix_dictionary::{DataType, EnumValue, Field, Tag};
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
@@ -138,8 +137,13 @@ mod tests {
         }
     }
 
+    fn accessor(field: &Field, lifetime: Lifetime) -> String {
+        let dictionary = message_with(vec![field.clone()]);
+        emit_accessor(field, &Names::new(&dictionary).unwrap(), lifetime)
+    }
+
     fn scope_signature(field: &Field) -> String {
-        let accessor = emit_accessor(field, Lifetime::Scope).unwrap();
+        let accessor = accessor(field, Lifetime::Scope);
         accessor.lines().next().unwrap().trim().to_owned()
     }
 
@@ -189,7 +193,7 @@ mod tests {
     #[test]
     fn a_multiple_value_enum_reads_all_its_values() {
         let exec_inst = with_value(field("ExecInst", 18, DataType::MultipleStringValue));
-        let accessor = emit_accessor(&exec_inst, Lifetime::Receiver).unwrap();
+        let accessor = accessor(&exec_inst, Lifetime::Receiver);
 
         assert_eq!(
             accessor,
@@ -220,7 +224,7 @@ mod tests {
         let party_role = with_value(field("PartyRole", 452, DataType::NumInGroup));
         let ord_type = with_value(field("OrdType", 40, DataType::Char));
         let body = |field: &Field| {
-            let accessor = emit_accessor(field, Lifetime::Receiver).unwrap();
+            let accessor = accessor(field, Lifetime::Receiver);
             accessor.lines().nth(1).unwrap().trim().to_owned()
         };
 

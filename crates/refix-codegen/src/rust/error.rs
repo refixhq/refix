@@ -1,11 +1,20 @@
 use refix_dictionary::MemberContext;
 
+use crate::NameClash;
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Error {
     UnrepresentableName { field: String },
     UnrepresentableValue { field: String, description: String },
     UnrepresentableGroupName { context: MemberContext },
     UnrepresentableMessageName { message: String },
+    NameClash(Box<NameClash>),
+}
+
+impl From<Box<NameClash>> for Error {
+    fn from(clash: Box<NameClash>) -> Self {
+        Error::NameClash(clash)
+    }
 }
 
 impl std::fmt::Display for Error {
@@ -26,6 +35,7 @@ impl std::fmt::Display for Error {
             Error::UnrepresentableMessageName { message } => {
                 write!(f, "message '{message}' cannot be a rust module name")
             }
+            Error::NameClash(clash) => write!(f, "rust name {clash}"),
         }
     }
 }
