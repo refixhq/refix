@@ -6,7 +6,7 @@ use std::fmt;
 
 use refix_dictionary::MemberContext;
 
-use crate::{Language, Warning};
+use crate::Warning;
 pub use error::NameClash;
 
 /// What a generated name stands for.
@@ -85,7 +85,6 @@ impl Namespace {
     pub(crate) fn claim_enum(
         &mut self,
         field: &str,
-        language: Language,
         warnings: &mut Vec<Warning>,
     ) -> Result<String, Box<NameClash>> {
         let owner = Owner::Enum(field.to_owned());
@@ -97,7 +96,6 @@ impl Namespace {
         let name = format!("{field}Enum");
         self.claim(&name, owner)?;
         warnings.push(Warning::Renamed {
-            language,
             clash,
             name: name.clone(),
         });
@@ -113,7 +111,6 @@ impl Namespace {
         name: &str,
         owner: Owner,
         numbered: impl Fn(&str, u32) -> String,
-        language: Language,
         warnings: &mut Vec<Warning>,
     ) -> Result<String, Box<NameClash>> {
         let clash = match self.claim(name, owner.clone()) {
@@ -130,7 +127,6 @@ impl Namespace {
             number += 1;
         };
         warnings.push(Warning::Renamed {
-            language,
             clash,
             name: renamed.clone(),
         });
@@ -141,7 +137,7 @@ impl Namespace {
 #[cfg(test)]
 mod tests {
     use super::{NameClash, Namespace, Owner};
-    use crate::{Language, Warning};
+    use crate::Warning;
     use refix_dictionary::MemberContext;
 
     #[test]
@@ -200,14 +196,13 @@ mod tests {
         let mut warnings = Vec::new();
 
         let name = namespace
-            .claim_enum("SecurityStatus", Language::Rust, &mut warnings)
+            .claim_enum("SecurityStatus", &mut warnings)
             .unwrap();
 
         assert_eq!(name, "SecurityStatusEnum");
         assert_eq!(
             warnings,
             vec![Warning::Renamed {
-                language: Language::Rust,
                 clash: Box::new(NameClash {
                     name: "SecurityStatus".to_owned(),
                     first: Owner::Message("SecurityStatus".to_owned()),
@@ -226,9 +221,7 @@ mod tests {
             .claim("RateSource", Owner::Group(context))
             .unwrap();
 
-        let name = namespace
-            .claim_enum("RateSource", Language::Python, &mut Vec::new())
-            .unwrap();
+        let name = namespace.claim_enum("RateSource", &mut Vec::new()).unwrap();
 
         assert_eq!(name, "RateSourceEnum");
     }
@@ -238,9 +231,7 @@ mod tests {
         let mut namespace = Namespace::with_generated(&["Result"]);
         let mut warnings = Vec::new();
 
-        let clash = namespace
-            .claim_enum("Result", Language::Rust, &mut warnings)
-            .unwrap_err();
+        let clash = namespace.claim_enum("Result", &mut warnings).unwrap_err();
 
         assert_eq!(clash.first, Owner::Generated);
         assert!(warnings.is_empty());
@@ -256,7 +247,7 @@ mod tests {
         }
 
         let clash = namespace
-            .claim_enum("SecurityStatus", Language::Rust, &mut Vec::new())
+            .claim_enum("SecurityStatus", &mut Vec::new())
             .unwrap_err();
 
         assert_eq!(
@@ -290,13 +281,7 @@ mod tests {
             .into_iter()
             .map(|code| {
                 namespace
-                    .claim_value(
-                        "Euribor",
-                        value(code),
-                        numbered,
-                        Language::Rust,
-                        &mut warnings,
-                    )
+                    .claim_value("Euribor", value(code), numbered, &mut warnings)
                     .unwrap()
             })
             .collect();
@@ -306,7 +291,6 @@ mod tests {
         assert_eq!(
             warnings[1],
             Warning::Renamed {
-                language: Language::Rust,
                 clash: Box::new(NameClash {
                     name: "Euribor".to_owned(),
                     first: value("Euribor"),
@@ -324,13 +308,7 @@ mod tests {
         namespace.claim("Euribor2", value("Euribor2")).unwrap();
 
         let name = namespace
-            .claim_value(
-                "Euribor",
-                value("EURIBOR"),
-                numbered,
-                Language::Rust,
-                &mut Vec::new(),
-            )
+            .claim_value("Euribor", value("EURIBOR"), numbered, &mut Vec::new())
             .unwrap();
 
         assert_eq!(name, "Euribor3");
@@ -341,13 +319,7 @@ mod tests {
         let mut namespace = Namespace::with_generated(&["Unrecognized"]);
 
         let clash = namespace
-            .claim_value(
-                "Unrecognized",
-                value("U"),
-                numbered,
-                Language::Rust,
-                &mut Vec::new(),
-            )
+            .claim_value("Unrecognized", value("U"), numbered, &mut Vec::new())
             .unwrap_err();
 
         assert_eq!(clash.first, Owner::Generated);

@@ -4,10 +4,10 @@ use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 
 use super::Error;
 use super::naming::{group_property_name, member_name, numbered_member, property_name};
+use crate::Warning;
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
 use crate::naming::group_source_name;
-use crate::{Language, Warning};
 
 /// The imports and builtins the generated module relies on.
 const MODULE: &[&str] = &[
@@ -91,7 +91,7 @@ impl Names {
         }
         for field in dictionary.fields() {
             if !field.values.is_empty() {
-                let class = module.claim_enum(&field.name, Language::Python, warnings)?;
+                let class = module.claim_enum(&field.name, warnings)?;
                 names.name_enum(field, class, warnings)?;
             }
         }
@@ -148,13 +148,7 @@ impl Names {
                     code: value.value.clone(),
                     description: value.description.clone(),
                 };
-                Ok(members.claim_value(
-                    &name,
-                    owner,
-                    numbered_member,
-                    Language::Python,
-                    warnings,
-                )?)
+                Ok(members.claim_value(&name, owner, numbered_member, warnings)?)
             })
             .collect::<Result<Vec<_>, Error>>()?;
         self.enums.insert(
@@ -234,7 +228,7 @@ mod tests {
     use super::Names;
     use crate::python::Error;
     use crate::test_utils::message_with;
-    use crate::{Language, NameClash, Owner, Warning};
+    use crate::{NameClash, Owner, Warning};
     use refix_dictionary::{
         Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Group,
         Member, MemberContext, Message, Protocol, Spec, Tag, Version,
@@ -333,7 +327,6 @@ mod tests {
         assert_eq!(
             warnings,
             vec![Warning::Renamed {
-                language: Language::Python,
                 clash: Box::new(NameClash {
                     name: "NewOrderSingle".to_owned(),
                     first: Owner::Message("NewOrderSingle".to_owned()),
@@ -381,7 +374,6 @@ mod tests {
         assert_eq!(
             warnings,
             vec![Warning::Renamed {
-                language: Language::Python,
                 clash: Box::new(NameClash {
                     name: "RateSource".to_owned(),
                     first: Owner::Group(
@@ -425,13 +417,7 @@ mod tests {
             names.enum_members(&dictionary.fields()[0]),
             ["EURIBOR", "EURIBOR_2"]
         );
-        assert!(matches!(
-            warnings.as_slice(),
-            [Warning::Renamed {
-                language: Language::Python,
-                ..
-            }]
-        ));
+        assert!(matches!(warnings.as_slice(), [Warning::Renamed { .. }]));
     }
 
     #[test]

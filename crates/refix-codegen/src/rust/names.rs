@@ -4,9 +4,9 @@ use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 
 use super::Error;
 use super::naming::{group_name, message_module_name, method_name, numbered_variant, variant_name};
+use crate::Warning;
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
-use crate::{Language, Warning};
 
 /// Names the generated root relies on.
 ///
@@ -78,7 +78,7 @@ impl Names {
         }
         for field in dictionary.fields() {
             if !field.values.is_empty() {
-                let type_name = root.claim_enum(&field.name, Language::Rust, warnings)?;
+                let type_name = root.claim_enum(&field.name, warnings)?;
                 names.name_enum(field, type_name, warnings)?;
             }
         }
@@ -144,13 +144,7 @@ impl Names {
                     code: value.value.clone(),
                     description: value.description.clone(),
                 };
-                Ok(variants.claim_value(
-                    &name,
-                    owner,
-                    numbered_variant,
-                    Language::Rust,
-                    warnings,
-                )?)
+                Ok(variants.claim_value(&name, owner, numbered_variant, warnings)?)
             })
             .collect::<Result<Vec<_>, Error>>()?;
         self.enums.insert(
@@ -225,7 +219,7 @@ mod tests {
     use super::Names;
     use crate::rust::Error;
     use crate::test_utils::message_with;
-    use crate::{Language, NameClash, Owner, Warning};
+    use crate::{NameClash, Owner, Warning};
     use refix_dictionary::{
         Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Group, Member,
         MemberContext, Message, Protocol, Spec, Tag, Version,
@@ -276,7 +270,6 @@ mod tests {
         assert_eq!(
             warnings,
             vec![Warning::Renamed {
-                language: Language::Rust,
                 clash: Box::new(NameClash {
                     name: "NewOrderSingle".to_owned(),
                     first: Owner::Message("NewOrderSingle".to_owned()),
@@ -314,13 +307,7 @@ mod tests {
             names.variants(&dictionary.fields()[0]),
             ["Euribor", "Euribor2"]
         );
-        assert!(matches!(
-            warnings.as_slice(),
-            [Warning::Renamed {
-                language: Language::Rust,
-                ..
-            }]
-        ));
+        assert!(matches!(warnings.as_slice(), [Warning::Renamed { .. }]));
     }
 
     #[test]

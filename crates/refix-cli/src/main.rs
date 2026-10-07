@@ -64,20 +64,20 @@ fn codegen(args: &Codegen) -> Result<(), String> {
     if let Some(output) = &args.rust {
         let generated = refix_codegen::rust::generate(&parsed.dictionary, &source)
             .map_err(|error| format!("cannot generate from '{dictionary_path}': {error}"))?;
-        write(generated, output)?;
+        write(generated, output, "rust")?;
     }
     if let Some(output) = &args.python {
         let generated = refix_codegen::python::generate(&parsed.dictionary, &source)
             .map_err(|error| format!("cannot generate from '{dictionary_path}': {error}"))?;
-        write(generated, output)?;
+        write(generated, output, "python")?;
     }
 
     Ok(())
 }
 
-fn write(generated: Generated, output: &Path) -> Result<(), String> {
+fn write(generated: Generated, output: &Path, language: &str) -> Result<(), String> {
     for warning in &generated.warnings {
-        eprintln!("warning: {warning}");
+        eprintln!("warning: {language}: {warning}");
     }
     fs::write(output, generated.code)
         .map_err(|error| format!("cannot write '{}': {error}", output.display()))
