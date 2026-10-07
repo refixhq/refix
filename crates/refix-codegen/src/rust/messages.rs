@@ -124,7 +124,7 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
     }
 
     match &field.data_type {
-        DataType::String => format!(
+        DataType::String | DataType::Char => format!(
             "    pub fn {name}(&self) -> Result<Option<{reference}str>, InvalidValue> {{\n        self.0.get_str(Tag({tag}))\n    }}\n"
         ),
         data_type if data_type.is_int_based() => format!(
@@ -171,6 +171,14 @@ mod tests {
         assert_eq!(
             scope_signature(&field("PartyID", 448, DataType::String)),
             "pub fn party_id(&self) -> Result<Option<&'a str>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn a_char_reads_as_text() {
+        assert_eq!(
+            scope_signature(&field("OptAttribute", 206, DataType::Char)),
+            "pub fn opt_attribute(&self) -> Result<Option<&'a str>, InvalidValue> {"
         );
     }
 

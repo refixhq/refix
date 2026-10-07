@@ -64,7 +64,7 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
     let tag = field.tag;
     let (return_type, body) = if field.values.is_empty() {
         match field.data_type {
-            DataType::String => (
+            DataType::String | DataType::Char => (
                 "str | None".to_owned(),
                 format!("return {receiver}.get_str({tag})"),
             ),
