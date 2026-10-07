@@ -281,6 +281,19 @@ class NewOrderSingle:
     }
 
     #[test]
+    fn a_char_reads_as_text() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(206)])],
+            vec![field("OptAttribute", 206, DataType::Char, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def opt_attribute(self) -> str | None:\n        return self._raw.get_str(206)\n"
+        ));
+    }
+
+    #[test]
     fn imports_only_what_the_module_uses() {
         let with_a_field = generated(
             vec![message("Heartbeat", "0", vec![field_ref(112)])],
