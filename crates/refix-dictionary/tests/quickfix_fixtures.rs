@@ -166,8 +166,7 @@ fn parses_the_full_fix44_dictionary() {
         .sum();
     assert_eq!(groups, 356);
 
-    // The header ends with the NoHops group; the trailer holds the signature
-    // and CheckSum.
+    // The header ends with the NoHops group.
     let header: Vec<dictionary::Member> = parsed.dictionary.header().collect();
     assert_eq!(header.len(), 27);
     let Some(dictionary::Member::Group(hops)) = header.last() else {
@@ -175,6 +174,8 @@ fn parses_the_full_fix44_dictionary() {
     };
     assert_eq!(hops.count_field().name, "NoHops");
     assert_eq!(hops.declared_in(), &MemberContext::Header);
+
+    // The trailer holds the signature fields and CheckSum.
     let trailer: Vec<&str> = parsed
         .dictionary
         .trailer()

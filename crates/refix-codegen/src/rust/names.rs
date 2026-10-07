@@ -54,7 +54,8 @@ struct EnumNames {
 impl Names {
     /// Names everything generated from `dictionary`.
     ///
-    /// A clash a rule settles is renamed with a warning; any other fails.
+    /// A clash that a rule settles is renamed with a warning. Any other
+    /// clash is an error.
     pub(super) fn new(dictionary: &Dictionary, warnings: &mut Vec<Warning>) -> Result<Self, Error> {
         let mut names = Names {
             enums: HashMap::new(),
