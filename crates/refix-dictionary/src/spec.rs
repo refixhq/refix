@@ -2,15 +2,19 @@ use refix_message::Tag;
 use std::borrow::Cow;
 use std::fmt;
 
-/// The field, message and component definitions of one FIX version or venue
-/// dialect, as authored.
+/// The fields, messages, components, header and trailer of one FIX version
+/// or venue dialect, as authored.
 ///
 /// A spec is plain data and makes no consistency guarantees. It is what
 /// frontends parse into and what dialect authors construct by hand.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Spec {
     pub version: Version,
+    /// The members every message starts with, in source order.
+    pub header: Vec<Member>,
     pub messages: Vec<Message>,
+    /// The members every message ends with, in source order.
+    pub trailer: Vec<Member>,
     pub fields: Vec<Field>,
     pub components: Vec<Component>,
 }
@@ -83,13 +87,16 @@ pub struct Group {
     pub members: Vec<Member>,
 }
 
-/// The message, component or group instance a member appears in.
+/// The message, component, group instance, header or trailer a member
+/// appears in.
 ///
 /// Diagnostics use this to name the place a problem was found.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum MemberContext {
     Message(String),
     Component(String),
+    Header,
+    Trailer,
     /// A group's instances, named after the group's count field.
     Group {
         name: String,
@@ -112,6 +119,8 @@ impl fmt::Display for MemberContext {
         match self {
             Self::Message(name) => write!(f, "message '{name}'"),
             Self::Component(name) => write!(f, "component '{name}'"),
+            Self::Header => write!(f, "the header"),
+            Self::Trailer => write!(f, "the trailer"),
             Self::Group { name, parent } => write!(f, "group '{name}' in {parent}"),
         }
     }
@@ -246,6 +255,15 @@ mod tests {
         assert_eq!(DataType::Int.canonical_code("01"), "1");
         assert_eq!(DataType::Int.canonical_code("-007"), "-7");
         assert_eq!(DataType::Char.canonical_code("01"), "01");
+    }
+
+    #[test]
+    fn a_header_group_names_the_header() {
+        assert_eq!(
+            MemberContext::Header.group("NoHops").to_string(),
+            "group 'NoHops' in the header"
+        );
+        assert_eq!(MemberContext::Trailer.to_string(), "the trailer");
     }
 
     #[test]

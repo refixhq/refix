@@ -15,7 +15,9 @@ use std::ops::Index;
 #[derive(Clone, Debug)]
 pub struct Dictionary {
     spec: Spec,
+    header: Vec<ResolvedMember>,
     messages: Vec<ResolvedMessage>,
+    trailer: Vec<ResolvedMember>,
 }
 
 #[derive(Clone, Debug)]
@@ -80,6 +82,12 @@ impl Dictionary {
         &self.spec.fields
     }
 
+    /// The members every message starts with, in source order, components
+    /// expanded in place.
+    pub fn header(&self) -> impl Iterator<Item = Member<'_>> {
+        members_of(&self.header, &self.spec.fields)
+    }
+
     /// The messages, with references resolved and components expanded.
     pub fn messages(&self) -> impl Iterator<Item = Message<'_>> {
         self.spec
@@ -91,6 +99,12 @@ impl Dictionary {
                 members: &resolved.members,
                 fields: &self.spec.fields,
             })
+    }
+
+    /// The members every message ends with, in source order, components
+    /// expanded in place.
+    pub fn trailer(&self) -> impl Iterator<Item = Member<'_>> {
+        members_of(&self.trailer, &self.spec.fields)
     }
 
     /// The spec this dictionary was resolved from, for structural queries.
@@ -166,7 +180,8 @@ impl<'a> Group<'a> {
         self.resolved.is_required
     }
 
-    /// The message, component or group instance the `<group>` element sits in.
+    /// The message, component, group instance, header or trailer the
+    /// `<group>` element sits in.
     pub fn declared_in(&self) -> &'a MemberContext {
         &self.resolved.declared_in
     }
@@ -279,6 +294,8 @@ mod tests {
                 minor: 4,
                 service_pack: 0,
             },
+            header: vec![],
+            trailer: vec![],
             messages,
             fields,
             components,
@@ -315,6 +332,111 @@ mod tests {
                     is_required: false,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn resolves_the_header_and_trailer() {
+        let mut spec = spec_of(
+            vec![
+                field("SenderCompID", 49),
+                field("TargetCompID", 56),
+                field("CheckSum", 10),
+            ],
+            vec![component("Target", vec![field_ref(56, true)])],
+            vec![],
+        );
+        spec.header = vec![field_ref(49, true), component_ref("Target", false)];
+        spec.trailer = vec![field_ref(10, true)];
+
+        let dictionary = spec.resolve().unwrap();
+
+        assert_eq!(
+            field_members(dictionary.header()),
+            [(Tag(49), true), (Tag(56), false)]
+        );
+        assert_eq!(field_members(dictionary.trailer()), [(Tag(10), true)]);
+    }
+
+    #[test]
+    fn a_header_group_is_declared_in_the_header() {
+        let mut spec = spec_of(
+            vec![field("NoHops", 627), field("HopCompID", 628)],
+            vec![],
+            vec![],
+        );
+        spec.header = vec![spec::Member::Group(spec::Group {
+            count_tag: Tag(627),
+            is_required: false,
+            members: vec![field_ref(628, false)],
+        })];
+
+        let dictionary = spec.resolve().unwrap();
+
+        let Some(Member::Group(hops)) = dictionary.header().next() else {
+            panic!("expected the hops group");
+        };
+        assert_eq!(hops.declared_in(), &MemberContext::Header);
+    }
+
+    #[test]
+    fn a_header_tag_in_a_message_is_an_error() {
+        let mut spec = spec_of(
+            vec![field("ClOrdID", 11), field("SenderCompID", 49)],
+            vec![],
+            vec![message(
+                "NewOrderSingle",
+                vec![field_ref(11, true), field_ref(49, false)],
+            )],
+        );
+        spec.header = vec![field_ref(49, true)];
+
+        let error = spec.resolve().unwrap_err();
+
+        assert_eq!(
+            error,
+            Error::DuplicateField {
+                tag: Tag(49),
+                first: MemberContext::Header,
+                second: MemberContext::Message("NewOrderSingle".to_owned()),
+            }
+        );
+        assert_eq!(
+            error.to_string(),
+            "tag 49 appears in both the header and message 'NewOrderSingle'"
+        );
+    }
+
+    #[test]
+    fn a_trailer_tag_in_a_message_is_an_error() {
+        let mut spec = spec_of(
+            vec![field("Signature", 89)],
+            vec![],
+            vec![message("NewOrderSingle", vec![field_ref(89, false)])],
+        );
+        spec.trailer = vec![field_ref(89, false)];
+
+        assert_eq!(
+            spec.resolve().unwrap_err(),
+            Error::DuplicateField {
+                tag: Tag(89),
+                first: MemberContext::Message("NewOrderSingle".to_owned()),
+                second: MemberContext::Trailer,
+            }
+        );
+    }
+
+    #[test]
+    fn an_unknown_trailer_field_names_the_trailer() {
+        let mut spec = spec_of(vec![], vec![], vec![]);
+        spec.trailer = vec![field_ref(10, true)];
+
+        assert_eq!(
+            spec.resolve().unwrap_err(),
+            Error::UnknownField {
+                tag: Tag(10),
+                context: MemberContext::Trailer,
+            }
         );
     }
 

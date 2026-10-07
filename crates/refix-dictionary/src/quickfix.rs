@@ -18,14 +18,6 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     }
 
     let mut warnings = Vec::new();
-    for section in ["header", "trailer"] {
-        if root.children().any(|node| node.has_tag_name(section)) {
-            warnings.push(Warning::UnsupportedSection {
-                section: section.to_owned(),
-            });
-        }
-    }
-
     let version = parse_version(root)?;
     let fields = parse_fields(root, &mut warnings)?;
     let tags_by_name: HashMap<&str, Tag> = fields
@@ -33,11 +25,27 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
         .map(|field| (field.name.as_str(), field.tag))
         .collect();
 
+    let header = parse_section(
+        root,
+        "header",
+        MemberContext::Header,
+        &tags_by_name,
+        &mut warnings,
+    )?;
     let components = parse_components(root, &tags_by_name, &mut warnings)?;
     let messages = parse_messages(root, &tags_by_name, &mut warnings)?;
+    let trailer = parse_section(
+        root,
+        "trailer",
+        MemberContext::Trailer,
+        &tags_by_name,
+        &mut warnings,
+    )?;
 
     let spec = Spec {
         version,
+        header,
+        trailer,
         messages,
         components,
         fields,
@@ -197,6 +205,21 @@ fn parse_messages(
         .filter(|node| node.has_tag_name("message"))
         .map(|node| parse_message(node, tags_by_name, warnings))
         .collect()
+}
+
+/// The members of the `<header>` or `<trailer>` section, or none when the
+/// dictionary leaves it out.
+fn parse_section(
+    root: Node,
+    name: &str,
+    context: MemberContext,
+    tags_by_name: &HashMap<&str, Tag>,
+    warnings: &mut Vec<Warning>,
+) -> Result<Vec<Member>, Error> {
+    let Some(section) = root.children().find(|node| node.has_tag_name(name)) else {
+        return Ok(Vec::new());
+    };
+    parse_members(section, context, tags_by_name, warnings)
 }
 
 fn parse_message(
@@ -379,9 +402,6 @@ pub enum Warning {
         context: MemberContext,
         element: String,
     },
-    UnsupportedSection {
-        section: String,
-    },
     /// A value listed under the code of an earlier value of its field.
     RepeatedCode {
         field: String,
@@ -395,9 +415,6 @@ impl fmt::Display for Warning {
         match self {
             Warning::UnsupportedElement { context, element } => {
                 write!(f, "unexpected element <{element}> in {context}")
-            }
-            Warning::UnsupportedSection { section } => {
-                write!(f, "section <{section}> is not supported yet")
             }
             Warning::RepeatedCode {
                 field,
@@ -851,6 +868,79 @@ mod tests {
         fn missing_components_section_yields_no_components() {
             let parsed = parse("<fix major='4' minor='4'/>").unwrap();
             assert!(parsed.dictionary.spec().components.is_empty());
+        }
+    }
+
+    mod envelope {
+        use super::*;
+
+        const DICTIONARY: &str = "\
+<fix major='4' minor='4'>
+ <header>
+  <field name='SenderCompID' required='Y'/>
+  <group name='NoHops' required='N'>
+   <field name='HopCompID'/>
+  </group>
+ </header>
+ <trailer>
+  <field name='CheckSum' required='Y'/>
+ </trailer>
+ <fields>
+  <field number='49' name='SenderCompID' type='STRING'/>
+  <field number='627' name='NoHops' type='NUMINGROUP'/>
+  <field number='628' name='HopCompID' type='STRING'/>
+  <field number='10' name='CheckSum' type='STRING'/>
+ </fields>
+</fix>";
+
+        fn field_ref(tag: u32, is_required: bool) -> Member {
+            Member::Field(FieldRef {
+                tag: Tag(tag),
+                is_required,
+            })
+        }
+
+        #[test]
+        fn parses_the_header_and_trailer() {
+            let parsed = parse(DICTIONARY).unwrap();
+
+            let spec = parsed.dictionary.spec();
+            assert_eq!(
+                spec.header,
+                vec![
+                    field_ref(49, true),
+                    Member::Group(Group {
+                        count_tag: Tag(627),
+                        is_required: false,
+                        members: vec![field_ref(628, false)],
+                    }),
+                ]
+            );
+            assert_eq!(spec.trailer, vec![field_ref(10, true)]);
+            assert!(parsed.warnings.is_empty());
+        }
+
+        #[test]
+        fn missing_sections_yield_no_members() {
+            let parsed = parse("<fix major='5' minor='0'/>").unwrap();
+
+            assert!(parsed.dictionary.spec().header.is_empty());
+            assert!(parsed.dictionary.spec().trailer.is_empty());
+        }
+
+        #[test]
+        fn an_undefined_field_in_the_trailer_names_the_trailer() {
+            let error = parse(
+                "<fix major='4' minor='4'>\
+                 <trailer><field name='CheckSum'/></trailer></fix>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::UnknownField { context, ref field }
+                    if context == MemberContext::Trailer && field == "CheckSum"
+            ));
         }
     }
 

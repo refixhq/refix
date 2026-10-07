@@ -21,6 +21,8 @@ pub fn message_with(fields: Vec<Field>) -> Dictionary {
             minor: 4,
             service_pack: 0,
         },
+        header: vec![],
+        trailer: vec![],
         messages: vec![Message {
             name: "NewOrderSingle".to_owned(),
             msg_type: "D".to_owned(),
@@ -75,6 +77,8 @@ pub fn with_group<R>(
             minor: 4,
             service_pack: 0,
         },
+        header: vec![],
+        trailer: vec![],
         messages: vec![Message {
             name: "NewOrderSingle".to_owned(),
             msg_type: "D".to_owned(),

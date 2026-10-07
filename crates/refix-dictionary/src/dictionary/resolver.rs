@@ -7,23 +7,23 @@ use std::collections::{HashMap, hash_map::Entry};
 impl Spec {
     /// Resolves this spec into a [`Dictionary`], checking its integrity.
     pub fn resolve(self) -> Result<Dictionary, Error> {
-        let messages = resolve_messages(&self)?;
+        let mut resolver = Resolver::new(&self)?;
+        resolver.expand_components()?;
+        let header = resolver.resolve_members(&self.header, &MemberContext::Header, false)?;
+        let trailer = resolver.resolve_members(&self.trailer, &MemberContext::Trailer, false)?;
+        let messages = self
+            .messages
+            .iter()
+            .map(|message| resolver.resolve_message(message, &header, &trailer))
+            .collect::<Result<_, _>>()?;
 
         Ok(Dictionary {
             spec: self,
+            header,
             messages,
+            trailer,
         })
     }
-}
-
-fn resolve_messages(spec: &Spec) -> Result<Vec<ResolvedMessage>, Error> {
-    let mut resolver = Resolver::new(spec)?;
-    resolver.expand_components()?;
-
-    spec.messages
-        .iter()
-        .map(|message| resolver.resolve_message(message))
-        .collect()
 }
 
 /// State shared while resolving one spec.
@@ -88,9 +88,24 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    fn resolve_message(&mut self, message: &spec::Message) -> Result<ResolvedMessage, Error> {
+    /// Resolves a message's members, and checks that the header and trailer
+    /// share none of their tags.
+    fn resolve_message(
+        &mut self,
+        message: &spec::Message,
+        header: &[ResolvedMember],
+        trailer: &[ResolvedMember],
+    ) -> Result<ResolvedMessage, Error> {
         let context = MemberContext::Message(message.name.clone());
         let members = self.resolve_members(&message.members, &context, false)?;
+        let mut seen = HashMap::new();
+        for (section, context) in [
+            (header, &MemberContext::Header),
+            (members.as_slice(), &context),
+            (trailer, &MemberContext::Trailer),
+        ] {
+            insert_unique_tags(section, context, &self.spec.fields, &mut seen)?;
+        }
         Ok(ResolvedMessage { members })
     }
 
