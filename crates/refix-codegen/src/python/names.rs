@@ -5,6 +5,7 @@ use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 use super::Error;
 use super::naming::{group_property_name, member_name, numbered_member, property_name};
 use crate::Warning;
+use crate::envelope::Section;
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
 use crate::naming::group_source_name;
@@ -13,8 +14,10 @@ use crate::naming::group_source_name;
 const MODULE: &[&str] = &[
     "ClassVar",
     "GroupTable",
+    "Header",
     "KnownTags",
     "RawMessage",
+    "Trailer",
     "Unrecognized",
     "annotations",
     "bytes",
@@ -38,6 +41,20 @@ const MESSAGE: &[&str] = &[
     "KNOWN_TAGS",
     "MSG_TYPE",
     "__init__",
+    "_raw",
+    "cached_property",
+    "header",
+    "property",
+    "raw",
+    "trailer",
+];
+
+/// The members every header or trailer view defines, and the decorators its
+/// body looks up.
+const VIEW: &[&str] = &[
+    "KNOWN_TAGS",
+    "__init__",
+    "_known_tags",
     "_raw",
     "cached_property",
     "property",
@@ -80,7 +97,7 @@ impl Names {
         for message in dictionary.messages() {
             module.claim(message.name(), Owner::Message(message.name().to_owned()))?;
         }
-        // A message's own group class nests in the message's class, so only
+        // A message's or section's own group class nests in its class, so only
         // a shared group's class is named in the module.
         for group in declared_groups(dictionary) {
             if is_generated(group) {
@@ -110,12 +127,33 @@ impl Names {
             }
             names.name_properties(message.members(), members)?;
         }
+        for section in [Section::Header, Section::Trailer] {
+            names.name_section(section, dictionary)?;
+        }
         for group in declared_groups(dictionary) {
             if is_generated(group) {
                 names.name_properties(group.members(), Namespace::with_generated(INSTANCE))?;
             }
         }
         Ok(names)
+    }
+
+    /// Names a section view's properties beside the classes of the groups the
+    /// section declares itself.
+    fn name_section(&mut self, section: Section, dictionary: &Dictionary) -> Result<(), Error> {
+        let members = section.members(dictionary);
+        let mut namespace = Namespace::with_generated(VIEW);
+        for member in &members {
+            if let dictionary::Member::Group(group) = member
+                && *group.declared_in() == section.context()
+            {
+                namespace.claim(
+                    self.group_class(*group),
+                    Owner::Group(instance_context(*group)),
+                )?;
+            }
+        }
+        self.name_properties(members.into_iter(), namespace)
     }
 
     /// Names a group's class and property, returning the class.
@@ -214,11 +252,13 @@ impl Names {
 
     /// The path of a group's class from the module.
     ///
-    /// A message's own group sits under the message's class.
+    /// A message's or section's own group sits under its class.
     pub(super) fn group_path(&self, group: dictionary::Group<'_>) -> String {
         let class = self.group_class(group);
         match group.declared_in() {
             MemberContext::Message(message) => format!("{message}.{class}"),
+            MemberContext::Header => format!("{}.{class}", Section::Header.type_name()),
+            MemberContext::Trailer => format!("{}.{class}", Section::Trailer.type_name()),
             _ => class.to_owned(),
         }
     }
@@ -443,6 +483,18 @@ mod tests {
         assert_eq!(
             clash(vec![field("Raw", 9000, DataType::String)]).first,
             Owner::Generated
+        );
+    }
+
+    #[test]
+    fn a_property_named_like_the_header_view_clashes() {
+        assert_eq!(
+            clash(vec![field("Header", 9000, DataType::String)]),
+            NameClash {
+                name: "header".to_owned(),
+                first: Owner::Generated,
+                second: Owner::Field("Header".to_owned()),
+            }
         );
     }
 

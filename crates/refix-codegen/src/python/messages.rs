@@ -4,10 +4,12 @@ use super::enums::str_literal;
 use super::groups::{emit_group_class, emit_group_property, tags};
 use super::layout::{MAX_WIDTH, indent, tuple_lines};
 use super::names::Names;
+use super::views::emit_view_property;
 use crate::envelope::Envelope;
 use crate::groups::message_known_tags;
 
-/// A message's class. Its known tags include the `envelope`'s.
+/// A message's class. Its known tags include the `envelope`'s, and it
+/// reaches each view the envelope has.
 pub(super) fn emit_message(
     message: dictionary::Message<'_>,
     envelope: &Envelope,
@@ -43,6 +45,9 @@ pub(super) fn emit_message(
     members.push(
         "    @property\n    def raw(self) -> RawMessage:\n        return self._raw\n".to_owned(),
     );
+    for section in &envelope.sections {
+        members.push(emit_view_property(*section, name, envelope));
+    }
     let known_tags = format!("{name}.KNOWN_TAGS");
     members.extend(message.members().map(|member| match member {
         dictionary::Member::Field { field, .. } => emit_property(field, names, "self._raw"),

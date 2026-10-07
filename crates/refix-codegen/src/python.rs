@@ -5,6 +5,7 @@ mod layout;
 mod messages;
 mod names;
 mod naming;
+mod views;
 
 use refix_dictionary::{Dictionary, dictionary};
 
@@ -16,6 +17,7 @@ pub use error::Error;
 use groups::{emit_group_class, shared_groups};
 use messages::emit_message;
 use names::Names;
+use views::emit_view;
 
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Error> {
     let mut warnings = Vec::new();
@@ -34,15 +36,21 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .into_iter()
         .map(|group| emit_group_class(group, 0, &names))
         .collect();
+    let views: Vec<String> = envelope
+        .sections
+        .iter()
+        .map(|section| emit_view(*section, dictionary, &envelope, &names))
+        .collect();
     let messages: Vec<String> = dictionary
         .messages()
         .map(|message| emit_message(message, &envelope, &names))
         .collect();
-    let imports = emit_imports(dictionary, !enums.is_empty());
+    let imports = emit_imports(dictionary, &envelope, !enums.is_empty());
     let sections = imports
         .into_iter()
         .chain(enums)
         .chain(groups)
+        .chain(views)
         .chain(messages)
         .collect::<Vec<String>>()
         .join("\n\n");
@@ -52,22 +60,25 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
 }
 
 /// The import block, naming only what the module uses.
-fn emit_imports(dictionary: &Dictionary, has_enums: bool) -> Option<String> {
-    let has_messages = dictionary.messages().next().is_some();
-    let has_properties = dictionary
-        .messages()
-        .any(|message| message.members().next().is_some());
-    let has_groups = dictionary.messages().any(|message| {
-        message
-            .members()
-            .any(|member| matches!(member, dictionary::Member::Group(_)))
-    });
-    let reads_enums = dictionary
-        .messages()
-        .any(|message| reads_enums(message.members()));
+fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -> Option<String> {
+    let has_classes = dictionary.messages().next().is_some() || !envelope.sections.is_empty();
+    let has_properties = !envelope.sections.is_empty()
+        || dictionary
+            .messages()
+            .any(|message| message.members().next().is_some());
+    let has_groups = !envelope.with_groups.is_empty()
+        || dictionary.messages().any(|message| {
+            message
+                .members()
+                .any(|member| matches!(member, dictionary::Member::Group(_)))
+        });
+    let reads_enums = reads_enums(dictionary.header().chain(dictionary.trailer()))
+        || dictionary
+            .messages()
+            .any(|message| reads_enums(message.members()));
 
     let mut blocks = Vec::new();
-    if has_messages {
+    if has_classes {
         blocks.push(vec!["from __future__ import annotations\n"]);
     }
     let mut standard = Vec::new();
@@ -77,7 +88,7 @@ fn emit_imports(dictionary: &Dictionary, has_enums: bool) -> Option<String> {
     if has_properties {
         standard.push("from functools import cached_property\n");
     }
-    if has_messages {
+    if has_classes {
         standard.push("from typing import ClassVar\n");
     }
     blocks.push(standard);
@@ -86,7 +97,7 @@ fn emit_imports(dictionary: &Dictionary, has_enums: bool) -> Option<String> {
     if has_groups {
         refix.push("import refix\n");
         refix.push("from refix import GroupTable, KnownTags, RawMessage\n");
-    } else if has_messages {
+    } else if has_classes {
         refix.push("from refix import KnownTags, RawMessage\n");
     }
     if reads_enums {
