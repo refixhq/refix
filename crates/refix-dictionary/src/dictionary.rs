@@ -380,6 +380,53 @@ mod tests {
     }
 
     #[test]
+    fn a_header_tag_in_a_message_is_an_error() {
+        let mut spec = spec_of(
+            vec![field("ClOrdID", 11), field("SenderCompID", 49)],
+            vec![],
+            vec![message(
+                "NewOrderSingle",
+                vec![field_ref(11, true), field_ref(49, false)],
+            )],
+        );
+        spec.header = vec![field_ref(49, true)];
+
+        let error = spec.resolve().unwrap_err();
+
+        assert_eq!(
+            error,
+            Error::DuplicateField {
+                tag: Tag(49),
+                first: MemberContext::Header,
+                second: MemberContext::Message("NewOrderSingle".to_owned()),
+            }
+        );
+        assert_eq!(
+            error.to_string(),
+            "tag 49 appears in both the header and message 'NewOrderSingle'"
+        );
+    }
+
+    #[test]
+    fn a_trailer_tag_in_a_message_is_an_error() {
+        let mut spec = spec_of(
+            vec![field("Signature", 89)],
+            vec![],
+            vec![message("NewOrderSingle", vec![field_ref(89, false)])],
+        );
+        spec.trailer = vec![field_ref(89, false)];
+
+        assert_eq!(
+            spec.resolve().unwrap_err(),
+            Error::DuplicateField {
+                tag: Tag(89),
+                first: MemberContext::Message("NewOrderSingle".to_owned()),
+                second: MemberContext::Trailer,
+            }
+        );
+    }
+
+    #[test]
     fn an_unknown_trailer_field_names_the_trailer() {
         let mut spec = spec_of(vec![], vec![], vec![]);
         spec.trailer = vec![field_ref(10, true)];
