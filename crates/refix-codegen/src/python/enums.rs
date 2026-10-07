@@ -97,6 +97,20 @@ mod tests {
     }
 
     #[test]
+    fn values_named_alike_are_numbered() {
+        let field = enum_field(
+            "BenchmarkCurveName",
+            DataType::String,
+            &[("Euribor", "EURIBOR"), ("EURIBOR", "EURIBOR")],
+        );
+
+        assert_eq!(
+            emitted(field),
+            "class BenchmarkCurveName(enum.StrEnum):\n    EURIBOR = \"Euribor\"\n    EURIBOR_2 = \"EURIBOR\"\n"
+        );
+    }
+
+    #[test]
     fn string_literals_are_escaped() {
         assert_eq!(str_literal("a\"b\\c"), r#""a\"b\\c""#);
         assert_eq!(str_literal("\u{1}\u{e9}"), r#""\u0001\u00e9""#);

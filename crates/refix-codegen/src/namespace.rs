@@ -103,6 +103,39 @@ impl Namespace {
         });
         Ok(name)
     }
+
+    /// Takes the name of one of a field's values.
+    ///
+    /// A value named like an earlier one of the field is numbered from 2 by
+    /// `numbered`, with a warning.
+    pub(crate) fn claim_value(
+        &mut self,
+        name: &str,
+        owner: Owner,
+        numbered: impl Fn(&str, u32) -> String,
+        language: Language,
+        warnings: &mut Vec<Warning>,
+    ) -> Result<String, Box<NameClash>> {
+        let clash = match self.claim(name, owner.clone()) {
+            Ok(()) => return Ok(name.to_owned()),
+            Err(clash) if matches!(clash.first, Owner::Value { .. }) => clash,
+            Err(clash) => return Err(clash),
+        };
+        let mut number = 2;
+        let renamed = loop {
+            let candidate = numbered(name, number);
+            if self.claim(&candidate, owner.clone()).is_ok() {
+                break candidate;
+            }
+            number += 1;
+        };
+        warnings.push(Warning::Renamed {
+            language,
+            clash,
+            name: renamed.clone(),
+        });
+        Ok(renamed)
+    }
 }
 
 #[cfg(test)]
@@ -234,6 +267,90 @@ mod tests {
                 second: Owner::Enum("SecurityStatus".to_owned()),
             })
         );
+    }
+
+    fn value(code: &str) -> Owner {
+        Owner::Value {
+            field: "BenchmarkCurveName".to_owned(),
+            code: code.to_owned(),
+            description: "EURIBOR".to_owned(),
+        }
+    }
+
+    fn numbered(name: &str, number: u32) -> String {
+        format!("{name}{number}")
+    }
+
+    #[test]
+    fn values_named_alike_are_numbered_in_order() {
+        let mut namespace = Namespace::default();
+        let mut warnings = Vec::new();
+
+        let names: Vec<String> = ["Euribor", "EURIBOR", "euribor"]
+            .into_iter()
+            .map(|code| {
+                namespace
+                    .claim_value(
+                        "Euribor",
+                        value(code),
+                        numbered,
+                        Language::Rust,
+                        &mut warnings,
+                    )
+                    .unwrap()
+            })
+            .collect();
+
+        assert_eq!(names, ["Euribor", "Euribor2", "Euribor3"]);
+        assert_eq!(warnings.len(), 2);
+        assert_eq!(
+            warnings[1],
+            Warning::Renamed {
+                language: Language::Rust,
+                clash: Box::new(NameClash {
+                    name: "Euribor".to_owned(),
+                    first: value("Euribor"),
+                    second: value("euribor"),
+                }),
+                name: "Euribor3".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_numbered_value_skips_a_taken_number() {
+        let mut namespace = Namespace::default();
+        namespace.claim("Euribor", value("Euribor")).unwrap();
+        namespace.claim("Euribor2", value("Euribor2")).unwrap();
+
+        let name = namespace
+            .claim_value(
+                "Euribor",
+                value("EURIBOR"),
+                numbered,
+                Language::Rust,
+                &mut Vec::new(),
+            )
+            .unwrap();
+
+        assert_eq!(name, "Euribor3");
+    }
+
+    #[test]
+    fn a_value_is_not_numbered_past_the_generated_code() {
+        let mut namespace = Namespace::with_generated(&["Unrecognized"]);
+
+        let clash = namespace
+            .claim_value(
+                "Unrecognized",
+                value("U"),
+                numbered,
+                Language::Rust,
+                &mut Vec::new(),
+            )
+            .unwrap_err();
+
+        assert_eq!(clash.first, Owner::Generated);
     }
 
     #[test]

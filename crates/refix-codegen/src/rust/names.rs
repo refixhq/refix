@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 
 use super::Error;
-use super::naming::{group_name, message_module_name, method_name, variant_name};
+use super::naming::{group_name, message_module_name, method_name, numbered_variant, variant_name};
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
 use crate::{Language, Warning};
@@ -79,7 +79,7 @@ impl Names {
         for field in dictionary.fields() {
             if !field.values.is_empty() {
                 let type_name = root.claim_enum(&field.name, Language::Rust, warnings)?;
-                names.name_enum(field, type_name)?;
+                names.name_enum(field, type_name, warnings)?;
             }
         }
         for message in dictionary.messages() {
@@ -127,22 +127,30 @@ impl Names {
         Ok(())
     }
 
-    fn name_enum(&mut self, field: &Field, type_name: String) -> Result<(), Error> {
+    fn name_enum(
+        &mut self,
+        field: &Field,
+        type_name: String,
+        warnings: &mut Vec<Warning>,
+    ) -> Result<(), Error> {
         let mut variants = Namespace::with_generated(&["Unrecognized"]);
         let names = field
             .values
             .iter()
             .map(|value| {
                 let name = variant_name(field, value)?;
-                variants.claim(
+                let owner = Owner::Value {
+                    field: field.name.clone(),
+                    code: value.value.clone(),
+                    description: value.description.clone(),
+                };
+                Ok(variants.claim_value(
                     &name,
-                    Owner::Value {
-                        field: field.name.clone(),
-                        code: value.value.clone(),
-                        description: value.description.clone(),
-                    },
-                )?;
-                Ok(name)
+                    owner,
+                    numbered_variant,
+                    Language::Rust,
+                    warnings,
+                )?)
             })
             .collect::<Result<Vec<_>, Error>>()?;
         self.enums.insert(
@@ -293,24 +301,26 @@ mod tests {
     }
 
     #[test]
-    fn two_values_named_alike_clash() {
-        let field = with_values(
+    fn two_values_named_alike_are_numbered() {
+        let dictionary = message_with(vec![with_values(
             field("BenchmarkCurveName", 221, DataType::String),
             &[("Euribor", "EURIBOR"), ("EURIBOR", "EURIBOR")],
-        );
-        let value = |code: &str| Owner::Value {
-            field: "BenchmarkCurveName".to_owned(),
-            code: code.to_owned(),
-            description: "EURIBOR".to_owned(),
-        };
+        )]);
+        let mut warnings = Vec::new();
+
+        let names = Names::new(&dictionary, &mut warnings).unwrap();
+
         assert_eq!(
-            clash(vec![field]),
-            NameClash {
-                name: "Euribor".to_owned(),
-                first: value("Euribor"),
-                second: value("EURIBOR"),
-            }
+            names.variants(&dictionary.fields()[0]),
+            ["Euribor", "Euribor2"]
         );
+        assert!(matches!(
+            warnings.as_slice(),
+            [Warning::Renamed {
+                language: Language::Rust,
+                ..
+            }]
+        ));
     }
 
     #[test]

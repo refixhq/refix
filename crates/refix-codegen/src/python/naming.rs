@@ -32,6 +32,12 @@ pub(super) fn member_name(field: &Field, value: &EnumValue) -> Result<String, Er
     Ok(name)
 }
 
+/// Numbers a member an earlier value of its field is named like, so the
+/// second `EURIBOR` becomes `EURIBOR_2`.
+pub(super) fn numbered_member(name: &str, number: u32) -> String {
+    format!("{name}_{number}")
+}
+
 /// Escapes a keyword with a trailing underscore, as PEP 8 suggests.
 fn identifier(name: String) -> String {
     if KEYWORDS.contains(&name.as_str()) {

@@ -136,6 +136,21 @@ impl PartyRole {
     }
 
     #[test]
+    fn values_named_alike_are_numbered() {
+        let field = enum_field(
+            "BenchmarkCurveName",
+            DataType::String,
+            &[("Euribor", "EURIBOR"), ("EURIBOR", "EURIBOR")],
+        );
+
+        let code = emitted(field);
+
+        assert!(code.contains(
+            "            \"Euribor\" => Self::Euribor,\n            \"EURIBOR\" => Self::Euribor2,\n"
+        ));
+    }
+
+    #[test]
     fn string_codes_are_escaped() {
         let field = enum_field("Code", DataType::String, &[("a\"b\\", "ODD")]);
 

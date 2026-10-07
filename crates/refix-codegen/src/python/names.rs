@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 
 use super::Error;
-use super::naming::{group_property_name, member_name, property_name};
+use super::naming::{group_property_name, member_name, numbered_member, property_name};
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
 use crate::naming::group_source_name;
@@ -92,7 +92,7 @@ impl Names {
         for field in dictionary.fields() {
             if !field.values.is_empty() {
                 let class = module.claim_enum(&field.name, Language::Python, warnings)?;
-                names.name_enum(field, class)?;
+                names.name_enum(field, class, warnings)?;
             }
         }
         for message in dictionary.messages() {
@@ -131,22 +131,30 @@ impl Names {
         class
     }
 
-    fn name_enum(&mut self, field: &Field, class: String) -> Result<(), Error> {
+    fn name_enum(
+        &mut self,
+        field: &Field,
+        class: String,
+        warnings: &mut Vec<Warning>,
+    ) -> Result<(), Error> {
         let mut members = Namespace::default();
         let names = field
             .values
             .iter()
             .map(|value| {
                 let name = member_name(field, value)?;
-                members.claim(
+                let owner = Owner::Value {
+                    field: field.name.clone(),
+                    code: value.value.clone(),
+                    description: value.description.clone(),
+                };
+                Ok(members.claim_value(
                     &name,
-                    Owner::Value {
-                        field: field.name.clone(),
-                        code: value.value.clone(),
-                        description: value.description.clone(),
-                    },
-                )?;
-                Ok(name)
+                    owner,
+                    numbered_member,
+                    Language::Python,
+                    warnings,
+                )?)
             })
             .collect::<Result<Vec<_>, Error>>()?;
         self.enums.insert(
@@ -404,27 +412,26 @@ mod tests {
     }
 
     #[test]
-    fn two_members_named_alike_clash() {
-        let field = with_values(
+    fn two_members_named_alike_are_numbered() {
+        let dictionary = message_with(vec![with_values(
             field("BenchmarkCurveName", 221, DataType::String),
-            &[("Euribor", "EURIBOR"), ("EURIBOR", "Euribor")],
-        );
+            &[("Euribor", "EURIBOR"), ("EURIBOR", "EURIBOR")],
+        )]);
+        let mut warnings = Vec::new();
+
+        let names = Names::new(&dictionary, &mut warnings).unwrap();
+
         assert_eq!(
-            clash(vec![field]),
-            NameClash {
-                name: "EURIBOR".to_owned(),
-                first: Owner::Value {
-                    field: "BenchmarkCurveName".to_owned(),
-                    code: "Euribor".to_owned(),
-                    description: "EURIBOR".to_owned(),
-                },
-                second: Owner::Value {
-                    field: "BenchmarkCurveName".to_owned(),
-                    code: "EURIBOR".to_owned(),
-                    description: "Euribor".to_owned(),
-                },
-            }
+            names.enum_members(&dictionary.fields()[0]),
+            ["EURIBOR", "EURIBOR_2"]
         );
+        assert!(matches!(
+            warnings.as_slice(),
+            [Warning::Renamed {
+                language: Language::Python,
+                ..
+            }]
+        ));
     }
 
     #[test]
