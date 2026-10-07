@@ -1,4 +1,5 @@
 use refix_message::Tag;
+use std::borrow::Cow;
 use std::fmt;
 
 /// The field, message and component definitions of one FIX version or venue
@@ -161,6 +162,16 @@ impl DataType {
     pub fn is_multiple_value(&self) -> bool {
         matches!(self, Self::MultipleCharValue | Self::MultipleStringValue)
     }
+
+    /// A code in the form every code for its value shares.
+    ///
+    /// An int-based type reads codes as numbers, so `01` and `1` agree.
+    pub(crate) fn canonical_code<'a>(&self, code: &'a str) -> Cow<'a, str> {
+        match code.parse::<i64>() {
+            Ok(number) if self.is_int_based() => Cow::Owned(number.to_string()),
+            _ => Cow::Borrowed(code),
+        }
+    }
 }
 
 /// The FIX version a dictionary describes, e.g. FIX 4.4 or FIXT 1.1.
@@ -228,6 +239,13 @@ mod tests {
         assert!(DataType::MultipleStringValue.is_multiple_value());
         assert!(!DataType::String.is_multiple_value());
         assert!(!DataType::Char.is_multiple_value());
+    }
+
+    #[test]
+    fn int_codes_are_canonical_as_numbers() {
+        assert_eq!(DataType::Int.canonical_code("01"), "1");
+        assert_eq!(DataType::Int.canonical_code("-007"), "-7");
+        assert_eq!(DataType::Char.canonical_code("01"), "01");
     }
 
     #[test]
