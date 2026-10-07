@@ -139,7 +139,11 @@ mod tests {
 
     fn accessor(field: &Field, lifetime: Lifetime) -> String {
         let dictionary = message_with(vec![field.clone()]);
-        emit_accessor(field, &Names::new(&dictionary).unwrap(), lifetime)
+        emit_accessor(
+            field,
+            &Names::new(&dictionary, &mut Vec::new()).unwrap(),
+            lifetime,
+        )
     }
 
     fn scope_signature(field: &Field) -> String {

@@ -6,6 +6,7 @@ use super::Error;
 use super::naming::{group_name, message_module_name, method_name, variant_name};
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
+use crate::{Language, Warning};
 
 /// Names the generated root relies on.
 ///
@@ -51,9 +52,10 @@ struct EnumNames {
 }
 
 impl Names {
-    /// Names everything generated from `dictionary`, failing when two
-    /// things would share a name.
-    pub(super) fn new(dictionary: &Dictionary) -> Result<Self, Error> {
+    /// Names everything generated from `dictionary`.
+    ///
+    /// A clash a rule settles is renamed with a warning; any other fails.
+    pub(super) fn new(dictionary: &Dictionary, warnings: &mut Vec<Warning>) -> Result<Self, Error> {
         let mut names = Names {
             enums: HashMap::new(),
             accessors: HashMap::new(),
@@ -76,8 +78,8 @@ impl Names {
         }
         for field in dictionary.fields() {
             if !field.values.is_empty() {
-                root.claim(&field.name, Owner::Enum(field.name.clone()))?;
-                names.name_enum(field)?;
+                let type_name = root.claim_enum(&field.name, Language::Rust, warnings)?;
+                names.name_enum(field, type_name)?;
             }
         }
         for message in dictionary.messages() {
@@ -125,7 +127,7 @@ impl Names {
         Ok(())
     }
 
-    fn name_enum(&mut self, field: &Field) -> Result<(), Error> {
+    fn name_enum(&mut self, field: &Field, type_name: String) -> Result<(), Error> {
         let mut variants = Namespace::with_generated(&["Unrecognized"]);
         let names = field
             .values
@@ -146,7 +148,7 @@ impl Names {
         self.enums.insert(
             field.tag,
             EnumNames {
-                type_name: field.name.clone(),
+                type_name,
                 variants: names,
             },
         );
@@ -215,7 +217,7 @@ mod tests {
     use super::Names;
     use crate::rust::Error;
     use crate::test_utils::message_with;
-    use crate::{NameClash, Owner};
+    use crate::{Language, NameClash, Owner, Warning};
     use refix_dictionary::{
         Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Group, Member,
         MemberContext, Message, Protocol, Spec, Tag, Version,
@@ -242,7 +244,7 @@ mod tests {
     }
 
     fn clash(fields: Vec<Field>) -> NameClash {
-        match Names::new(&message_with(fields)) {
+        match Names::new(&message_with(fields), &mut Vec::new()) {
             Err(Error::NameClash(clash)) => *clash,
             Err(other) => panic!("expected a name clash, found {other:?}"),
             Ok(_) => panic!("expected a name clash"),
@@ -250,18 +252,30 @@ mod tests {
     }
 
     #[test]
-    fn an_enum_named_like_a_message_clashes() {
-        let field = with_values(
+    fn an_enum_named_like_a_message_yields() {
+        let dictionary = message_with(vec![with_values(
             field("NewOrderSingle", 9000, DataType::Char),
             &[("1", "FIRST")],
+        )]);
+        let mut warnings = Vec::new();
+
+        let names = Names::new(&dictionary, &mut warnings).unwrap();
+
+        assert_eq!(
+            names.enum_type(&dictionary.fields()[0]),
+            "NewOrderSingleEnum"
         );
         assert_eq!(
-            clash(vec![field]),
-            NameClash {
-                name: "NewOrderSingle".to_owned(),
-                first: Owner::Message("NewOrderSingle".to_owned()),
-                second: Owner::Enum("NewOrderSingle".to_owned()),
-            }
+            warnings,
+            vec![Warning::Renamed {
+                language: Language::Rust,
+                clash: Box::new(NameClash {
+                    name: "NewOrderSingle".to_owned(),
+                    first: Owner::Message("NewOrderSingle".to_owned()),
+                    second: Owner::Enum("NewOrderSingle".to_owned()),
+                }),
+                name: "NewOrderSingleEnum".to_owned(),
+            }]
         );
     }
 
@@ -388,7 +402,7 @@ mod tests {
         .resolve()
         .unwrap();
 
-        let Err(Error::NameClash(clash)) = Names::new(&dictionary) else {
+        let Err(Error::NameClash(clash)) = Names::new(&dictionary, &mut Vec::new()) else {
             panic!("expected a name clash");
         };
         assert_eq!(
@@ -406,7 +420,9 @@ mod tests {
     #[test]
     fn a_clash_names_the_language() {
         let field = with_values(field("Result", 9000, DataType::Char), &[("1", "FIRST")]);
-        let error = Names::new(&message_with(vec![field])).err().unwrap();
+        let error = Names::new(&message_with(vec![field]), &mut Vec::new())
+            .err()
+            .unwrap();
         assert_eq!(
             error.to_string(),
             "rust name `Result` is taken by both the generated code and the enum of field 'Result'"

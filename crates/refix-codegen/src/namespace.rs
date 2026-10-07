@@ -6,6 +6,7 @@ use std::fmt;
 
 use refix_dictionary::MemberContext;
 
+use crate::{Language, Warning};
 pub use error::NameClash;
 
 /// What a generated name stands for.
@@ -76,11 +77,38 @@ impl Namespace {
             }
         }
     }
+
+    /// Takes the name of a field's enum.
+    ///
+    /// The enum yields to a message or group of its name, taking `Enum`
+    /// after it, with a warning.
+    pub(crate) fn claim_enum(
+        &mut self,
+        field: &str,
+        language: Language,
+        warnings: &mut Vec<Warning>,
+    ) -> Result<String, Box<NameClash>> {
+        let owner = Owner::Enum(field.to_owned());
+        let clash = match self.claim(field, owner.clone()) {
+            Ok(()) => return Ok(field.to_owned()),
+            Err(clash) if matches!(clash.first, Owner::Message(_) | Owner::Group(_)) => clash,
+            Err(clash) => return Err(clash),
+        };
+        let name = format!("{field}Enum");
+        self.claim(&name, owner)?;
+        warnings.push(Warning::Renamed {
+            language,
+            clash,
+            name: name.clone(),
+        });
+        Ok(name)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{NameClash, Namespace, Owner};
+    use crate::{Language, Warning};
     use refix_dictionary::MemberContext;
 
     #[test]
@@ -124,6 +152,87 @@ mod tests {
                 .unwrap_err()
                 .first,
             Owner::Generated
+        );
+    }
+
+    #[test]
+    fn an_enum_yields_to_a_message() {
+        let mut namespace = Namespace::default();
+        namespace
+            .claim(
+                "SecurityStatus",
+                Owner::Message("SecurityStatus".to_owned()),
+            )
+            .unwrap();
+        let mut warnings = Vec::new();
+
+        let name = namespace
+            .claim_enum("SecurityStatus", Language::Rust, &mut warnings)
+            .unwrap();
+
+        assert_eq!(name, "SecurityStatusEnum");
+        assert_eq!(
+            warnings,
+            vec![Warning::Renamed {
+                language: Language::Rust,
+                clash: Box::new(NameClash {
+                    name: "SecurityStatus".to_owned(),
+                    first: Owner::Message("SecurityStatus".to_owned()),
+                    second: Owner::Enum("SecurityStatus".to_owned()),
+                }),
+                name: "SecurityStatusEnum".to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn an_enum_yields_to_a_group() {
+        let context = MemberContext::Component("RateSource".to_owned()).group("NoRateSources");
+        let mut namespace = Namespace::default();
+        namespace
+            .claim("RateSource", Owner::Group(context))
+            .unwrap();
+
+        let name = namespace
+            .claim_enum("RateSource", Language::Python, &mut Vec::new())
+            .unwrap();
+
+        assert_eq!(name, "RateSourceEnum");
+    }
+
+    #[test]
+    fn an_enum_does_not_yield_to_the_generated_code() {
+        let mut namespace = Namespace::with_generated(&["Result"]);
+        let mut warnings = Vec::new();
+
+        let clash = namespace
+            .claim_enum("Result", Language::Rust, &mut warnings)
+            .unwrap_err();
+
+        assert_eq!(clash.first, Owner::Generated);
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn a_yielding_enum_clashes_when_its_new_name_is_taken() {
+        let mut namespace = Namespace::default();
+        for message in ["SecurityStatus", "SecurityStatusEnum"] {
+            namespace
+                .claim(message, Owner::Message(message.to_owned()))
+                .unwrap();
+        }
+
+        let clash = namespace
+            .claim_enum("SecurityStatus", Language::Rust, &mut Vec::new())
+            .unwrap_err();
+
+        assert_eq!(
+            clash,
+            Box::new(NameClash {
+                name: "SecurityStatusEnum".to_owned(),
+                first: Owner::Message("SecurityStatusEnum".to_owned()),
+                second: Owner::Enum("SecurityStatus".to_owned()),
+            })
         );
     }
 

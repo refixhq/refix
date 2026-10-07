@@ -5,6 +5,7 @@
 mod case_converter;
 mod generated;
 mod groups;
+mod language;
 mod literal;
 mod namespace;
 mod naming;
@@ -16,5 +17,6 @@ mod warning;
 
 pub use case_converter::{pascal_case, snake_case};
 pub use generated::Generated;
+pub use language::Language;
 pub use namespace::{NameClash, Owner};
 pub use warning::Warning;

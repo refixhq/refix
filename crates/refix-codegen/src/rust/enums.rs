@@ -65,7 +65,7 @@ mod tests {
 
     fn emitted(field: Field) -> String {
         let dictionary = message_with(vec![field.clone()]);
-        emit_enum(&field, &Names::new(&dictionary).unwrap())
+        emit_enum(&field, &Names::new(&dictionary, &mut Vec::new()).unwrap())
     }
 
     fn enum_field(name: &str, data_type: DataType, values: &[(&str, &str)]) -> Field {

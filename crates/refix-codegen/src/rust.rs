@@ -17,8 +17,8 @@ use messages::emit_message;
 use names::Names;
 
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Error> {
-    let names = Names::new(dictionary)?;
     let mut warnings = Vec::new();
+    let names = Names::new(dictionary, &mut warnings)?;
 
     // The layout is the emitter's own, so rustfmt leaves it alone. That keeps
     // the output byte-stable across rustfmt versions. A message may declare a
@@ -274,6 +274,45 @@ impl NewOrderSingle {
             imports(unused),
             "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
         );
+    }
+
+    #[test]
+    fn an_enum_named_like_a_message_is_renamed_with_a_warning() {
+        let mut security_status = field("SecurityStatus", 965, DataType::String);
+        security_status.values = vec![EnumValue {
+            value: "1".to_owned(),
+            description: "ACTIVE".to_owned(),
+        }];
+        let spec = spec_of(
+            vec![Message {
+                name: "SecurityStatus".to_owned(),
+                msg_type: "f".to_owned(),
+                members: vec![Member::Field(FieldRef {
+                    tag: Tag(965),
+                    is_required: false,
+                })],
+                category: Category::App,
+            }],
+            vec![security_status],
+        );
+
+        let generated = generate(&spec.resolve().unwrap(), "toy.xml").unwrap();
+
+        assert!(generated.code.contains("pub enum SecurityStatusEnum<'a> {"));
+        assert!(
+            generated
+                .code
+                .contains("pub struct SecurityStatus(RawMessage);")
+        );
+        assert!(
+            generated
+                .code
+                .contains("Result<Option<SecurityStatusEnum<'_>>, InvalidValue>")
+        );
+        assert!(matches!(
+            generated.warnings.as_slice(),
+            [Warning::Renamed { .. }]
+        ));
     }
 
     #[test]
