@@ -290,6 +290,8 @@ mod tests {
                 minor: 0,
                 service_pack: 2,
             },
+            header: vec![],
+            trailer: vec![],
             messages,
             fields,
             components,

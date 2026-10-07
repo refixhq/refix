@@ -7,23 +7,23 @@ use std::collections::{HashMap, hash_map::Entry};
 impl Spec {
     /// Resolves this spec into a [`Dictionary`], checking its integrity.
     pub fn resolve(self) -> Result<Dictionary, Error> {
-        let messages = resolve_messages(&self)?;
+        let mut resolver = Resolver::new(&self)?;
+        resolver.expand_components()?;
+        let header = resolver.resolve_members(&self.header, &MemberContext::Header, false)?;
+        let messages = self
+            .messages
+            .iter()
+            .map(|message| resolver.resolve_message(message))
+            .collect::<Result<_, _>>()?;
+        let trailer = resolver.resolve_members(&self.trailer, &MemberContext::Trailer, false)?;
 
         Ok(Dictionary {
             spec: self,
+            header,
             messages,
+            trailer,
         })
     }
-}
-
-fn resolve_messages(spec: &Spec) -> Result<Vec<ResolvedMessage>, Error> {
-    let mut resolver = Resolver::new(spec)?;
-    resolver.expand_components()?;
-
-    spec.messages
-        .iter()
-        .map(|message| resolver.resolve_message(message))
-        .collect()
 }
 
 /// State shared while resolving one spec.

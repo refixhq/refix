@@ -38,6 +38,8 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
 
     let spec = Spec {
         version,
+        header: Vec::new(),
+        trailer: Vec::new(),
         messages,
         components,
         fields,

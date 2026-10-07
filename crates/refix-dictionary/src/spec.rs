@@ -2,15 +2,19 @@ use refix_message::Tag;
 use std::borrow::Cow;
 use std::fmt;
 
-/// The field, message and component definitions of one FIX version or venue
-/// dialect, as authored.
+/// The fields, messages, components, header and trailer of one FIX version
+/// or venue dialect, as authored.
 ///
 /// A spec is plain data and makes no consistency guarantees. It is what
 /// frontends parse into and what dialect authors construct by hand.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Spec {
     pub version: Version,
+    /// The members every message starts with, in source order.
+    pub header: Vec<Member>,
     pub messages: Vec<Message>,
+    /// The members every message ends with, in source order.
+    pub trailer: Vec<Member>,
     pub fields: Vec<Field>,
     pub components: Vec<Component>,
 }

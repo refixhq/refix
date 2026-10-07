@@ -374,6 +374,8 @@ mod tests {
                 minor: 4,
                 service_pack: 0,
             },
+            header: vec![],
+            trailer: vec![],
             messages: vec![
                 message("Parties", "X", vec![group(384, vec![field_ref(372)])]),
                 message(
