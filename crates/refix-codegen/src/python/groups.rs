@@ -6,7 +6,8 @@ use super::names::Names;
 use crate::Warning;
 use crate::groups::{is_generated, known_tags, member_tags};
 
-/// The groups declared in components, each once, innermost first.
+/// The groups declared in components, each once, innermost first, from the
+/// header, messages and trailer.
 ///
 /// A class is defined after the classes its table names. A group declared
 /// directly in another group's instance gets no class and is reported
@@ -17,9 +18,11 @@ pub(super) fn shared_groups<'a>(
 ) -> Vec<dictionary::Group<'a>> {
     let mut groups = Vec::new();
     let mut seen = Vec::new();
+    collect_groups(dictionary.header(), &mut groups, &mut seen, warnings);
     for message in dictionary.messages() {
         collect_groups(message.members(), &mut groups, &mut seen, warnings);
     }
+    collect_groups(dictionary.trailer(), &mut groups, &mut seen, warnings);
     groups
 }
 

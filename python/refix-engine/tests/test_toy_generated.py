@@ -4,7 +4,7 @@ import pytest
 from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
 from test_tokenizer import tokenize_body
-from toy_generated import ExecInst, Logon, NewOrderSingle, OrdType, PartyRole
+from toy_generated import ExecInst, Header, Logon, NewOrderSingle, OrdType, PartyRole
 
 
 def order(body: str) -> NewOrderSingle:
@@ -121,7 +121,41 @@ class TestGroups:
 
         assert [msg_type.ref_msg_type for msg_type in logon.msg_types] == ["D", "8"]
 
+    def test_a_header_field_after_a_group_ends_it(self):
+        logon = Logon(tokenize_body("35=A|384=1|372=D|49=SENDER|"))
+
+        assert logon.msg_types[0].raw.get(49) is None
+
     def test_a_group_read_is_cached(self):
         new_order = order("35=D|453=1|448=AL|")
 
         assert new_order.parties is new_order.parties
+
+
+class TestHeader:
+    def test_reads_the_header_and_trailer(self):
+        new_order = order("35=D|49=SENDER|56=TARGET|34=7|11=ORDER-1|")
+
+        assert new_order.header.begin_string == "FIX.4.4"
+        assert new_order.header.msg_seq_num == 7
+        assert new_order.header.msg_type == "D"
+        assert new_order.header.sender_comp_id == "SENDER"
+        assert new_order.header.target_comp_id == "TARGET"
+        assert new_order.trailer.check_sum is not None
+
+    def test_reads_a_header_without_the_message_type(self):
+        header = Header(tokenize_body("35=D|49=SENDER|11=ORDER-1|"))
+
+        assert header.sender_comp_id == "SENDER"
+
+    def test_a_message_header_ends_its_groups_where_the_body_starts(self):
+        logon = Logon(tokenize_body("35=A|627=2|628=HOP-1|628=HOP-2|384=1|372=D|"))
+
+        hops = logon.header.hops
+        assert [hop.hop_comp_id for hop in hops] == ["HOP-1", "HOP-2"]
+        assert hops[1].raw.get(384) is None
+
+    def test_a_header_from_raw_keeps_body_fields_in_its_last_group(self):
+        header = Header(tokenize_body("35=A|627=2|628=HOP-1|628=HOP-2|384=1|372=D|"))
+
+        assert header.hops[1].raw.get(384) == b"1"

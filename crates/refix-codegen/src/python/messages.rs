@@ -4,9 +4,17 @@ use super::enums::str_literal;
 use super::groups::{emit_group_class, emit_group_property, tags};
 use super::layout::{MAX_WIDTH, indent, tuple_lines};
 use super::names::Names;
-use crate::groups::known_tags;
+use super::views::emit_view_property;
+use crate::envelope::Envelope;
+use crate::groups::message_known_tags;
 
-pub(super) fn emit_message(message: dictionary::Message<'_>, names: &Names) -> String {
+/// A message's class. Its known tags include the `envelope`'s, and it
+/// reaches each view the envelope has.
+pub(super) fn emit_message(
+    message: dictionary::Message<'_>,
+    envelope: &Envelope,
+    names: &Names,
+) -> String {
     let name = message.name();
     let mut members = vec![
         format!(
@@ -16,7 +24,7 @@ pub(super) fn emit_message(message: dictionary::Message<'_>, names: &Names) -> S
         indent(
             &tuple_lines(
                 "KNOWN_TAGS: ClassVar[KnownTags] = KnownTags(",
-                &tags(&known_tags(message.members())),
+                &tags(&message_known_tags(message, &envelope.tags)),
                 ")",
                 MAX_WIDTH - 4,
             ),
@@ -37,6 +45,9 @@ pub(super) fn emit_message(message: dictionary::Message<'_>, names: &Names) -> S
     members.push(
         "    @property\n    def raw(self) -> RawMessage:\n        return self._raw\n".to_owned(),
     );
+    for section in &envelope.sections {
+        members.push(emit_view_property(*section, name, envelope));
+    }
     let known_tags = format!("{name}.KNOWN_TAGS");
     members.extend(message.members().map(|member| match member {
         dictionary::Member::Field { field, .. } => emit_property(field, names, "self._raw"),
@@ -57,7 +68,7 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
                 "str | None".to_owned(),
                 format!("return {receiver}.get_str({tag})"),
             ),
-            DataType::Int => (
+            _ if field.data_type.is_int_based() => (
                 "int | None".to_owned(),
                 format!("return {receiver}.get_int({tag})"),
             ),

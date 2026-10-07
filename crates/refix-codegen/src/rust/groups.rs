@@ -7,7 +7,7 @@ use crate::Warning;
 use crate::groups::{is_generated, known_tags, member_tags};
 
 /// The groups declared in components, each once, in order of first
-/// appearance across the messages.
+/// appearance across the header, messages and trailer.
 ///
 /// A group declared directly in another group's instance gets no module
 /// and is reported instead.
@@ -17,9 +17,11 @@ pub(super) fn shared_groups<'a>(
 ) -> Vec<dictionary::Group<'a>> {
     let mut groups = Vec::new();
     let mut seen = Vec::new();
+    collect_groups(dictionary.header(), &mut groups, &mut seen, warnings);
     for message in dictionary.messages() {
         collect_groups(message.members(), &mut groups, &mut seen, warnings);
     }
+    collect_groups(dictionary.trailer(), &mut groups, &mut seen, warnings);
     groups
 }
 

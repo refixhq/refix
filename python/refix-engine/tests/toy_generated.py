@@ -73,10 +73,95 @@ class Parties:
             return () if scopes is None else tuple(PtysSubGrp.Instance(scope) for scope in scopes)
 
 
+class Header:
+    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((8, 9, 10, 34, 35, 49, 52, 56, 89, 93, 627, 628))
+
+    class Hops:
+        TABLE: ClassVar[GroupTable] = GroupTable(627, 628, (628,), ())
+
+        KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((628,))
+
+        class Instance:
+            def __init__(self, scope: refix.Scope) -> None:
+                self._scope = scope
+
+            @property
+            def raw(self) -> refix.Scope:
+                return self._scope
+
+            @cached_property
+            def hop_comp_id(self) -> str | None:
+                return self._scope.get_str(628)
+
+    def __init__(self, raw: RawMessage, known_tags: KnownTags = KNOWN_TAGS) -> None:
+        self._raw = raw
+        self._known_tags = known_tags
+
+    @property
+    def raw(self) -> RawMessage:
+        return self._raw
+
+    @cached_property
+    def begin_string(self) -> str | None:
+        return self._raw.get_str(8)
+
+    @cached_property
+    def body_length(self) -> int | None:
+        return self._raw.get_int(9)
+
+    @cached_property
+    def msg_type(self) -> str | None:
+        return self._raw.get_str(35)
+
+    @cached_property
+    def sender_comp_id(self) -> str | None:
+        return self._raw.get_str(49)
+
+    @cached_property
+    def target_comp_id(self) -> str | None:
+        return self._raw.get_str(56)
+
+    @cached_property
+    def msg_seq_num(self) -> int | None:
+        return self._raw.get_int(34)
+
+    @cached_property
+    def sending_time_raw(self) -> bytes | None:
+        return self._raw.get(52)
+
+    @cached_property
+    def hops(self) -> tuple[Header.Hops.Instance, ...]:
+        scopes = self._raw.get_group(Header.Hops.TABLE, self._known_tags)
+        return () if scopes is None else tuple(Header.Hops.Instance(scope) for scope in scopes)
+
+
+class Trailer:
+    def __init__(self, raw: RawMessage) -> None:
+        self._raw = raw
+
+    @property
+    def raw(self) -> RawMessage:
+        return self._raw
+
+    @cached_property
+    def signature_length(self) -> int | None:
+        return self._raw.get_int(93)
+
+    @cached_property
+    def signature_raw(self) -> bytes | None:
+        return self._raw.get(89)
+
+    @cached_property
+    def check_sum(self) -> str | None:
+        return self._raw.get_str(10)
+
+
 class NewOrderSingle:
     MSG_TYPE: ClassVar[bytes] = b"D"
 
-    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((11, 18, 38, 40, 44, 448, 452, 453, 523, 802))
+    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((
+        8, 9, 10, 11, 18, 34, 35, 38, 40, 44, 49, 52, 56, 89, 93, 448, 452, 453, 523, 627, 628, 802,
+    ))
 
     def __init__(self, raw: RawMessage) -> None:
         self._raw = raw
@@ -84,6 +169,14 @@ class NewOrderSingle:
     @property
     def raw(self) -> RawMessage:
         return self._raw
+
+    @cached_property
+    def header(self) -> Header:
+        return Header(self._raw, NewOrderSingle.KNOWN_TAGS)
+
+    @cached_property
+    def trailer(self) -> Trailer:
+        return Trailer(self._raw)
 
     @cached_property
     def cl_ord_id(self) -> str | None:
@@ -116,7 +209,9 @@ class NewOrderSingle:
 class Logon:
     MSG_TYPE: ClassVar[bytes] = b"A"
 
-    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((372, 384))
+    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((
+        8, 9, 10, 34, 35, 49, 52, 56, 89, 93, 372, 384, 627, 628,
+    ))
 
     class MsgTypes:
         TABLE: ClassVar[GroupTable] = GroupTable(384, 372, (372,), ())
@@ -141,6 +236,14 @@ class Logon:
     @property
     def raw(self) -> RawMessage:
         return self._raw
+
+    @cached_property
+    def header(self) -> Header:
+        return Header(self._raw, Logon.KNOWN_TAGS)
+
+    @cached_property
+    def trailer(self) -> Trailer:
+        return Trailer(self._raw)
 
     @cached_property
     def msg_types(self) -> tuple[Logon.MsgTypes.Instance, ...]:

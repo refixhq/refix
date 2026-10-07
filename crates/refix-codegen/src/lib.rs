@@ -3,6 +3,7 @@
 //! kept fresh by tests that regenerate and compare.
 
 mod case_converter;
+mod envelope;
 mod generated;
 mod groups;
 mod literal;

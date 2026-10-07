@@ -3,12 +3,20 @@ use refix_dictionary::{DataType, Field, MemberContext, dictionary};
 use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::names::Names;
-use crate::groups::known_tags;
+use super::views::emit_view_accessor;
+use crate::envelope::Envelope;
+use crate::groups::message_known_tags;
 
-pub(super) fn emit_message(message: dictionary::Message<'_>, names: &Names) -> String {
+/// A message's struct, impl and group module. Its known tags include the
+/// `envelope`'s, and it reaches each view the envelope has.
+pub(super) fn emit_message(
+    message: dictionary::Message<'_>,
+    envelope: &Envelope,
+    names: &Names,
+) -> String {
     let mut items = vec![
         emit_message_struct(message),
-        emit_message_impl(message, names),
+        emit_message_impl(message, envelope, names),
     ];
     if let Some(module) = emit_message_module(message, names) {
         items.push(module);
@@ -20,19 +28,26 @@ fn emit_message_struct(message: dictionary::Message<'_>) -> String {
     format!("pub struct {}(RawMessage);\n", message.name())
 }
 
-fn emit_message_impl(message: dictionary::Message<'_>, names: &Names) -> String {
+fn emit_message_impl(
+    message: dictionary::Message<'_>,
+    envelope: &Envelope,
+    names: &Names,
+) -> String {
     let mut members = vec![
         format!(
             "    pub const MSG_TYPE: &[u8] = b\"{}\";\n",
             message.msg_type()
         ),
         indent(
-            &emit_known_tags(&known_tags(message.members()), MAX_WIDTH - 4),
+            &emit_known_tags(&message_known_tags(message, &envelope.tags), MAX_WIDTH - 4),
             1,
         ),
         "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),
         "    pub fn raw(&self) -> &RawMessage {\n        &self.0\n    }\n".to_owned(),
     ];
+    for section in &envelope.sections {
+        members.push(emit_view_accessor(*section, envelope));
+    }
     for member in message.members() {
         match member {
             dictionary::Member::Field { field, .. } => {
@@ -112,7 +127,7 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         DataType::String => format!(
             "    pub fn {name}(&self) -> Result<Option<{reference}str>, InvalidValue> {{\n        self.0.get_str(Tag({tag}))\n    }}\n"
         ),
-        DataType::Int => format!(
+        data_type if data_type.is_int_based() => format!(
             "    pub fn {name}(&self) -> Result<Option<i64>, InvalidValue> {{\n        self.0.get_int(Tag({tag}))\n    }}\n"
         ),
         _ => format!(
@@ -156,6 +171,14 @@ mod tests {
         assert_eq!(
             scope_signature(&field("PartyID", 448, DataType::String)),
             "pub fn party_id(&self) -> Result<Option<&'a str>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn an_int_based_type_reads_as_an_integer() {
+        assert_eq!(
+            scope_signature(&field("MsgSeqNum", 34, DataType::SeqNum)),
+            "pub fn msg_seq_num(&self) -> Result<Option<i64>, InvalidValue> {"
         );
     }
 
