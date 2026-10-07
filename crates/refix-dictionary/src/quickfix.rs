@@ -3,6 +3,7 @@ use crate::{
     Member, MemberContext, Message, Protocol, Spec, Tag, Version, dictionary,
 };
 use roxmltree::Node;
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::num::ParseIntError;
@@ -26,7 +27,7 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     }
 
     let version = parse_version(root)?;
-    let fields = parse_fields(root)?;
+    let fields = parse_fields(root, &mut warnings)?;
     let tags_by_name: HashMap<&str, Tag> = fields
         .iter()
         .map(|field| (field.name.as_str(), field.tag))
@@ -64,7 +65,7 @@ fn parse_version(root: Node) -> Result<Version, Error> {
     })
 }
 
-fn parse_fields(root: Node) -> Result<Vec<Field>, Error> {
+fn parse_fields(root: Node, warnings: &mut Vec<Warning>) -> Result<Vec<Field>, Error> {
     let Some(section) = root.children().find(|node| node.has_tag_name("fields")) else {
         return Ok(Vec::new());
     };
@@ -72,7 +73,7 @@ fn parse_fields(root: Node) -> Result<Vec<Field>, Error> {
     let fields: Vec<Field> = section
         .children()
         .filter(|node| node.has_tag_name("field"))
-        .map(|node| parse_field(node))
+        .map(|node| parse_field(node, warnings))
         .collect::<Result<_, _>>()?;
 
     let mut seen = HashSet::new();
@@ -87,7 +88,7 @@ fn parse_fields(root: Node) -> Result<Vec<Field>, Error> {
     Ok(fields)
 }
 
-fn parse_field(node: Node) -> Result<Field, Error> {
+fn parse_field(node: Node, warnings: &mut Vec<Warning>) -> Result<Field, Error> {
     let name = string_attribute(node, "name")?;
     let values = node
         .children()
@@ -99,13 +100,41 @@ fn parse_field(node: Node) -> Result<Field, Error> {
             })
         })
         .collect::<Result<_, _>>()?;
+    let tag = Tag(int_attribute(node, "number")?);
+    let data_type = parse_data_type(string_attribute(node, "type")?);
+    let values = drop_repeated_codes(&name, &data_type, values, warnings);
 
     Ok(Field {
         name,
-        tag: Tag(int_attribute(node, "number")?),
-        data_type: parse_data_type(string_attribute(node, "type")?),
+        tag,
+        data_type,
         values,
     })
+}
+
+/// Keeps the first value listed for each code, warning of the rest.
+fn drop_repeated_codes(
+    field: &str,
+    data_type: &DataType,
+    values: Vec<EnumValue>,
+    warnings: &mut Vec<Warning>,
+) -> Vec<EnumValue> {
+    let mut kept: Vec<EnumValue> = Vec::new();
+    let mut by_code: HashMap<String, usize> = HashMap::new();
+    for value in values {
+        match by_code.entry(data_type.canonical_code(&value.value).into_owned()) {
+            Entry::Occupied(first) => warnings.push(Warning::RepeatedCode {
+                field: field.to_owned(),
+                kept: kept[*first.get()].clone(),
+                dropped: value,
+            }),
+            Entry::Vacant(free) => {
+                free.insert(kept.len());
+                kept.push(value);
+            }
+        }
+    }
+    kept
 }
 
 fn parse_components(
@@ -343,7 +372,7 @@ pub struct Parsed {
     pub warnings: Vec<Warning>,
 }
 
-/// A construct the parser recognised but the model does not hold yet.
+/// Something the parser read but left out of the dictionary.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Warning {
     UnsupportedElement {
@@ -352,6 +381,12 @@ pub enum Warning {
     },
     UnsupportedSection {
         section: String,
+    },
+    /// A value listed under the code of an earlier value of its field.
+    RepeatedCode {
+        field: String,
+        kept: EnumValue,
+        dropped: EnumValue,
     },
 }
 
@@ -364,6 +399,16 @@ impl fmt::Display for Warning {
             Warning::UnsupportedSection { section } => {
                 write!(f, "section <{section}> is not supported yet")
             }
+            Warning::RepeatedCode {
+                field,
+                kept,
+                dropped,
+            } => write!(
+                f,
+                "value '{}' (code {}) of field '{field}' is dropped, as value '{}' (code {}) has \
+                 the same code",
+                dropped.description, dropped.value, kept.description, kept.value
+            ),
         }
     }
 }
@@ -614,6 +659,71 @@ mod tests {
                 Error::MissingAttribute { ref element, ref attribute }
                     if element == "value" && attribute == "description"
             ));
+        }
+
+        fn value(code: &str, description: &str) -> EnumValue {
+            EnumValue {
+                value: code.to_owned(),
+                description: description.to_owned(),
+            }
+        }
+
+        #[test]
+        fn a_repeated_code_keeps_its_first_value() {
+            let parsed = parse(
+                "<fix major='4' minor='3'><fields>\
+                 <field number='574' name='MatchType' type='STRING'>\
+                 <value enum='M1' description='EXACT_MATCH'/>\
+                 <value enum='M2' description='SUMMARIZED_MATCH'/>\
+                 <value enum='M1' description='ACT_M1_MATCH'/>\
+                 </field></fields></fix>",
+            )
+            .unwrap();
+
+            assert_eq!(
+                parsed.dictionary.fields()[0].values,
+                [value("M1", "EXACT_MATCH"), value("M2", "SUMMARIZED_MATCH")]
+            );
+            assert_eq!(
+                parsed.warnings,
+                [Warning::RepeatedCode {
+                    field: "MatchType".to_owned(),
+                    kept: value("M1", "EXACT_MATCH"),
+                    dropped: value("M1", "ACT_M1_MATCH"),
+                }]
+            );
+        }
+
+        #[test]
+        fn int_codes_repeat_by_number() {
+            let parsed = parse(
+                "<fix major='4' minor='4'><fields>\
+                 <field number='423' name='PriceType' type='INT'>\
+                 <value enum='1' description='PERCENTAGE'/>\
+                 <value enum='01' description='PERCENT'/>\
+                 </field></fields></fix>",
+            )
+            .unwrap();
+
+            assert_eq!(
+                parsed.dictionary.fields()[0].values,
+                [value("1", "PERCENTAGE")]
+            );
+            assert_eq!(parsed.warnings.len(), 1);
+        }
+
+        #[test]
+        fn a_repeated_code_names_both_values() {
+            let warning = Warning::RepeatedCode {
+                field: "PriceType".to_owned(),
+                kept: value("1", "PERCENTAGE"),
+                dropped: value("01", "PERCENT"),
+            };
+            assert_eq!(
+                warning.to_string(),
+                "value 'PERCENT' (code 01) of field 'PriceType' is dropped, as value 'PERCENTAGE' \
+                 (code 1) has the same code"
+            );
         }
 
         #[test]

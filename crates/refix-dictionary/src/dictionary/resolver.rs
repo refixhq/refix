@@ -41,6 +41,7 @@ struct Resolver<'a> {
 impl<'a> Resolver<'a> {
     fn new(spec: &'a Spec) -> Result<Self, Error> {
         check_int_values(&spec.fields)?;
+        check_unique_codes(&spec.fields)?;
         Ok(Self {
             spec,
             fields_by_tag: index_fields(&spec.fields)?,
@@ -235,6 +236,24 @@ fn check_int_values(fields: &[Field]) -> Result<(), Error> {
                 field: field.name.clone(),
                 value: value.value.clone(),
             });
+        }
+    }
+    Ok(())
+}
+
+/// Checks that no field lists two values under one code.
+fn check_unique_codes(fields: &[Field]) -> Result<(), Error> {
+    for field in fields {
+        let mut codes = HashMap::new();
+        for value in &field.values {
+            let code = field.data_type.canonical_code(&value.value);
+            if let Some(first) = codes.insert(code, &value.value) {
+                return Err(Error::RepeatedCode {
+                    field: field.name.clone(),
+                    first: first.clone(),
+                    second: value.value.clone(),
+                });
+            }
         }
     }
     Ok(())

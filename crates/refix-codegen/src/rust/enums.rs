@@ -65,7 +65,7 @@ mod tests {
 
     fn emitted(field: Field) -> String {
         let dictionary = message_with(vec![field.clone()]);
-        emit_enum(&field, &Names::new(&dictionary).unwrap())
+        emit_enum(&field, &Names::new(&dictionary, &mut Vec::new()).unwrap())
     }
 
     fn enum_field(name: &str, data_type: DataType, values: &[(&str, &str)]) -> Field {
@@ -133,6 +133,21 @@ impl PartyRole {
         assert!(code.contains("            7 => Self::Seven,\n"));
         assert!(code.contains("            -2 => Self::MinusTwo,\n"));
         assert!(code.contains("            0 => Self::Zero,\n"));
+    }
+
+    #[test]
+    fn values_named_alike_are_numbered() {
+        let field = enum_field(
+            "BenchmarkCurveName",
+            DataType::String,
+            &[("Euribor", "EURIBOR"), ("EURIBOR", "EURIBOR")],
+        );
+
+        let code = emitted(field);
+
+        assert!(code.contains(
+            "            \"Euribor\" => Self::Euribor,\n            \"EURIBOR\" => Self::Euribor2,\n"
+        ));
     }
 
     #[test]

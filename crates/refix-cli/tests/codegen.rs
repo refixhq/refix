@@ -8,13 +8,19 @@ fn toy_xml() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../refix-codegen/tests/data/toy.xml")
 }
 
-/// Runs `refix codegen` on the toy with `outputs` as (flag, file name)
-/// pairs, returning each written module.
-fn codegen(outputs: &[(&str, &str)]) -> Vec<String> {
+/// A fresh directory for one run's files.
+fn scratch_directory() -> PathBuf {
     static RUNS: AtomicUsize = AtomicUsize::new(0);
     let run = RUNS.fetch_add(1, Ordering::Relaxed);
     let directory = std::env::temp_dir().join(format!("refix-cli-{}-{run}", std::process::id()));
     std::fs::create_dir_all(&directory).unwrap();
+    directory
+}
+
+/// Runs `refix codegen` on the toy with `outputs` as (flag, file name)
+/// pairs, returning each written module.
+fn codegen(outputs: &[(&str, &str)]) -> Vec<String> {
+    let directory = scratch_directory();
     let mut command = Command::new(env!("CARGO_BIN_EXE_refix"));
     command.arg("codegen").arg(toy_xml());
     for (flag, name) in outputs {
@@ -50,6 +56,48 @@ fn writes_every_output_from_one_run() {
     assert_eq!(
         codegen(&[("--rust", "toy.rs"), ("--python", "toy.py")]),
         [RUST_GOLDEN, PYTHON_GOLDEN]
+    );
+}
+
+/// A dictionary whose `SecurityStatus` field and message share a name.
+const CLASHING_XML: &str = r#"<fix type="FIX" major="5" minor="0" servicepack="2">
+  <messages>
+    <message name="SecurityStatus" msgtype="f" msgcat="app">
+      <field name="SecurityStatus" required="N"/>
+    </message>
+  </messages>
+  <components/>
+  <fields>
+    <field number="965" name="SecurityStatus" type="STRING">
+      <value enum="1" description="ACTIVE"/>
+    </field>
+  </fields>
+</fix>
+"#;
+
+#[test]
+fn labels_each_warning_with_its_language() {
+    let directory = scratch_directory();
+    let dictionary = directory.join("clash.xml");
+    std::fs::write(&dictionary, CLASHING_XML).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_refix"))
+        .arg("codegen")
+        .arg(&dictionary)
+        .arg("--rust")
+        .arg(directory.join("clash.rs"))
+        .arg("--python")
+        .arg(directory.join("clash.py"))
+        .output()
+        .unwrap();
+    std::fs::remove_dir_all(&directory).unwrap();
+
+    assert!(output.status.success());
+    let renamed = "`SecurityStatus` is taken by message 'SecurityStatus', so the enum of field \
+                   'SecurityStatus' is named `SecurityStatusEnum`";
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!("warning: rust: {renamed}\nwarning: python: {renamed}\n")
     );
 }
 

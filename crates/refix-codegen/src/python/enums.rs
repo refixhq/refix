@@ -50,7 +50,7 @@ mod tests {
 
     fn emitted(field: Field) -> String {
         let dictionary = message_with(vec![field.clone()]);
-        emit_enum(&field, &Names::new(&dictionary).unwrap())
+        emit_enum(&field, &Names::new(&dictionary, &mut Vec::new()).unwrap())
     }
 
     fn enum_field(name: &str, data_type: DataType, values: &[(&str, &str)]) -> Field {
@@ -93,6 +93,20 @@ mod tests {
         assert_eq!(
             emitted(field),
             "class OrdType(enum.StrEnum):\n    MARKET = \"1\"\n    LIMIT = \"2\"\n"
+        );
+    }
+
+    #[test]
+    fn values_named_alike_are_numbered() {
+        let field = enum_field(
+            "BenchmarkCurveName",
+            DataType::String,
+            &[("Euribor", "EURIBOR"), ("EURIBOR", "EURIBOR")],
+        );
+
+        assert_eq!(
+            emitted(field),
+            "class BenchmarkCurveName(enum.StrEnum):\n    EURIBOR = \"Euribor\"\n    EURIBOR_2 = \"EURIBOR\"\n"
         );
     }
 

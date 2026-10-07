@@ -36,6 +36,12 @@ pub(super) fn variant_name(field: &Field, value: &EnumValue) -> Result<String, E
     Ok(name)
 }
 
+/// Numbers a variant an earlier value of its field is named like, so the
+/// second `Euribor` becomes `Euribor2`.
+pub(super) fn numbered_variant(name: &str, number: u32) -> String {
+    format!("{name}{number}")
+}
+
 /// The name of the module holding a message's own groups.
 pub(super) fn message_module_name(message: &str) -> Result<String, Error> {
     identifier(snake_case(message)).ok_or_else(|| Error::UnrepresentableMessageName {

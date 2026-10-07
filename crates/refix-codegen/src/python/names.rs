@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 
 use super::Error;
-use super::naming::{group_property_name, member_name, property_name};
+use super::naming::{group_property_name, member_name, numbered_member, property_name};
+use crate::Warning;
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
 use crate::naming::group_source_name;
@@ -65,9 +66,10 @@ struct GroupNames {
 }
 
 impl Names {
-    /// Names everything generated from `dictionary`, failing when two
-    /// things would share a name.
-    pub(super) fn new(dictionary: &Dictionary) -> Result<Self, Error> {
+    /// Names everything generated from `dictionary`.
+    ///
+    /// A clash a rule settles is renamed with a warning; any other fails.
+    pub(super) fn new(dictionary: &Dictionary, warnings: &mut Vec<Warning>) -> Result<Self, Error> {
         let mut names = Names {
             enums: HashMap::new(),
             properties: HashMap::new(),
@@ -89,8 +91,8 @@ impl Names {
         }
         for field in dictionary.fields() {
             if !field.values.is_empty() {
-                module.claim(&field.name, Owner::Enum(field.name.clone()))?;
-                names.name_enum(field)?;
+                let class = module.claim_enum(&field.name, warnings)?;
+                names.name_enum(field, class, warnings)?;
             }
         }
         for message in dictionary.messages() {
@@ -129,28 +131,30 @@ impl Names {
         class
     }
 
-    fn name_enum(&mut self, field: &Field) -> Result<(), Error> {
+    fn name_enum(
+        &mut self,
+        field: &Field,
+        class: String,
+        warnings: &mut Vec<Warning>,
+    ) -> Result<(), Error> {
         let mut members = Namespace::default();
         let names = field
             .values
             .iter()
             .map(|value| {
                 let name = member_name(field, value)?;
-                members.claim(
-                    &name,
-                    Owner::Value {
-                        field: field.name.clone(),
-                        code: value.value.clone(),
-                        description: value.description.clone(),
-                    },
-                )?;
-                Ok(name)
+                let owner = Owner::Value {
+                    field: field.name.clone(),
+                    code: value.value.clone(),
+                    description: value.description.clone(),
+                };
+                Ok(members.claim_value(&name, owner, numbered_member, warnings)?)
             })
             .collect::<Result<Vec<_>, Error>>()?;
         self.enums.insert(
             field.tag,
             EnumNames {
-                class: field.name.clone(),
+                class,
                 members: names,
             },
         );
@@ -224,7 +228,7 @@ mod tests {
     use super::Names;
     use crate::python::Error;
     use crate::test_utils::message_with;
-    use crate::{NameClash, Owner};
+    use crate::{NameClash, Owner, Warning};
     use refix_dictionary::{
         Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Group,
         Member, MemberContext, Message, Protocol, Spec, Tag, Version,
@@ -295,7 +299,7 @@ mod tests {
     }
 
     fn clash_in(dictionary: &Dictionary) -> NameClash {
-        match Names::new(dictionary) {
+        match Names::new(dictionary, &mut Vec::new()) {
             Err(Error::NameClash(clash)) => *clash,
             Err(other) => panic!("expected a name clash, found {other:?}"),
             Ok(_) => panic!("expected a name clash"),
@@ -307,18 +311,29 @@ mod tests {
     }
 
     #[test]
-    fn an_enum_named_like_a_message_clashes() {
-        let field = with_values(
+    fn an_enum_named_like_a_message_yields() {
+        let dictionary = message_with(vec![with_values(
             field("NewOrderSingle", 9000, DataType::Char),
             &[("1", "FIRST")],
+        )]);
+        let mut warnings = Vec::new();
+
+        let names = Names::new(&dictionary, &mut warnings).unwrap();
+
+        assert_eq!(
+            names.enum_class(&dictionary.fields()[0]),
+            "NewOrderSingleEnum"
         );
         assert_eq!(
-            clash(vec![field]),
-            NameClash {
-                name: "NewOrderSingle".to_owned(),
-                first: Owner::Message("NewOrderSingle".to_owned()),
-                second: Owner::Enum("NewOrderSingle".to_owned()),
-            }
+            warnings,
+            vec![Warning::Renamed {
+                clash: Box::new(NameClash {
+                    name: "NewOrderSingle".to_owned(),
+                    first: Owner::Message("NewOrderSingle".to_owned()),
+                    second: Owner::Enum("NewOrderSingle".to_owned()),
+                }),
+                name: "NewOrderSingleEnum".to_owned(),
+            }]
         );
     }
 
@@ -329,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn an_enum_named_like_a_shared_group_clashes() {
+    fn an_enum_named_like_a_shared_group_yields() {
         let dictionary = dictionary(
             vec![message(
                 "MarketDataRequest",
@@ -351,15 +366,23 @@ mod tests {
                 members: vec![group(1445, vec![field_ref(1446)])],
             }],
         );
+        let mut warnings = Vec::new();
+
+        let names = Names::new(&dictionary, &mut warnings).unwrap();
+
+        assert_eq!(names.enum_class(&dictionary.fields()[1]), "RateSourceEnum");
         assert_eq!(
-            clash_in(&dictionary),
-            NameClash {
-                name: "RateSource".to_owned(),
-                first: Owner::Group(
-                    MemberContext::Component("RateSource".to_owned()).group("NoRateSources")
-                ),
-                second: Owner::Enum("RateSource".to_owned()),
-            }
+            warnings,
+            vec![Warning::Renamed {
+                clash: Box::new(NameClash {
+                    name: "RateSource".to_owned(),
+                    first: Owner::Group(
+                        MemberContext::Component("RateSource".to_owned()).group("NoRateSources")
+                    ),
+                    second: Owner::Enum("RateSource".to_owned()),
+                }),
+                name: "RateSourceEnum".to_owned(),
+            }]
         );
     }
 
@@ -377,31 +400,24 @@ mod tests {
             ],
             vec![],
         );
-        assert!(Names::new(&dictionary).is_ok());
+        assert!(Names::new(&dictionary, &mut Vec::new()).is_ok());
     }
 
     #[test]
-    fn two_members_named_alike_clash() {
-        let field = with_values(
+    fn two_members_named_alike_are_numbered() {
+        let dictionary = message_with(vec![with_values(
             field("BenchmarkCurveName", 221, DataType::String),
-            &[("Euribor", "EURIBOR"), ("EURIBOR", "Euribor")],
-        );
+            &[("Euribor", "EURIBOR"), ("EURIBOR", "EURIBOR")],
+        )]);
+        let mut warnings = Vec::new();
+
+        let names = Names::new(&dictionary, &mut warnings).unwrap();
+
         assert_eq!(
-            clash(vec![field]),
-            NameClash {
-                name: "EURIBOR".to_owned(),
-                first: Owner::Value {
-                    field: "BenchmarkCurveName".to_owned(),
-                    code: "Euribor".to_owned(),
-                    description: "EURIBOR".to_owned(),
-                },
-                second: Owner::Value {
-                    field: "BenchmarkCurveName".to_owned(),
-                    code: "EURIBOR".to_owned(),
-                    description: "Euribor".to_owned(),
-                },
-            }
+            names.enum_members(&dictionary.fields()[0]),
+            ["EURIBOR", "EURIBOR_2"]
         );
+        assert!(matches!(warnings.as_slice(), [Warning::Renamed { .. }]));
     }
 
     #[test]
@@ -442,7 +458,9 @@ mod tests {
     #[test]
     fn a_clash_names_the_language() {
         let field = with_values(field("RawMessage", 9000, DataType::Char), &[("1", "FIRST")]);
-        let error = Names::new(&message_with(vec![field])).err().unwrap();
+        let error = Names::new(&message_with(vec![field]), &mut Vec::new())
+            .err()
+            .unwrap();
         assert_eq!(
             error.to_string(),
             "python name `RawMessage` is taken by both the generated code and the enum of field \

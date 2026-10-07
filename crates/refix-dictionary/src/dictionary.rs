@@ -675,6 +675,30 @@ mod tests {
         }
 
         #[test]
+        fn a_repeated_code_is_an_error() {
+            assert_eq!(
+                resolve(enum_field(DataType::Char, &["1", "2", "1"])).unwrap_err(),
+                Error::RepeatedCode {
+                    field: "PartyRole".to_owned(),
+                    first: "1".to_owned(),
+                    second: "1".to_owned(),
+                }
+            );
+        }
+
+        #[test]
+        fn int_codes_repeat_by_number() {
+            assert_eq!(
+                resolve(enum_field(DataType::Int, &["1", "01"])).unwrap_err(),
+                Error::RepeatedCode {
+                    field: "PartyRole".to_owned(),
+                    first: "1".to_owned(),
+                    second: "01".to_owned(),
+                }
+            );
+        }
+
+        #[test]
         fn values_of_other_types_are_not_checked() {
             assert!(resolve(enum_field(DataType::Char, &["A"])).is_ok());
         }
