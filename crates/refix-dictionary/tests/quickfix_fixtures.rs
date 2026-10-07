@@ -1,7 +1,7 @@
 //! The frontend handles the full, real QuickFIX dictionary files: parsing
 //! must succeed, and anything not yet modelled surfaces as warnings.
 
-use refix_dictionary::quickfix::{self, Warning};
+use refix_dictionary::quickfix;
 use refix_dictionary::{
     Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Member, MemberContext,
     Message, Protocol, Tag, Version, dictionary,
@@ -166,16 +166,25 @@ fn parses_the_full_fix44_dictionary() {
         .sum();
     assert_eq!(groups, 356);
 
-    // Only the header and trailer remain unmodelled.
-    assert_eq!(
-        parsed.warnings,
-        vec![
-            Warning::UnsupportedSection {
-                section: "header".to_owned(),
-            },
-            Warning::UnsupportedSection {
-                section: "trailer".to_owned(),
-            },
-        ]
-    );
+    // The header ends with the NoHops group; the trailer holds the signature
+    // and CheckSum.
+    let header: Vec<dictionary::Member> = parsed.dictionary.header().collect();
+    assert_eq!(header.len(), 27);
+    let Some(dictionary::Member::Group(hops)) = header.last() else {
+        panic!("expected the header to end with a group");
+    };
+    assert_eq!(hops.count_field().name, "NoHops");
+    assert_eq!(hops.declared_in(), &MemberContext::Header);
+    let trailer: Vec<&str> = parsed
+        .dictionary
+        .trailer()
+        .map(|member| match member {
+            dictionary::Member::Field { field, .. } => field.name.as_str(),
+            dictionary::Member::Group(group) => panic!("unexpected group {group:?}"),
+        })
+        .collect();
+    assert_eq!(trailer, ["SignatureLength", "Signature", "CheckSum"]);
+
+    // Nothing is left unmodelled.
+    assert!(parsed.warnings.is_empty());
 }
