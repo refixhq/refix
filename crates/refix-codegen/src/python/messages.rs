@@ -68,7 +68,7 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
                 "str | None".to_owned(),
                 format!("return {receiver}.get_str({tag})"),
             ),
-            DataType::Int => (
+            _ if field.data_type.is_int_based() => (
                 "int | None".to_owned(),
                 format!("return {receiver}.get_int({tag})"),
             ),

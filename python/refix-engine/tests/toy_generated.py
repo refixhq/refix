@@ -106,8 +106,8 @@ class Header:
         return self._raw.get_str(8)
 
     @cached_property
-    def body_length_raw(self) -> bytes | None:
-        return self._raw.get(9)
+    def body_length(self) -> int | None:
+        return self._raw.get_int(9)
 
     @cached_property
     def msg_type(self) -> str | None:
@@ -122,8 +122,8 @@ class Header:
         return self._raw.get_str(56)
 
     @cached_property
-    def msg_seq_num_raw(self) -> bytes | None:
-        return self._raw.get(34)
+    def msg_seq_num(self) -> int | None:
+        return self._raw.get_int(34)
 
     @cached_property
     def sending_time_raw(self) -> bytes | None:
@@ -144,8 +144,8 @@ class Trailer:
         return self._raw
 
     @cached_property
-    def signature_length_raw(self) -> bytes | None:
-        return self._raw.get(93)
+    def signature_length(self) -> int | None:
+        return self._raw.get_int(93)
 
     @cached_property
     def signature_raw(self) -> bytes | None:

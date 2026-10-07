@@ -127,7 +127,7 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         DataType::String => format!(
             "    pub fn {name}(&self) -> Result<Option<{reference}str>, InvalidValue> {{\n        self.0.get_str(Tag({tag}))\n    }}\n"
         ),
-        DataType::Int => format!(
+        data_type if data_type.is_int_based() => format!(
             "    pub fn {name}(&self) -> Result<Option<i64>, InvalidValue> {{\n        self.0.get_int(Tag({tag}))\n    }}\n"
         ),
         _ => format!(
@@ -171,6 +171,14 @@ mod tests {
         assert_eq!(
             scope_signature(&field("PartyID", 448, DataType::String)),
             "pub fn party_id(&self) -> Result<Option<&'a str>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn an_int_based_type_reads_as_an_integer() {
+        assert_eq!(
+            scope_signature(&field("MsgSeqNum", 34, DataType::SeqNum)),
+            "pub fn msg_seq_num(&self) -> Result<Option<i64>, InvalidValue> {"
         );
     }
 

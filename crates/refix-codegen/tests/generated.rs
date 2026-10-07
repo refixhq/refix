@@ -154,12 +154,13 @@ fn a_header_field_after_a_group_ends_it() {
 #[test]
 fn reads_the_header_and_trailer() {
     let raw = Tokenizer::default()
-        .tokenize(frame("35=D|49=SENDER|56=TARGET|11=ORDER-1|"))
+        .tokenize(frame("35=D|49=SENDER|56=TARGET|34=7|11=ORDER-1|"))
         .unwrap();
 
     let order = NewOrderSingle::from_raw(raw);
 
     assert_eq!(order.header().begin_string(), Ok(Some("FIX.4.4")));
+    assert_eq!(order.header().msg_seq_num(), Ok(Some(7)));
     assert_eq!(order.header().msg_type(), Ok(Some("D")));
     assert_eq!(order.header().sender_comp_id(), Ok(Some("SENDER")));
     assert_eq!(order.header().target_comp_id(), Ok(Some("TARGET")));

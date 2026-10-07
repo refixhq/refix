@@ -183,8 +183,8 @@ impl<'a> Header<'a> {
         self.0.get_str(Tag(8))
     }
 
-    pub fn body_length_raw(&self) -> Option<&'a [u8]> {
-        self.0.get(Tag(9))
+    pub fn body_length(&self) -> Result<Option<i64>, InvalidValue> {
+        self.0.get_int(Tag(9))
     }
 
     pub fn msg_type(&self) -> Result<Option<&'a str>, InvalidValue> {
@@ -199,8 +199,8 @@ impl<'a> Header<'a> {
         self.0.get_str(Tag(56))
     }
 
-    pub fn msg_seq_num_raw(&self) -> Option<&'a [u8]> {
-        self.0.get(Tag(34))
+    pub fn msg_seq_num(&self) -> Result<Option<i64>, InvalidValue> {
+        self.0.get_int(Tag(34))
     }
 
     pub fn sending_time_raw(&self) -> Option<&'a [u8]> {
@@ -260,8 +260,8 @@ impl<'a> Trailer<'a> {
         self.0
     }
 
-    pub fn signature_length_raw(&self) -> Option<&'a [u8]> {
-        self.0.get(Tag(93))
+    pub fn signature_length(&self) -> Result<Option<i64>, InvalidValue> {
+        self.0.get_int(Tag(93))
     }
 
     pub fn signature_raw(&self) -> Option<&'a [u8]> {

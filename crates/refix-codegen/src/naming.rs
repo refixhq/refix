@@ -7,7 +7,8 @@ use crate::snake_case;
 /// A field of a type the generator does not interpret takes the `_raw` suffix.
 pub(crate) fn field_base_name(field: &Field) -> String {
     let mut name = snake_case(&field.name);
-    if field.values.is_empty() && !matches!(field.data_type, DataType::String | DataType::Int) {
+    let interpreted = field.data_type == DataType::String || field.data_type.is_int_based();
+    if field.values.is_empty() && !interpreted {
         name.push_str("_raw");
     }
     name
@@ -67,6 +68,12 @@ mod tests {
     fn an_unclaimed_type_takes_the_raw_suffix() {
         let price = field("Price", DataType::Other("PRICE".to_owned()));
         assert_eq!(field_base_name(&price), "price_raw");
+    }
+
+    #[test]
+    fn an_int_based_type_takes_the_plain_name() {
+        let msg_seq_num = field("MsgSeqNum", DataType::SeqNum);
+        assert_eq!(field_base_name(&msg_seq_num), "msg_seq_num");
     }
 
     #[test]

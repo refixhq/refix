@@ -134,9 +134,10 @@ class TestGroups:
 
 class TestHeader:
     def test_reads_the_header_and_trailer(self):
-        new_order = order("35=D|49=SENDER|56=TARGET|11=ORDER-1|")
+        new_order = order("35=D|49=SENDER|56=TARGET|34=7|11=ORDER-1|")
 
         assert new_order.header.begin_string == "FIX.4.4"
+        assert new_order.header.msg_seq_num == 7
         assert new_order.header.msg_type == "D"
         assert new_order.header.sender_comp_id == "SENDER"
         assert new_order.header.target_comp_id == "TARGET"
