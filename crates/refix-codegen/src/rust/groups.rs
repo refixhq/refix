@@ -40,7 +40,7 @@ fn collect_groups<'a>(
         seen.push(context.clone());
         match group.declared_in() {
             MemberContext::Component(_) => groups.push(group),
-            MemberContext::Message(_) => {}
+            MemberContext::Message(_) | MemberContext::Header | MemberContext::Trailer => {}
             MemberContext::Group { .. } => warnings.push(Warning::UnsupportedGroup { context }),
         }
         collect_groups(group.members(), groups, seen, warnings);

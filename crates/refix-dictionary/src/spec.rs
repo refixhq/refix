@@ -83,13 +83,16 @@ pub struct Group {
     pub members: Vec<Member>,
 }
 
-/// The message, component or group instance a member appears in.
+/// The message, component, group instance, header or trailer a member
+/// appears in.
 ///
 /// Diagnostics use this to name the place a problem was found.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum MemberContext {
     Message(String),
     Component(String),
+    Header,
+    Trailer,
     /// A group's instances, named after the group's count field.
     Group {
         name: String,
@@ -112,6 +115,8 @@ impl fmt::Display for MemberContext {
         match self {
             Self::Message(name) => write!(f, "message '{name}'"),
             Self::Component(name) => write!(f, "component '{name}'"),
+            Self::Header => write!(f, "the header"),
+            Self::Trailer => write!(f, "the trailer"),
             Self::Group { name, parent } => write!(f, "group '{name}' in {parent}"),
         }
     }
@@ -246,6 +251,15 @@ mod tests {
         assert_eq!(DataType::Int.canonical_code("01"), "1");
         assert_eq!(DataType::Int.canonical_code("-007"), "-7");
         assert_eq!(DataType::Char.canonical_code("01"), "01");
+    }
+
+    #[test]
+    fn a_header_group_names_the_header() {
+        assert_eq!(
+            MemberContext::Header.group("NoHops").to_string(),
+            "group 'NoHops' in the header"
+        );
+        assert_eq!(MemberContext::Trailer.to_string(), "the trailer");
     }
 
     #[test]
