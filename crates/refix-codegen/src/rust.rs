@@ -5,21 +5,24 @@ mod layout;
 mod messages;
 mod names;
 mod naming;
+mod views;
 
 use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Generated;
-use crate::groups::{is_generated, known_tags};
+use crate::envelope::Envelope;
+use crate::groups::is_generated;
 use enums::emit_enum;
 pub use error::Error;
 use groups::{emit_group_module, shared_groups};
 use messages::emit_message;
 use names::Names;
+use views::emit_view;
 
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Error> {
     let mut warnings = Vec::new();
     let names = Names::new(dictionary, &mut warnings)?;
-    let envelope = known_tags(dictionary.header().chain(dictionary.trailer()));
+    let envelope = Envelope::of(dictionary);
 
     // The layout is the emitter's own, so rustfmt leaves it alone. That keeps
     // the output byte-stable across rustfmt versions. A message may declare a
@@ -38,6 +41,11 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .into_iter()
         .map(|group| emit_group_module(group, &names))
         .collect();
+    let views: Vec<String> = envelope
+        .sections
+        .iter()
+        .map(|section| emit_view(*section, dictionary, &envelope, &names))
+        .collect();
     let messages: Vec<String> = dictionary
         .messages()
         .map(|message| emit_message(message, &envelope, &names))
@@ -45,21 +53,24 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     let sections = enums
         .into_iter()
         .chain(groups)
+        .chain(views)
         .chain(messages)
         .collect::<Vec<String>>()
         .join("\n");
-    let has_groups = dictionary.messages().any(|message| {
-        message
-            .members()
-            .any(|member| matches!(member, dictionary::Member::Group(_)))
-    });
+    let has_groups = !envelope.with_groups.is_empty()
+        || dictionary.messages().any(|message| {
+            message
+                .members()
+                .any(|member| matches!(member, dictionary::Member::Group(_)))
+        });
     let mut imports = vec!["InvalidValue", "KnownTags", "RawMessage", "Tag"];
     if has_groups {
         imports.extend(["GroupTable", "Instances"]);
     }
-    if dictionary
-        .messages()
-        .any(|message| reads_multiple_values(message.members()))
+    if reads_multiple_values(dictionary.header().chain(dictionary.trailer()))
+        || dictionary
+            .messages()
+            .any(|message| reads_multiple_values(message.members()))
     {
         imports.push("MultipleValues");
     }

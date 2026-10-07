@@ -1,15 +1,17 @@
-use refix_dictionary::{DataType, Field, MemberContext, Tag, dictionary};
+use refix_dictionary::{DataType, Field, MemberContext, dictionary};
 
 use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::names::Names;
+use super::views::emit_view_accessor;
+use crate::envelope::Envelope;
 use crate::groups::message_known_tags;
 
 /// A message's struct, impl and group module. Its known tags include the
-/// `envelope`'s.
+/// `envelope`'s, and it reaches each view the envelope has.
 pub(super) fn emit_message(
     message: dictionary::Message<'_>,
-    envelope: &[Tag],
+    envelope: &Envelope,
     names: &Names,
 ) -> String {
     let mut items = vec![
@@ -26,19 +28,26 @@ fn emit_message_struct(message: dictionary::Message<'_>) -> String {
     format!("pub struct {}(RawMessage);\n", message.name())
 }
 
-fn emit_message_impl(message: dictionary::Message<'_>, envelope: &[Tag], names: &Names) -> String {
+fn emit_message_impl(
+    message: dictionary::Message<'_>,
+    envelope: &Envelope,
+    names: &Names,
+) -> String {
     let mut members = vec![
         format!(
             "    pub const MSG_TYPE: &[u8] = b\"{}\";\n",
             message.msg_type()
         ),
         indent(
-            &emit_known_tags(&message_known_tags(message, envelope), MAX_WIDTH - 4),
+            &emit_known_tags(&message_known_tags(message, &envelope.tags), MAX_WIDTH - 4),
             1,
         ),
         "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),
         "    pub fn raw(&self) -> &RawMessage {\n        &self.0\n    }\n".to_owned(),
     ];
+    for section in &envelope.sections {
+        members.push(emit_view_accessor(*section, envelope));
+    }
     for member in message.members() {
         match member {
             dictionary::Member::Field { field, .. } => {

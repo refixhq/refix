@@ -160,6 +160,119 @@ pub mod ptys_sub_grp {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Header<'a>(refix_message::Scope<'a>, KnownTags<'static>);
+
+impl<'a> From<refix_message::Scope<'a>> for Header<'a> {
+    fn from(scope: refix_message::Scope<'a>) -> Self {
+        Self(scope, Self::KNOWN_TAGS)
+    }
+}
+
+impl<'a> Header<'a> {
+    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
+        Tag(8), Tag(9), Tag(10), Tag(34), Tag(35), Tag(49), Tag(52), Tag(56), Tag(89), Tag(93),
+        Tag(627), Tag(628),
+    ]);
+
+    pub fn raw(&self) -> refix_message::Scope<'a> {
+        self.0
+    }
+
+    pub fn begin_string(&self) -> Result<Option<&'a str>, InvalidValue> {
+        self.0.get_str(Tag(8))
+    }
+
+    pub fn body_length_raw(&self) -> Option<&'a [u8]> {
+        self.0.get(Tag(9))
+    }
+
+    pub fn msg_type(&self) -> Result<Option<&'a str>, InvalidValue> {
+        self.0.get_str(Tag(35))
+    }
+
+    pub fn sender_comp_id(&self) -> Result<Option<&'a str>, InvalidValue> {
+        self.0.get_str(Tag(49))
+    }
+
+    pub fn target_comp_id(&self) -> Result<Option<&'a str>, InvalidValue> {
+        self.0.get_str(Tag(56))
+    }
+
+    pub fn msg_seq_num_raw(&self) -> Option<&'a [u8]> {
+        self.0.get(Tag(34))
+    }
+
+    pub fn sending_time_raw(&self) -> Option<&'a [u8]> {
+        self.0.get(Tag(52))
+    }
+
+    pub fn hops(&self) -> Result<Instances<'a, header::hops::Instance<'a>>, InvalidValue> {
+        self.0.get_group(&header::hops::TABLE, &self.1).map(Instances::from)
+    }
+}
+
+pub mod header {
+    pub mod hops {
+        use super::super::*;
+
+        pub const TABLE: GroupTable<'static> = GroupTable::new(
+            Tag(627),
+            Tag(628),
+            &[Tag(628)],
+            &[],
+        );
+
+        pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(628)]);
+
+        #[derive(Clone, Copy, Debug)]
+        pub struct Instance<'a>(refix_message::Scope<'a>);
+
+        impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {
+            fn from(scope: refix_message::Scope<'a>) -> Self {
+                Self(scope)
+            }
+        }
+
+        impl<'a> Instance<'a> {
+            pub fn raw(&self) -> refix_message::Scope<'a> {
+                self.0
+            }
+
+            pub fn hop_comp_id(&self) -> Result<Option<&'a str>, InvalidValue> {
+                self.0.get_str(Tag(628))
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Trailer<'a>(refix_message::Scope<'a>);
+
+impl<'a> From<refix_message::Scope<'a>> for Trailer<'a> {
+    fn from(scope: refix_message::Scope<'a>) -> Self {
+        Self(scope)
+    }
+}
+
+impl<'a> Trailer<'a> {
+    pub fn raw(&self) -> refix_message::Scope<'a> {
+        self.0
+    }
+
+    pub fn signature_length_raw(&self) -> Option<&'a [u8]> {
+        self.0.get(Tag(93))
+    }
+
+    pub fn signature_raw(&self) -> Option<&'a [u8]> {
+        self.0.get(Tag(89))
+    }
+
+    pub fn check_sum(&self) -> Result<Option<&'a str>, InvalidValue> {
+        self.0.get_str(Tag(10))
+    }
+}
+
 pub struct NewOrderSingle(RawMessage);
 
 impl NewOrderSingle {
@@ -177,6 +290,14 @@ impl NewOrderSingle {
 
     pub fn raw(&self) -> &RawMessage {
         &self.0
+    }
+
+    pub fn header(&self) -> Header<'_> {
+        Header(self.0.scope(), Self::KNOWN_TAGS)
+    }
+
+    pub fn trailer(&self) -> Trailer<'_> {
+        Trailer(self.0.scope())
     }
 
     pub fn cl_ord_id(&self) -> Result<Option<&str>, InvalidValue> {
@@ -220,6 +341,14 @@ impl Logon {
 
     pub fn raw(&self) -> &RawMessage {
         &self.0
+    }
+
+    pub fn header(&self) -> Header<'_> {
+        Header(self.0.scope(), Self::KNOWN_TAGS)
+    }
+
+    pub fn trailer(&self) -> Trailer<'_> {
+        Trailer(self.0.scope())
     }
 
     pub fn msg_types(&self) -> Result<Instances<'_, logon::msg_types::Instance<'_>>, InvalidValue> {

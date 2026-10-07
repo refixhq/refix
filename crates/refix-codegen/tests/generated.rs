@@ -11,7 +11,7 @@ use refix_message::{InvalidValue, Tag, Tokenizer};
 #[path = "data/toy_generated.rs"]
 mod toy;
 
-use toy::{ExecInst, Logon, NewOrderSingle, OrdType, PartyRole};
+use toy::{ExecInst, Header, Logon, NewOrderSingle, OrdType, PartyRole};
 
 const TOY_XML: &str = include_str!("data/toy.xml");
 const TOY_GENERATED: &str = include_str!("data/toy_generated.rs");
@@ -149,6 +149,59 @@ fn a_header_field_after_a_group_ends_it() {
 
     let msg_types = logon.msg_types().unwrap();
     assert_eq!(msg_types.get(0).unwrap().raw().get(Tag(49)), None);
+}
+
+#[test]
+fn reads_the_header_and_trailer() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|49=SENDER|56=TARGET|11=ORDER-1|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(order.header().begin_string(), Ok(Some("FIX.4.4")));
+    assert_eq!(order.header().msg_type(), Ok(Some("D")));
+    assert_eq!(order.header().sender_comp_id(), Ok(Some("SENDER")));
+    assert_eq!(order.header().target_comp_id(), Ok(Some("TARGET")));
+    assert!(order.trailer().check_sum().unwrap().is_some());
+}
+
+#[test]
+fn reads_a_header_without_the_message_type() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|49=SENDER|11=ORDER-1|"))
+        .unwrap();
+
+    let header = Header::from(raw.scope());
+
+    assert_eq!(header.sender_comp_id(), Ok(Some("SENDER")));
+}
+
+#[test]
+fn a_message_header_ends_its_groups_where_the_body_starts() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=A|627=2|628=HOP-1|628=HOP-2|384=1|372=D|"))
+        .unwrap();
+
+    let logon = Logon::from_raw(raw);
+
+    let hops = logon.header().hops().unwrap();
+    let hop_ids: Vec<Option<&str>> = hops.iter().map(|hop| hop.hop_comp_id().unwrap()).collect();
+    assert_eq!(hop_ids, [Some("HOP-1"), Some("HOP-2")]);
+    assert_eq!(hops.get(1).unwrap().raw().get(Tag(384)), None);
+}
+
+#[test]
+fn a_header_without_the_message_type_keeps_body_fields_in_its_last_group() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=A|627=2|628=HOP-1|628=HOP-2|384=1|372=D|"))
+        .unwrap();
+
+    let header = Header::from(raw.scope());
+
+    let last = header.hops().unwrap().get(1).unwrap();
+    assert_eq!(last.hop_comp_id(), Ok(Some("HOP-2")));
+    assert_eq!(last.raw().get(Tag(384)), Some(b"1".as_slice()));
 }
 
 #[test]

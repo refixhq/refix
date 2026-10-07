@@ -5,6 +5,7 @@ use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 use super::Error;
 use super::naming::{group_name, message_module_name, method_name, numbered_variant, variant_name};
 use crate::Warning;
+use crate::envelope::Section;
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
 
@@ -12,10 +13,12 @@ use crate::namespace::{Namespace, Owner};
 ///
 /// These are its imports, the standard names its signatures use, the crate
 /// its paths start from, and `Instance`, which each group module defines
-/// over the root names it imports.
+/// over the root names it imports. The header and trailer views take their
+/// types and the modules of their groups.
 const ROOT: &[&str] = &[
     "From",
     "GroupTable",
+    "Header",
     "Instance",
     "Instances",
     "InvalidValue",
@@ -26,16 +29,26 @@ const ROOT: &[&str] = &[
     "RawMessage",
     "Result",
     "Tag",
+    "Trailer",
+    "header",
     "i64",
     "refix_message",
     "str",
+    "trailer",
     "u8",
 ];
 
 /// The constants and methods every message defines.
-const MESSAGE: &[&str] = &["KNOWN_TAGS", "MSG_TYPE", "from_raw", "raw"];
+const MESSAGE: &[&str] = &[
+    "KNOWN_TAGS",
+    "MSG_TYPE",
+    "from_raw",
+    "header",
+    "raw",
+    "trailer",
+];
 
-/// The methods every group instance defines.
+/// The methods every group instance and header or trailer view defines.
 const INSTANCE: &[&str] = &["raw"];
 
 /// Every name the generated Rust uses, settled before anything is emitted.
@@ -76,6 +89,9 @@ impl Names {
                 root.claim(&name, Owner::Group(instance_context(group)))?;
                 names.groups.insert(instance_context(group), name);
             }
+        }
+        for section in [Section::Header, Section::Trailer] {
+            names.name_section(section, dictionary)?;
         }
         for field in dictionary.fields() {
             if !field.values.is_empty() {
@@ -126,6 +142,23 @@ impl Names {
         self.message_modules
             .insert(message.name().to_owned(), module);
         Ok(())
+    }
+
+    /// Names a section view's accessors and the module of the groups the
+    /// section declares itself.
+    fn name_section(&mut self, section: Section, dictionary: &Dictionary) -> Result<(), Error> {
+        let members = section.members(dictionary);
+        let mut modules = Namespace::default();
+        for member in &members {
+            if let dictionary::Member::Group(group) = member
+                && *group.declared_in() == section.context()
+            {
+                let name = group_name(*group)?;
+                modules.claim(&name, Owner::Group(instance_context(*group)))?;
+                self.groups.insert(instance_context(*group), name);
+            }
+        }
+        self.name_accessors(members.into_iter(), Namespace::with_generated(INSTANCE))
     }
 
     fn name_enum(
@@ -210,6 +243,8 @@ impl Names {
         let name = self.group(group);
         match group.declared_in() {
             MemberContext::Message(message) => format!("{}::{name}", self.message_module(message)),
+            MemberContext::Header => format!("{}::{name}", Section::Header.member_name()),
+            MemberContext::Trailer => format!("{}::{name}", Section::Trailer.member_name()),
             _ => name.to_owned(),
         }
     }
@@ -331,6 +366,18 @@ mod tests {
                 name: "order_qty".to_owned(),
                 first: Owner::Field("OrderQty".to_owned()),
                 second: Owner::Field("OrderQTY".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn an_accessor_named_like_the_header_view_clashes() {
+        assert_eq!(
+            clash(vec![field("Header", 9000, DataType::String)]),
+            NameClash {
+                name: "header".to_owned(),
+                first: Owner::Generated,
+                second: Owner::Field("Header".to_owned()),
             }
         );
     }

@@ -13,14 +13,16 @@ pub(crate) fn instance_context(group: dictionary::Group<'_>) -> MemberContext {
     group.declared_in().group(&group.count_field().name)
 }
 
-/// Every group declaration the messages reach, each once, in order of first
-/// appearance.
+/// Every group declaration the header, messages and trailer reach, each
+/// once, in order of first appearance.
 pub(crate) fn declared_groups(dictionary: &Dictionary) -> Vec<dictionary::Group<'_>> {
     let mut groups = Vec::new();
     let mut seen = HashSet::new();
+    collect_declared(dictionary.header(), &mut groups, &mut seen);
     for message in dictionary.messages() {
         collect_declared(message.members(), &mut groups, &mut seen);
     }
+    collect_declared(dictionary.trailer(), &mut groups, &mut seen);
     groups
 }
 
