@@ -13,6 +13,13 @@ pub enum Error {
         field: String,
         value: String,
     },
+    /// Two values listed under one code of a field, `1` and `01` being one
+    /// code on an int-based field.
+    RepeatedCode {
+        field: String,
+        first: String,
+        second: String,
+    },
     DuplicateComponent {
         component: String,
     },
@@ -45,6 +52,23 @@ impl fmt::Display for Error {
             }
             Error::NonIntegerValue { field, value } => {
                 write!(f, "value '{value}' of field '{field}' is not an integer")
+            }
+            Error::RepeatedCode {
+                field,
+                first,
+                second,
+            } if first == second => {
+                write!(f, "field '{field}' lists code {first} more than once")
+            }
+            Error::RepeatedCode {
+                field,
+                first,
+                second,
+            } => {
+                write!(
+                    f,
+                    "field '{field}' lists both {first} and {second}, which are the same number"
+                )
             }
             Error::DuplicateComponent { component } => {
                 write!(f, "component '{component}' is defined more than once")
@@ -89,6 +113,34 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "component 'Top' contains tag 58 more than once"
+        );
+    }
+
+    #[test]
+    fn a_repeated_code_reads_as_listed_twice() {
+        let error = Error::RepeatedCode {
+            field: "MatchType".to_owned(),
+            first: "M1".to_owned(),
+            second: "M1".to_owned(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "field 'MatchType' lists code M1 more than once"
+        );
+    }
+
+    #[test]
+    fn a_code_spelled_twice_names_both_spellings() {
+        let error = Error::RepeatedCode {
+            field: "PriceType".to_owned(),
+            first: "1".to_owned(),
+            second: "01".to_owned(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "field 'PriceType' lists both 1 and 01, which are the same number"
         );
     }
 
