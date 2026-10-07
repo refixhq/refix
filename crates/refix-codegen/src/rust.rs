@@ -9,7 +9,7 @@ mod naming;
 use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Generated;
-use crate::groups::is_generated;
+use crate::groups::{is_generated, known_tags};
 use enums::emit_enum;
 pub use error::Error;
 use groups::{emit_group_module, shared_groups};
@@ -19,6 +19,7 @@ use names::Names;
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Error> {
     let mut warnings = Vec::new();
     let names = Names::new(dictionary, &mut warnings)?;
+    let envelope = known_tags(dictionary.header().chain(dictionary.trailer()));
 
     // The layout is the emitter's own, so rustfmt leaves it alone. That keeps
     // the output byte-stable across rustfmt versions. A message may declare a
@@ -39,7 +40,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .collect();
     let messages: Vec<String> = dictionary
         .messages()
-        .map(|message| emit_message(message, &names))
+        .map(|message| emit_message(message, &envelope, &names))
         .collect();
     let sections = enums
         .into_iter()

@@ -121,6 +121,11 @@ class TestGroups:
 
         assert [msg_type.ref_msg_type for msg_type in logon.msg_types] == ["D", "8"]
 
+    def test_a_header_field_after_a_group_ends_it(self):
+        logon = Logon(tokenize_body("35=A|384=1|372=D|49=SENDER|"))
+
+        assert logon.msg_types[0].raw.get(49) is None
+
     def test_a_group_read_is_cached(self):
         new_order = order("35=D|453=1|448=AL|")
 

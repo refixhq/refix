@@ -140,6 +140,18 @@ fn a_malformed_group_reads_as_an_error() {
 }
 
 #[test]
+fn a_header_field_after_a_group_ends_it() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=A|384=1|372=D|49=SENDER|"))
+        .unwrap();
+
+    let logon = Logon::from_raw(raw);
+
+    let msg_types = logon.msg_types().unwrap();
+    assert_eq!(msg_types.get(0).unwrap().raw().get(Tag(49)), None);
+}
+
+#[test]
 fn reads_a_group_declared_in_its_message() {
     let raw = Tokenizer::default()
         .tokenize(frame("35=A|384=2|372=D|372=8|"))

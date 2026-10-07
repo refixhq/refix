@@ -166,8 +166,9 @@ impl NewOrderSingle {
     pub const MSG_TYPE: &[u8] = b"D";
 
     pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
-        Tag(11), Tag(18), Tag(38), Tag(40), Tag(44), Tag(448), Tag(452), Tag(453), Tag(523),
-        Tag(802),
+        Tag(8), Tag(9), Tag(10), Tag(11), Tag(18), Tag(34), Tag(35), Tag(38), Tag(40), Tag(44),
+        Tag(49), Tag(52), Tag(56), Tag(89), Tag(93), Tag(448), Tag(452), Tag(453), Tag(523),
+        Tag(627), Tag(628), Tag(802),
     ]);
 
     pub fn from_raw(raw: RawMessage) -> Self {
@@ -208,7 +209,10 @@ pub struct Logon(RawMessage);
 impl Logon {
     pub const MSG_TYPE: &[u8] = b"A";
 
-    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(372), Tag(384)]);
+    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
+        Tag(8), Tag(9), Tag(10), Tag(34), Tag(35), Tag(49), Tag(52), Tag(56), Tag(89), Tag(93),
+        Tag(372), Tag(384), Tag(627), Tag(628),
+    ]);
 
     pub fn from_raw(raw: RawMessage) -> Self {
         Self(raw)

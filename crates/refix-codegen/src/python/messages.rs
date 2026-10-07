@@ -1,12 +1,17 @@
-use refix_dictionary::{DataType, Field, MemberContext, dictionary};
+use refix_dictionary::{DataType, Field, MemberContext, Tag, dictionary};
 
 use super::enums::str_literal;
 use super::groups::{emit_group_class, emit_group_property, tags};
 use super::layout::{MAX_WIDTH, indent, tuple_lines};
 use super::names::Names;
-use crate::groups::known_tags;
+use crate::groups::message_known_tags;
 
-pub(super) fn emit_message(message: dictionary::Message<'_>, names: &Names) -> String {
+/// A message's class. Its known tags include the `envelope`'s.
+pub(super) fn emit_message(
+    message: dictionary::Message<'_>,
+    envelope: &[Tag],
+    names: &Names,
+) -> String {
     let name = message.name();
     let mut members = vec![
         format!(
@@ -16,7 +21,7 @@ pub(super) fn emit_message(message: dictionary::Message<'_>, names: &Names) -> S
         indent(
             &tuple_lines(
                 "KNOWN_TAGS: ClassVar[KnownTags] = KnownTags(",
-                &tags(&known_tags(message.members())),
+                &tags(&message_known_tags(message, envelope)),
                 ")",
                 MAX_WIDTH - 4,
             ),

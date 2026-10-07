@@ -62,6 +62,14 @@ pub(crate) fn known_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a
     tags
 }
 
+/// Every tag a message can contain, its envelope's included, sorted.
+pub(crate) fn message_known_tags(message: dictionary::Message<'_>, envelope: &[Tag]) -> Vec<Tag> {
+    let mut tags = envelope.to_vec();
+    collect_tags(message.members(), &mut tags);
+    tags.sort();
+    tags
+}
+
 fn collect_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a>>, tags: &mut Vec<Tag>) {
     for member in members {
         match member {
@@ -76,7 +84,10 @@ fn collect_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a>>, tags:
 
 #[cfg(test)]
 mod tests {
-    use super::{declared_groups, instance_context, is_generated, known_tags, member_tags};
+    use super::{
+        declared_groups, instance_context, is_generated, known_tags, member_tags,
+        message_known_tags,
+    };
     use refix_dictionary::{
         Category, DataType, Field, FieldRef, Group, Member, Message, Protocol, Spec, Tag, Version,
         dictionary,
@@ -169,6 +180,26 @@ mod tests {
         assert_eq!(
             known_tags(message.members()),
             [Tag(448), Tag(452), Tag(453), Tag(523), Tag(802)]
+        );
+    }
+
+    #[test]
+    fn a_message_knows_its_envelope() {
+        let dictionary = dictionary();
+        let message = dictionary.messages().next().unwrap();
+
+        assert_eq!(
+            message_known_tags(message, &[Tag(10), Tag(49), Tag(627)]),
+            [
+                Tag(10),
+                Tag(49),
+                Tag(448),
+                Tag(452),
+                Tag(453),
+                Tag(523),
+                Tag(627),
+                Tag(802)
+            ]
         );
     }
 

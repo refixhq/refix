@@ -1,14 +1,20 @@
-use refix_dictionary::{DataType, Field, MemberContext, dictionary};
+use refix_dictionary::{DataType, Field, MemberContext, Tag, dictionary};
 
 use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::names::Names;
-use crate::groups::known_tags;
+use crate::groups::message_known_tags;
 
-pub(super) fn emit_message(message: dictionary::Message<'_>, names: &Names) -> String {
+/// A message's struct, impl and group module. Its known tags include the
+/// `envelope`'s.
+pub(super) fn emit_message(
+    message: dictionary::Message<'_>,
+    envelope: &[Tag],
+    names: &Names,
+) -> String {
     let mut items = vec![
         emit_message_struct(message),
-        emit_message_impl(message, names),
+        emit_message_impl(message, envelope, names),
     ];
     if let Some(module) = emit_message_module(message, names) {
         items.push(module);
@@ -20,14 +26,14 @@ fn emit_message_struct(message: dictionary::Message<'_>) -> String {
     format!("pub struct {}(RawMessage);\n", message.name())
 }
 
-fn emit_message_impl(message: dictionary::Message<'_>, names: &Names) -> String {
+fn emit_message_impl(message: dictionary::Message<'_>, envelope: &[Tag], names: &Names) -> String {
     let mut members = vec![
         format!(
             "    pub const MSG_TYPE: &[u8] = b\"{}\";\n",
             message.msg_type()
         ),
         indent(
-            &emit_known_tags(&known_tags(message.members()), MAX_WIDTH - 4),
+            &emit_known_tags(&message_known_tags(message, envelope), MAX_WIDTH - 4),
             1,
         ),
         "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),

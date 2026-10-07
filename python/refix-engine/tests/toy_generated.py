@@ -76,7 +76,9 @@ class Parties:
 class NewOrderSingle:
     MSG_TYPE: ClassVar[bytes] = b"D"
 
-    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((11, 18, 38, 40, 44, 448, 452, 453, 523, 802))
+    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((
+        8, 9, 10, 11, 18, 34, 35, 38, 40, 44, 49, 52, 56, 89, 93, 448, 452, 453, 523, 627, 628, 802,
+    ))
 
     def __init__(self, raw: RawMessage) -> None:
         self._raw = raw
@@ -116,7 +118,9 @@ class NewOrderSingle:
 class Logon:
     MSG_TYPE: ClassVar[bytes] = b"A"
 
-    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((372, 384))
+    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((
+        8, 9, 10, 34, 35, 49, 52, 56, 89, 93, 372, 384, 627, 628,
+    ))
 
     class MsgTypes:
         TABLE: ClassVar[GroupTable] = GroupTable(384, 372, (372,), ())
