@@ -35,5 +35,8 @@ venv/
 .venv/
 __pypackages__/
 
+# Generated stock package code
+crates/refix-fix44/src/generated.rs
+
 # Other
 .DS_Store

@@ -20,6 +20,11 @@ pytest *args:
 pybench:
     cd {{ py }} && uv run pytest tests/test_benchmarks.py --benchmark-autosave
 
+# Generate the stock packages' code from the QuickFIX dictionaries
+generate-stock:
+    cargo run -q -p refix-cli -- codegen dictionaries/quickfix/FIX44.xml \
+        --rust crates/refix-fix44/src/generated.rs
+
 # Run the Rust test suite
 cargo-test:
     cargo test

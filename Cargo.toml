@@ -3,8 +3,14 @@ members = [
     "crates/*",
     "python/refix-engine",
 ]
+# The stock packages are left out, as their code exists only once
+# `just generate-stock` has run.
 default-members = [
-    "crates/*",
+    "crates/refix",
+    "crates/refix-cli",
+    "crates/refix-codegen",
+    "crates/refix-dictionary",
+    "crates/refix-message",
 ]
 resolver = "3"
 
