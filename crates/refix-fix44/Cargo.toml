@@ -12,8 +12,9 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 # The generated module is gitignored, which cargo honours unless the files
-# are listed here.
-include = ["src/**/*.rs", "README.md", "LICENSE-*"]
+# are listed here. The fingerprint is packaged so that release-plz counts a
+# change to it as a change to the crate.
+include = ["src/**/*.rs", "generated.sha256", "README.md", "LICENSE-*"]
 
 [dependencies]
 refix-message = { workspace = true }
