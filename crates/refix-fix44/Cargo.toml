@@ -2,7 +2,6 @@
 name = "refix-fix44"
 description = "Typed FIX 4.4 messages for the ReFIX engine"
 version = "0.1.0"
-publish = false
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,8 +11,9 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 # The generated module is gitignored, which cargo honours unless the files
-# are listed here.
-include = ["src/**/*.rs", "README.md", "LICENSE-*"]
+# are listed here. The fingerprint is packaged so that release-plz counts a
+# change to it as a change to the crate.
+include = ["src/**/*.rs", "generated.sha256", "README.md", "LICENSE-*"]
 
 [dependencies]
 refix-message = { workspace = true }

@@ -1,0 +1,13 @@
+[workspace]
+# Publish only when a release PR is merged, not on every push to main.
+release_always = false
+
+[[package]]
+# The PyO3 extension behind the refix-engine wheel. It is not on crates.io,
+# so its version comes from git tags, which keep their existing names.
+name = "refix-engine"
+git_only = true
+git_tag_name = "python-v{{ version }}"
+# A feature bumps the minor version, as Python users read it. Before 1.0,
+# cargo treats a minor bump as breaking, so the crates keep the default.
+features_always_increment_minor = true

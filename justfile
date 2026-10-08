@@ -21,14 +21,19 @@ pytest *args:
 pybench:
     cd {{ py }} && uv run pytest tests/test_benchmarks.py --benchmark-autosave
 
-# Generate the stock packages' code from the QuickFIX dictionaries
+# Generate the stock packages' code from the QuickFIX dictionaries, and
+# the committed fingerprint that tells release-plz when it changed
 generate-stock:
     cargo run -q -p refix-cli -- codegen dictionaries/quickfix/FIX44.xml \
         --rust crates/refix-fix44/src/generated.rs \
         --python python/refix-fix44/src/refix_fix44/__init__.py
+    shasum -a 256 crates/refix-fix44/src/generated.rs \
+        python/refix-fix44/src/refix_fix44/__init__.py > crates/refix-fix44/generated.sha256
 
 # Check the stock packages as published, the Python one through its built wheel
 check-stock: generate-stock
+    git diff --exit-code -- crates/refix-fix44/generated.sha256 || \
+        (echo "The stock output changed. Commit crates/refix-fix44/generated.sha256." && exit 1)
     cargo clippy -p refix-fix44 --all-targets -- -D warnings
     cargo test -p refix-fix44
     rm -rf target/stock-wheels
