@@ -2,7 +2,6 @@
 name = "refix-fix44"
 description = "Typed FIX 4.4 messages for the ReFIX engine"
 version = "0.1.0"
-publish = false
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
