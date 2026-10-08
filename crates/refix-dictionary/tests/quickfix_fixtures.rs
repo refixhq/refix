@@ -7,7 +7,10 @@ use refix_dictionary::{
     Message, Protocol, Tag, Version, dictionary,
 };
 
-const FIX44: &str = include_str!("data/quickfix/FIX44.xml");
+const FIX44: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../dictionaries/quickfix/FIX44.xml"
+));
 
 #[test]
 fn parses_the_full_fix44_dictionary() {

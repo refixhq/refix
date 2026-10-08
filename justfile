@@ -1,4 +1,5 @@
 py := "python/refix-engine"
+stock := "python/refix-fix44"
 
 # List available recipes
 default:
@@ -19,6 +20,22 @@ pytest *args:
 # Run the Python benchmarks and save the results for comparison
 pybench:
     cd {{ py }} && uv run pytest tests/test_benchmarks.py --benchmark-autosave
+
+# Generate the stock packages' code from the QuickFIX dictionaries
+generate-stock:
+    cargo run -q -p refix-cli -- codegen dictionaries/quickfix/FIX44.xml \
+        --rust crates/refix-fix44/src/generated.rs \
+        --python python/refix-fix44/src/refix_fix44/__init__.py
+
+# Check the stock packages as published, the Python one through its built wheel
+check-stock: generate-stock
+    cargo clippy -p refix-fix44 --all-targets -- -D warnings
+    cargo test -p refix-fix44
+    rm -rf target/stock-wheels
+    uv build --wheel {{ stock }} -o target/stock-wheels
+    uv pip install --python {{ py }}/.venv/bin/python --no-deps --reinstall target/stock-wheels/*.whl
+    cd {{ stock }} && uv run --project ../refix-engine pyright
+    cd {{ stock }} && uv run --project ../refix-engine python -m doctest README.md
 
 # Run the Rust test suite
 cargo-test:

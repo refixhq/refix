@@ -1,0 +1,37 @@
+[project]
+name = "refix-fix44"
+version = "0.1.0"
+description = "Typed FIX 4.4 messages for ReFIX"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE", "LICENSE-QUICKFIX"]
+authors = [{ name = "David Steiner", email = "david@davidsteiner.dev" }]
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business :: Financial",
+    "Typing :: Typed",
+]
+dependencies = ["refix-engine"]
+
+[project.urls]
+Repository = "https://github.com/refixhq/refix"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/refix_fix44"]
+# The generated module is gitignored, which hatchling honours unless the file is listed here.
+artifacts = ["src/refix_fix44/__init__.py"]
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "../refix-engine"
+venv = ".venv"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
