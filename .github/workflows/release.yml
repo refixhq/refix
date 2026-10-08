@@ -1,0 +1,236 @@
+name: Release
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  # Opens or updates the release PR with the next versions and changelogs.
+  release-pr:
+    if: github.repository_owner == 'refixhq'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-pr
+      cancel-in-progress: false
+    steps:
+      # A PR opened with the default token runs no CI, so the App opens it.
+      - name: Generate a GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install just
+        uses: taiki-e/install-action@just
+      - name: Generate the stock packages
+        run: just generate-stock
+      - name: Run release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+  # Publishes the crates a merged release PR bumped, then tags and releases
+  # them on GitHub.
+  release:
+    if: github.repository_owner == 'refixhq'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write
+    outputs:
+      engine: ${{ steps.python.outputs.engine }}
+      fix44: ${{ steps.python.outputs.fix44 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install just
+        uses: taiki-e/install-action@just
+      - name: Generate the stock packages
+        run: just generate-stock
+      # Trusted publishing cannot create a crate, so a new crate's first
+      # release needs a registry token. It is used only while the secret
+      # exists, and release-plz falls back to trusted publishing without it.
+      - name: Use the bootstrap registry token
+        env:
+          BOOTSTRAP_TOKEN: ${{ secrets.CRATES_IO_BOOTSTRAP_TOKEN }}
+        run: |
+          if [ -n "$BOOTSTRAP_TOKEN" ]; then
+            echo "CARGO_REGISTRY_TOKEN=$BOOTSTRAP_TOKEN" >> "$GITHUB_ENV"
+          fi
+      - name: Run release-plz
+        id: release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Note the Python packages to publish
+        id: python
+        env:
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          released() {
+            if echo "$RELEASES" | jq -e --arg name "$1" 'any(.[]; .package_name == $name)' > /dev/null; then
+              echo true
+            else
+              echo false
+            fi
+          }
+          echo "engine=$(released refix-engine)" >> "$GITHUB_OUTPUT"
+          echo "fix44=$(released refix-fix44)" >> "$GITHUB_OUTPUT"
+
+  engine-wheels-linux:
+    needs: release
+    if: needs.release.outputs.engine == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --manifest-path python/refix-engine/Cargo.toml
+          manylinux: auto
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-wheels-linux-${{ matrix.target }}
+          path: dist
+
+  engine-wheels-macos:
+    needs: release
+    if: needs.release.outputs.engine == 'true'
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist --manifest-path python/refix-engine/Cargo.toml
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-wheels-macos-${{ matrix.target }}
+          path: dist
+
+  engine-wheels-windows:
+    needs: release
+    if: needs.release.outputs.engine == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x64
+          args: --release --out dist --manifest-path python/refix-engine/Cargo.toml
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-wheels-windows-x64
+          path: dist
+
+  engine-sdist:
+    needs: release
+    if: needs.release.outputs.engine == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist --manifest-path python/refix-engine/Cargo.toml
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-sdist
+          path: dist
+
+  engine-publish:
+    needs: [engine-wheels-linux, engine-wheels-macos, engine-wheels-windows, engine-sdist]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: engine-*
+          merge-multiple: true
+          path: dist
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+  # The stock packages are pure Python, so one wheel serves every platform.
+  fix44-wheel:
+    needs: release
+    if: needs.release.outputs.fix44 == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install just
+        uses: taiki-e/install-action@just
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Generate the stock packages
+        run: just generate-stock
+      - name: Build wheel
+        run: uv build --wheel python/refix-fix44 -o dist
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: fix44-wheel
+          path: dist
+
+  fix44-publish:
+    needs: fix44-wheel
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: fix44-wheel
+          path: dist
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
