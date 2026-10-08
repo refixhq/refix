@@ -23,7 +23,8 @@ pybench:
 # Generate the stock packages' code from the QuickFIX dictionaries
 generate-stock:
     cargo run -q -p refix-cli -- codegen dictionaries/quickfix/FIX44.xml \
-        --rust crates/refix-fix44/src/generated.rs
+        --rust crates/refix-fix44/src/generated.rs \
+        --python python/refix-fix44/src/refix_fix44/__init__.py
 
 # Run the Rust test suite
 cargo-test:

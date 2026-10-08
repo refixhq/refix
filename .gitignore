@@ -37,6 +37,7 @@ __pypackages__/
 
 # Generated stock package code
 crates/refix-fix44/src/generated.rs
+python/refix-fix44/src/refix_fix44/__init__.py
 
 # Other
 .DS_Store
