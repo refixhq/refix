@@ -14,7 +14,7 @@ classifiers = [
     "Topic :: Office/Business :: Financial",
     "Typing :: Typed",
 ]
-dependencies = ["refix-engine"]
+dependencies = ["refix-engine>=0.2"]
 
 [project.urls]
 Repository = "https://github.com/refixhq/refix"
