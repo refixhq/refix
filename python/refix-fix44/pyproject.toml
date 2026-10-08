@@ -1,6 +1,6 @@
 [project]
 name = "refix-fix44"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Typed FIX 4.4 messages for ReFIX"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
@@ -18,6 +18,12 @@ dependencies = ["refix-engine"]
 
 [project.urls]
 Repository = "https://github.com/refixhq/refix"
+
+# The wheel and the crate are generated from the same source, so they share
+# the crate's version.
+[tool.hatch.version]
+path = "../../crates/refix-fix44/Cargo.toml"
+pattern = '(?m)^version = "(?P<version>[^"]+)"'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/refix_fix44"]
