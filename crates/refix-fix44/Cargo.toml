@@ -10,9 +10,7 @@ homepage.workspace = true
 repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
-# The generated module is gitignored, which cargo honours unless the files
-# are listed here. The fingerprint is packaged so that release-plz counts a
-# change to it as a change to the crate.
+# Packages the gitignored generated module, and the fingerprint release-plz watches.
 include = ["src/**/*.rs", "generated.sha256", "README.md", "LICENSE-*"]
 
 [dependencies]

@@ -21,8 +21,7 @@ pytest *args:
 pybench:
     cd {{ py }} && uv run pytest tests/test_benchmarks.py --benchmark-autosave
 
-# Generate the stock packages' code from the QuickFIX dictionaries, and
-# the committed fingerprint that tells release-plz when it changed
+# Generate the stock packages' code and its fingerprint
 generate-stock:
     cargo run -q -p refix-cli -- codegen dictionaries/quickfix/FIX44.xml \
         --rust crates/refix-fix44/src/generated.rs \

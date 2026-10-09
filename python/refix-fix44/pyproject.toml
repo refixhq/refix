@@ -19,15 +19,14 @@ dependencies = ["refix-engine>=0.2"]
 [project.urls]
 Repository = "https://github.com/refixhq/refix"
 
-# The wheel and the crate are generated from the same source, so they share
-# the crate's version.
+# Same version as the crate, generated from the same source.
 [tool.hatch.version]
 path = "../../crates/refix-fix44/Cargo.toml"
 pattern = '(?m)^version = "(?P<version>[^"]+)"'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/refix_fix44"]
-# The generated module is gitignored, which hatchling honours unless the file is listed here.
+# Packages the gitignored generated module.
 artifacts = ["src/refix_fix44/__init__.py"]
 
 [tool.pyright]

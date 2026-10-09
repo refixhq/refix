@@ -41,8 +41,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
-  # Publishes the crates a merged release PR bumped, then tags and releases
-  # them on GitHub.
+  # Publishes what a merged release PR bumped.
   release:
     if: github.repository_owner == 'refixhq'
     runs-on: ubuntu-latest
@@ -65,9 +64,7 @@ jobs:
         uses: taiki-e/install-action@just
       - name: Generate the stock packages
         run: just generate-stock
-      # Trusted publishing cannot create a crate, so a new crate's first
-      # release needs a registry token. It is used only while the secret
-      # exists, and release-plz falls back to trusted publishing without it.
+      # A new crate's first publish needs a token, used only while the secret exists.
       - name: Use the bootstrap registry token
         env:
           BOOTSTRAP_TOKEN: ${{ secrets.CRATES_IO_BOOTSTRAP_TOKEN }}

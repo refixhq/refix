@@ -3,8 +3,7 @@ members = [
     "crates/*",
     "python/refix-engine",
 ]
-# The stock packages are left out, as their code exists only once
-# `just generate-stock` has run.
+# The stock packages need `just generate-stock` first.
 default-members = [
     "crates/refix",
     "crates/refix-cli",
@@ -28,8 +27,9 @@ categories = ["encoding", "parsing", "finance"]
 bytes = "1.12.1"
 clap = { version = "4.6.5", features = ["derive"] }
 pyo3 = "0.29.0"
-refix-codegen = { version = "0.1.0", path = "crates/refix-codegen" }
-refix-dictionary = { version = "0.1.0", path = "crates/refix-dictionary" }
-refix-message = { version = "0.3.0", path = "crates/refix-message" }
+# Major and minor only, so a patch release doesn't re-release dependents.
+refix-codegen = { version = "0.1", path = "crates/refix-codegen" }
+refix-dictionary = { version = "0.1", path = "crates/refix-dictionary" }
+refix-message = { version = "0.3", path = "crates/refix-message" }
 roxmltree = "0.21.0"
 serde = "1.0.229"
