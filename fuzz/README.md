@@ -8,7 +8,7 @@ just fuzz chunking_equivalence seeds_chunking
 just fuzz tokenize_tiling seeds_tokenize
 ```
 
-To invoke `cargo fuzz` directly, run from `crates/refix-message` and create the corpus directory first, e.g.
+To invoke `cargo fuzz` directly, run from the repo root and create the corpus directory first, e.g.
 
 ```sh
 mkdir -p fuzz/corpus/scan_invariants
