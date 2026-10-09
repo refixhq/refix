@@ -14,7 +14,7 @@ bytes = "1"
 libfuzzer-sys = "0.4"
 
 [dependencies.refix-message]
-path = ".."
+path = "../crates/refix-message"
 
 [[bin]]
 name = "scan_invariants"

@@ -66,8 +66,8 @@ fmt:
 lint:
     cargo fmt --all -- --check
     cargo clippy --all-targets
-    cargo fmt --manifest-path crates/refix-message/fuzz/Cargo.toml --all -- --check
-    cargo clippy --manifest-path crates/refix-message/fuzz/Cargo.toml --all-targets
+    cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check
+    cargo clippy --manifest-path fuzz/Cargo.toml --all-targets
     cd {{ py }} && uv run ruff format --check
     cd {{ py }} && uv run ruff check
 
@@ -81,6 +81,6 @@ wheel:
 
 # Run a fuzz target (requires nightly and cargo-fuzz)
 fuzz target seeds time="60":
-    mkdir -p crates/refix-message/fuzz/corpus/{{ target }}
-    cd crates/refix-message && cargo +nightly fuzz run {{ target }} \
+    mkdir -p fuzz/corpus/{{ target }}
+    cargo +nightly fuzz run {{ target }} \
         fuzz/corpus/{{ target }} fuzz/{{ seeds }} -- -dict=fuzz/dict.txt -max_total_time={{ time }}
