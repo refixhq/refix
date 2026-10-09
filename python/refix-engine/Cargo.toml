@@ -14,4 +14,5 @@ crate-type = ["cdylib"]
 [dependencies]
 bytes = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py312"] }
-refix-message = { workspace = true }
+# No version, so every refix-message release ships a new wheel.
+refix-message = { path = "../../crates/refix-message" }
