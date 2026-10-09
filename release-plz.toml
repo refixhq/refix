@@ -11,3 +11,9 @@ git_tag_name = "python-v{{ version }}"
 # A feature bumps the minor version, as Python users read it. Before 1.0,
 # cargo treats a minor bump as breaking, so the crates keep the default.
 features_always_increment_minor = true
+
+[[package]]
+# The generated module is gitignored but packaged, which cargo counts as an
+# uncommitted change. The release job generates it just before publishing.
+name = "refix-fix44"
+publish_allow_dirty = true
