@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/refixhq/refix/compare/refix-message-v0.3.0...refix-message-v0.3.1) - 2026-10-10
+
+### Fixed
+
+- allow publishing the generated stock crate ([#79](https://github.com/refixhq/refix/pull/79))
+
+### Other
+
+- move the fuzz crate to the repo root ([#82](https://github.com/refixhq/refix/pull/82))
+
 ## [0.3.0](https://github.com/refixhq/refix/compare/refix-message-v0.2.0...refix-message-v0.3.0) - 2026-10-08
 
 ### Added
