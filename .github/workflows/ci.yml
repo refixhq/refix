@@ -103,3 +103,17 @@ jobs:
         run: just develop
       - name: Check the stock packages
         run: just check-stock
+
+  cli-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install just
+        uses: taiki-e/install-action@just
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
+      - name: Check the CLI package
+        run: just check-cli

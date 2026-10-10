@@ -29,17 +29,19 @@ generate-stock:
     shasum -a 256 crates/refix-fix44/src/generated.rs \
         python/refix-fix44/src/refix_fix44/__init__.py > crates/refix-fix44/generated.sha256
 
-# Check the stock packages as published, the Python one through its built wheel
+# Check the stock packages as published
 check-stock: generate-stock
-    git diff --exit-code -- crates/refix-fix44/generated.sha256 || \
-        (echo "The stock output changed. Commit crates/refix-fix44/generated.sha256." && exit 1)
+    git diff --exit-code -- crates/refix-fix44/generated.sha256
     cargo clippy -p refix-fix44 --all-targets -- -D warnings
     cargo test -p refix-fix44
-    rm -rf target/stock-wheels
-    uv build --wheel {{ stock }} -o target/stock-wheels
-    uv pip install --python {{ py }}/.venv/bin/python --no-deps --reinstall target/stock-wheels/*.whl
+    rm -rf target/stock && uv build --wheel {{ stock }} -o target/stock
     cd {{ stock }} && uv run --project ../refix-engine pyright
-    cd {{ stock }} && uv run --project ../refix-engine python -m doctest README.md
+    cd {{ stock }} && uv run --project ../refix-engine --with ../../target/stock/refix_fix44-*.whl python -m doctest README.md
+
+# Check the CLI as published, through a wheel built from its sdist
+check-cli:
+    rm -rf target/cli && uv build python/refix-cli -o target/cli
+    uvx --from target/cli/refix_cli-*.whl refix --version
 
 # Run the Rust test suite
 cargo-test:
