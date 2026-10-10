@@ -14,3 +14,6 @@ features_always_increment_minor = true
 # The generated module is gitignored, so cargo sees it as uncommitted.
 name = "refix-fix44"
 publish_allow_dirty = true
+# release-plz can't semver-check generated code, so every release is minor.
+semver_check = false
+custom_minor_increment_regex = ".*"
