@@ -6,11 +6,12 @@ from a QuickFIX-format dictionary.
 > ReFIX is in early development, and APIs change between 0.x releases.
 
 ```sh
-uv tool install refix-cli
-refix codegen FIX44.xml --python fix44.py --rust fix44.rs
+cargo install refix-cli
+refix codegen FIX44.xml --rust fix44.rs --python fix44.py
 ```
 
-The generated Python module needs `refix-engine` at runtime. The stock FIX 4.4 messages are published ready-made as
+Without a Rust toolchain, `uv tool install refix-cli` installs a prebuilt binary. The generated Rust module depends on
+`refix-message`, and the Python module on `refix-engine`. The stock FIX 4.4 messages are published ready-made as
 `refix-fix44`.
 
 ## License

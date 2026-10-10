@@ -1,20 +1,26 @@
 # refix-engine
 
-FIX message processing for Python, powered by Rust.
+FIX message processing for Python, powered by Rust. These are the Python bindings
+of [ReFIX](https://github.com/refixhq/refix). The import name is `refix`. Requires Python 3.12 or later.
 
-This package provides the Python bindings for
-[ReFIX](https://github.com/refixhq/refix), a FIX engine written in pure Rust
-with first-party Python support. The import name is `refix`:
+> ReFIX is in early development. It reads FIX messages and types them through
+> generated code. Building messages and the session layer are not implemented
+> yet, and APIs change between 0.x releases.
 
 ```python
 import refix
 
-message = refix.Tokenizer().tokenize(frame)
-print(message.get(35))
+for message in refix.read_log("fix.log"):
+    if isinstance(message, refix.RawMessage):
+        print(message.get(35), message.get(49))
 ```
 
-> Development on ReFIX has just started. In its current state, the project
-> isn't useful, but make sure to check back later to monitor progress.
+Anything between frames that isn't FIX comes back as `refix.Garble`.
+`refix.Tokenizer` reads a single frame, and `refix.MessageStream` reads frames as bytes arrive.
 
-See the [project repository](https://github.com/refixhq/refix) for
-documentation, roadmap and licensing (MIT OR Apache-2.0).
+Typed messages come from generated code: `refix-fix44` for FIX 4.4, or
+`refix-cli` for your own dictionary.
+
+## License
+
+Licensed under either of Apache License, Version 2.0 or MIT license at your option.
