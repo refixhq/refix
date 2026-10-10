@@ -2,13 +2,14 @@
 name = "refix-dictionary"
 description = "FIX dictionary model and frontends for the ReFIX engine"
 version = "0.1.0"
-publish = false
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 refix-message = { workspace = true }

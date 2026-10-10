@@ -2,13 +2,14 @@
 name = "refix-cli"
 description = "Command-line tools for the ReFIX engine"
 version = "0.1.0"
-publish = false
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories = ["command-line-utilities", "finance"]
 
 [[bin]]
 name = "refix"

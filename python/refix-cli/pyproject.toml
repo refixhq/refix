@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.9.4,<2"]
+build-backend = "maturin"
+
+[project]
+name = "refix-cli"
+description = "Command-line tools for ReFIX"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+authors = [{ name = "David Steiner", email = "david@davidsteiner.dev" }]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Programming Language :: Rust",
+    "Topic :: Office/Business :: Financial",
+]
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/refixhq/refix"
+
+[tool.maturin]
+bindings = "bin"
+manifest-path = "../../crates/refix-cli/Cargo.toml"
