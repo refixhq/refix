@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/refixhq/refix/compare/refix-codegen-v0.1.0...refix-codegen-v0.1.1) - 2026-10-10
+
+### Other
+
+- give each package its own README ([#87](https://github.com/refixhq/refix/pull/87))
+
 ## [0.1.0](https://github.com/refixhq/refix/releases/tag/refix-codegen-v0.1.0) - 2026-10-10
 
 ### Added
