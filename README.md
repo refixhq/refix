@@ -3,46 +3,66 @@
 # ReFIX
 
 [![crates-badge]](https://crates.io/crates/refix)
+[![pypi-badge]](https://pypi.org/project/refix-engine/)
 [![docs-badge]](https://docs.rs/refix)
 [![codecov](https://codecov.io/gh/refixhq/refix/graph/badge.svg?token=S738KU2U1K)](https://codecov.io/gh/refixhq/refix)
 [![CI](https://github.com/refixhq/refix/actions/workflows/ci.yml/badge.svg)](https://github.com/refixhq/refix/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
-[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE-APACHE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)][license-mit]
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)][license-apache]
 
 **ReFIX is a FIX engine written in pure Rust with first-party bindings for Python.**
 
 </div>
 
 > [!WARNING]
-> Development on ReFIX has just started. In its current state, the project
-> isn't useful, but make sure to check back later to monitor progress.
+> ReFIX is in early development. Currently, it supports reading TagValue FIX messages and code generation for
+> typed messages. Message serialisation, the network and session layers are not implemented yet,
+> and APIs change between 0.x releases.
+
+## Quick start
+
+The Python bindings require Python 3.12 or later.
+
+```sh
+pip install refix-engine refix-fix44
+```
+
+```python
+import refix
+from refix_fix44 import NewOrderSingle
+
+for message in refix.read_log("fix.log"):
+    if isinstance(message, refix.RawMessage) and message.get(35) == b"D":
+        order = NewOrderSingle(message)
+        print(order.header.sender_comp_id, order.cl_ord_id, order.symbol)
+```
+
+In Rust, `cargo add refix-fix44`; see [refix-fix44].
 
 ## Why ReFIX?
 
-I previously built [HotFIX](https://github.com/Validus-Risk-Management/hotfix)
-(also in pure Rust) with a very specific objective:
-a robust FIX engine for buy-side use cases supporting FIX 4.4. HotFIX is feature complete, and if you need an engine
-now, I recommend you check it out to see if it fits your use case.
-
-ReFIX has different goals - to build high-quality building blocks with first-class support for both Python and Rust. The
-aim is still a functional engine working end-to-end, but the design philosophy is different.
-
-I've written a
-[longer blog post](https://davidsteiner.dev/writing/refix-a-new-fix-engine)
-on my motivations for ReFIX.
+ReFIX builds FIX building blocks with first-class support for both Rust and Python. See
+the [longer blog post](https://davidsteiner.dev/writing/refix-a-new-fix-engine) for the motivations. If you need a
+complete FIX 4.4 engine today, see [HotFIX](https://github.com/Validus-Risk-Management/hotfix), which I built before
+ReFIX.
 
 ## Near-term goals
 
-The first milestone is a message layer which natively supports Python, with fully typed messages and minimal compromises
-on performance in either language.
+Reading and typing messages works in both languages. Planned next:
+
+- better type coverage: prices, quantities and timestamps
+- stock packages for more FIX versions
+- reading each message as its type automatically
+- building and serialising messages
+- the session layer
 
 ## License
 
 Licensed under either of
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+- Apache License, Version 2.0 ([LICENSE-APACHE][license-apache] or
   https://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or
+- MIT license ([LICENSE-MIT][license-mit] or
   https://opensource.org/licenses/MIT)
 
 at your option.
@@ -55,4 +75,12 @@ defined in the Apache-2.0 license, shall be dual licensed as above, without any 
 
 [crates-badge]: https://img.shields.io/crates/v/refix.svg
 
+[pypi-badge]: https://img.shields.io/pypi/v/refix-engine.svg
+
 [docs-badge]: https://docs.rs/refix/badge.svg
+
+[license-mit]: https://github.com/refixhq/refix/blob/main/LICENSE-MIT
+
+[license-apache]: https://github.com/refixhq/refix/blob/main/LICENSE-APACHE
+
+[refix-fix44]: https://crates.io/crates/refix-fix44
