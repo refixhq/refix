@@ -223,14 +223,14 @@ dependencies = [
 
 [[package]]
 name = "refix"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "refix-message",
 ]
 
 [[package]]
 name = "refix-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "refix-codegen",
@@ -239,7 +239,7 @@ dependencies = [
 
 [[package]]
 name = "refix-codegen"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "refix-dictionary",
@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "refix-dictionary"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "refix-message",
  "roxmltree",
@@ -256,7 +256,7 @@ dependencies = [
 
 [[package]]
 name = "refix-engine"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "bytes",
  "pyo3",
@@ -273,7 +273,7 @@ dependencies = [
 
 [[package]]
 name = "refix-message"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "bytes",
 ]
