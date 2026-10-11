@@ -9,9 +9,8 @@ describes how the repository is organised and the practices we follow.
   publication to crates.io.
 - `python/` — everything Python. `python/refix-engine` contains the PyO3 crate
   (`refix-engine`) together with the pure-Python package; it builds the
-  `refix-engine` distribution on PyPI (imported as `refix`) and is never
-  published to crates.io. Other Python-related directories (benchmarks,
-  examples) will live alongside it.
+  `refix` distribution on PyPI and is never published to crates.io. Other
+  Python-related directories (benchmarks, examples) will live alongside it.
 
 ## Branches, commits and pull requests
 

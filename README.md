@@ -3,7 +3,7 @@
 # ReFIX
 
 [![crates-badge]](https://crates.io/crates/refix)
-[![pypi-badge]](https://pypi.org/project/refix-engine/)
+[![pypi-badge]](https://pypi.org/project/refix/)
 [![docs-badge]](https://docs.rs/refix)
 [![codecov](https://codecov.io/gh/refixhq/refix/graph/badge.svg?token=S738KU2U1K)](https://codecov.io/gh/refixhq/refix)
 [![CI](https://github.com/refixhq/refix/actions/workflows/ci.yml/badge.svg)](https://github.com/refixhq/refix/actions/workflows/ci.yml)
@@ -24,7 +24,7 @@
 The Python bindings require Python 3.12 or later.
 
 ```sh
-pip install refix-engine refix-fix44
+pip install refix refix-fix44
 ```
 
 ```python
@@ -75,7 +75,7 @@ defined in the Apache-2.0 license, shall be dual licensed as above, without any 
 
 [crates-badge]: https://img.shields.io/crates/v/refix.svg
 
-[pypi-badge]: https://img.shields.io/pypi/v/refix-engine.svg
+[pypi-badge]: https://img.shields.io/pypi/v/refix.svg
 
 [docs-badge]: https://docs.rs/refix/badge.svg
 
