@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/refixhq/refix/compare/refix-codegen-v0.1.1...refix-codegen-v0.1.2) - 2026-10-11
+
+### Added
+
+- publish the Python package as refix ([#89](https://github.com/refixhq/refix/pull/89))
+
 ## [0.1.1](https://github.com/refixhq/refix/compare/refix-codegen-v0.1.0...refix-codegen-v0.1.1) - 2026-10-10
 
 ### Other
