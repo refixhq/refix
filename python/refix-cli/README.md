@@ -10,7 +10,7 @@ uv tool install refix-cli
 refix codegen FIX44.xml --python fix44.py --rust fix44.rs
 ```
 
-The generated Python module needs `refix-engine` at runtime. The stock FIX 4.4 messages are published ready-made as
+The generated Python module needs `refix` at runtime. The stock FIX 4.4 messages are published ready-made as
 `refix-fix44`.
 
 ## License

@@ -11,8 +11,8 @@ refix codegen FIX44.xml --rust fix44.rs --python fix44.py
 ```
 
 Without a Rust toolchain, `uv tool install refix-cli` installs a prebuilt binary. The generated Rust module depends on
-`refix-message`, and the Python module on `refix-engine`. The stock FIX 4.4 messages are published ready-made as
-`refix-fix44`.
+`refix-message`, and the Python module on the `refix` package from PyPI. The stock FIX 4.4 messages are published
+ready-made as `refix-fix44`.
 
 ## License
 

@@ -36,7 +36,8 @@ check-stock: generate-stock
     cargo test -p refix-fix44
     rm -rf target/stock && uv build --wheel {{ stock }} -o target/stock
     cd {{ stock }} && uv run --project ../refix-engine pyright
-    cd {{ stock }} && uv run --project ../refix-engine --with ../../target/stock/refix_fix44-*.whl python -m doctest README.md
+    uv pip install -q --python {{ py }}/.venv --no-deps target/stock/refix_fix44-*.whl
+    cd {{ stock }} && uv run --project ../refix-engine python -m doctest README.md
 
 # Check the CLI as published, through a wheel built from its sdist
 check-cli:
