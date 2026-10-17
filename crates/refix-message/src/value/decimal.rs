@@ -1,3 +1,4 @@
+use std::fmt;
 use std::hash::{Hash, Hasher};
 
 // src/decimal.rs
@@ -76,6 +77,27 @@ impl Hash for Decimal {
     }
 }
 
+impl fmt::Display for Decimal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.exponent >= 0 {
+            write!(f, "{}", self.mantissa)?;
+            for _ in 0..self.exponent {
+                f.write_str("0")?;
+            }
+            return Ok(());
+        }
+        let sign = if self.mantissa < 0 { "-" } else { "" };
+        let digits = self.mantissa.unsigned_abs().to_string();
+        let scale = usize::from(self.exponent.unsigned_abs());
+        if digits.len() > scale {
+            let (whole, fraction) = digits.split_at(digits.len() - scale);
+            write!(f, "{sign}{whole}.{fraction}")
+        } else {
+            write!(f, "{sign}0.{digits:0>scale$}")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,6 +171,34 @@ mod tests {
         fn rejects_more_than_127_fraction_digits() {
             assert_eq!(parts(&format!("0.{}", "0".repeat(127))), (0, -127));
             assert_eq!(parse(&format!("0.{}", "0".repeat(128))), None);
+        }
+    }
+
+    mod display {
+        use super::*;
+
+        #[test]
+        fn keeps_the_scale() {
+            assert_eq!(Decimal::new(150, -2).to_string(), "1.50");
+        }
+
+        #[test]
+        fn pads_a_small_fraction() {
+            assert_eq!(Decimal::new(-5, -3).to_string(), "-0.005");
+            assert_eq!(Decimal::new(0, -2).to_string(), "0.00");
+        }
+
+        #[test]
+        fn writes_an_integer_without_a_point() {
+            assert_eq!(Decimal::new(23, 0).to_string(), "23");
+            assert_eq!(Decimal::new(15, 3).to_string(), "15000");
+        }
+
+        #[test]
+        fn round_trips_the_wire_text() {
+            for text in ["101.25", "-1.50", "0.005", "100"] {
+                assert_eq!(parse(text).unwrap().to_string(), text);
+            }
         }
     }
 }
