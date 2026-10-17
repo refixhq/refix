@@ -201,4 +201,30 @@ mod tests {
             }
         }
     }
+
+    mod equality {
+        use super::*;
+        use std::hash::DefaultHasher;
+
+        fn hash_of(value: Decimal) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        #[test]
+        fn compares_by_value_across_scales() {
+            assert_eq!(Decimal::new(150, -2), Decimal::new(15, -1));
+            assert_eq!(Decimal::new(0, -2), Decimal::new(0, 0));
+            assert_ne!(Decimal::new(150, -2), Decimal::new(151, -2));
+        }
+
+        #[test]
+        fn equal_values_hash_alike() {
+            assert_eq!(
+                hash_of(Decimal::new(150, -2)),
+                hash_of(Decimal::new(15, -1))
+            );
+        }
+    }
 }
