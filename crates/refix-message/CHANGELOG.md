@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3](https://github.com/refixhq/refix/compare/refix-message-v0.3.2...refix-message-v0.3.3) - 2026-10-17
+
+### Added
+
+- read FIX floats as decimals ([#91](https://github.com/refixhq/refix/pull/91))
+
 ## [0.3.2](https://github.com/refixhq/refix/compare/refix-message-v0.3.1...refix-message-v0.3.2) - 2026-10-10
 
 ### Other
