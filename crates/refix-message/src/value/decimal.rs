@@ -1,7 +1,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-// src/decimal.rs
+/// A FIX float, such as a price or quantity, as `mantissa * 10^exponent`.
 #[derive(Clone, Copy, Debug)]
 pub struct Decimal {
     mantissa: i64,
@@ -9,6 +9,7 @@ pub struct Decimal {
 }
 
 impl Decimal {
+    /// The decimal `mantissa * 10^exponent`.
     pub const fn new(mantissa: i64, exponent: i8) -> Self {
         Self { mantissa, exponent }
     }

@@ -1,5 +1,4 @@
-use crate::value::InvalidValue;
-use crate::{Decimal, Tag};
+use crate::{Decimal, InvalidValue, Tag};
 use bytes::Bytes;
 
 /// A field's position in a message's index.
@@ -129,6 +128,7 @@ impl<'a> Scope<'a> {
         let Some(value) = self.get(tag) else {
             return Ok(None);
         };
+
         let value = std::str::from_utf8(value).map_err(|_| InvalidValue { tag })?;
         Ok(Some(value))
     }
@@ -138,6 +138,7 @@ impl<'a> Scope<'a> {
         let Some(value) = self.get_str(tag)? else {
             return Ok(None);
         };
+
         let value = value.parse().map_err(|_| InvalidValue { tag })?;
         Ok(Some(value))
     }
