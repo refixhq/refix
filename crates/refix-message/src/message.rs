@@ -1,5 +1,4 @@
-use crate::Tag;
-use crate::value::InvalidValue;
+use crate::{Decimal, InvalidValue, Tag};
 use bytes::Bytes;
 
 /// A field's position in a message's index.
@@ -79,6 +78,11 @@ impl RawMessage {
         self.scope().get_int(tag)
     }
 
+    /// First occurrence of `tag` parsed as a decimal or `Ok(None)` when absent.
+    pub fn get_decimal(&self, tag: Tag) -> Result<Option<Decimal>, InvalidValue> {
+        self.scope().get_decimal(tag)
+    }
+
     /// Every field as `(tag, value)`, in wire order, duplicates included.
     ///
     /// Includes an entry with [`Tag::MALFORMED`] for any byte run that could
@@ -124,6 +128,7 @@ impl<'a> Scope<'a> {
         let Some(value) = self.get(tag) else {
             return Ok(None);
         };
+
         let value = std::str::from_utf8(value).map_err(|_| InvalidValue { tag })?;
         Ok(Some(value))
     }
@@ -133,7 +138,18 @@ impl<'a> Scope<'a> {
         let Some(value) = self.get_str(tag)? else {
             return Ok(None);
         };
+
         let value = value.parse().map_err(|_| InvalidValue { tag })?;
+        Ok(Some(value))
+    }
+
+    /// First occurrence of `tag` parsed as a decimal or `Ok(None)` when absent.
+    pub fn get_decimal(&self, tag: Tag) -> Result<Option<Decimal>, InvalidValue> {
+        let Some(value) = self.get(tag) else {
+            return Ok(None);
+        };
+
+        let value = Decimal::parse(value).ok_or(InvalidValue { tag })?;
         Ok(Some(value))
     }
 
@@ -268,6 +284,30 @@ mod tests {
     fn get_int_rejects_invalid_utf8() {
         let message = message_of(&[(38, b"\xE9".as_slice())]);
         assert_eq!(message.get_int(Tag(38)), Err(InvalidValue { tag: Tag(38) }));
+    }
+
+    #[test]
+    fn get_decimal_parses_a_price() {
+        let message = message_of(&[(44, "101.25")]);
+        assert_eq!(
+            message.get_decimal(Tag(44)),
+            Ok(Some(Decimal::new(10125, -2)))
+        );
+    }
+
+    #[test]
+    fn get_decimal_absent_tag() {
+        let message = message_of(&[(35, "0")]);
+        assert_eq!(message.get_decimal(Tag(44)), Ok(None));
+    }
+
+    #[test]
+    fn get_decimal_rejects_garbage() {
+        let message = message_of(&[(44, "1e5")]);
+        assert_eq!(
+            message.get_decimal(Tag(44)),
+            Err(InvalidValue { tag: Tag(44) })
+        );
     }
 
     mod scope {
