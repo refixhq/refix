@@ -20,4 +20,4 @@ pub use multiple_values::MultipleValues;
 pub use stream::MessageStream;
 pub use tag::Tag;
 pub use tokenizer::{TokenizeError, Tokenizer};
-pub use value::InvalidValue;
+pub use value::{Decimal, InvalidValue};
