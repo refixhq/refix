@@ -1,4 +1,5 @@
 import pickle
+from decimal import Decimal
 
 import pytest
 import refix
@@ -84,3 +85,28 @@ class TestInvalidValueError:
     def test_pickles(self):
         clone = pickle.loads(pickle.dumps(InvalidValueError(38)))
         assert clone.tag == 38
+
+
+class TestGetDecimal:
+    def test_reads_a_price(self):
+        assert tokenize_body("35=D|44=101.25|").get_decimal(44) == Decimal("101.25")
+
+    def test_keeps_the_scale(self):
+        assert str(tokenize_body("35=D|44=1.50|").get_decimal(44)) == "1.50"
+
+    def test_reads_a_negative_value(self):
+        assert tokenize_body("35=D|44=-.5|").get_decimal(44) == Decimal("-0.5")
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=D|").get_decimal(44) is None
+
+    @pytest.mark.parametrize(
+        "value", ["", "1e5", "NaN", "Infinity", " 1", "+5", "1_000"]
+    )
+    def test_text_only_python_accepts_raises(self, value: str):
+        message = tokenize_body(f"35=D|44={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_decimal(44)
+
+        assert excinfo.value.tag == 44

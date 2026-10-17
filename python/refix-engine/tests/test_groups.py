@@ -1,4 +1,5 @@
 import gc
+from decimal import Decimal
 
 import pytest
 import refix
@@ -89,6 +90,19 @@ class TestGetGroup:
 
         assert instances is not None
         assert instances[0].get_str(448) == "AL"
+
+    def test_an_instance_reads_decimals(self):
+        entries = refix.GroupTable(268, 269, (269, 270), ())
+
+        message = tokenize_body("35=W|268=2|269=0|270=101.25|269=1|270=101.50|")
+
+        instances = message.get_group(entries, refix.KnownTags((35, 268, 269, 270)))
+
+        assert instances is not None
+        assert [entry.get_decimal(270) for entry in instances] == [
+            Decimal("101.25"),
+            Decimal("101.50"),
+        ]
 
     def test_a_scope_cannot_be_built_directly(self):
         with pytest.raises(TypeError):
