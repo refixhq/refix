@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 // src/decimal.rs
 #[derive(Clone, Copy, Debug)]
 pub struct Decimal {
@@ -67,6 +69,12 @@ impl PartialEq for Decimal {
 }
 
 impl Eq for Decimal {}
+
+impl Hash for Decimal {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.normalized().hash(state);
+    }
+}
 
 #[cfg(test)]
 mod tests {
