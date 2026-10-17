@@ -80,22 +80,17 @@ impl Hash for Decimal {
 
 impl fmt::Display for Decimal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.exponent >= 0 {
-            write!(f, "{}", self.mantissa)?;
-            for _ in 0..self.exponent {
-                f.write_str("0")?;
-            }
-            return Ok(());
-        }
-        let sign = if self.mantissa < 0 { "-" } else { "" };
         let digits = self.mantissa.unsigned_abs().to_string();
         let scale = usize::from(self.exponent.unsigned_abs());
-        if digits.len() > scale {
+        let text = if self.exponent >= 0 {
+            format!("{digits}{}", "0".repeat(scale))
+        } else if digits.len() > scale {
             let (whole, fraction) = digits.split_at(digits.len() - scale);
-            write!(f, "{sign}{whole}.{fraction}")
+            format!("{whole}.{fraction}")
         } else {
-            write!(f, "{sign}0.{digits:0>scale$}")
-        }
+            format!("0.{digits:0>scale$}")
+        };
+        f.pad_integral(self.mantissa >= 0, "", &text)
     }
 }
 
@@ -200,6 +195,12 @@ mod tests {
             for text in ["101.25", "-1.50", "0.005", "100"] {
                 assert_eq!(parse(text).unwrap().to_string(), text);
             }
+        }
+
+        #[test]
+        fn honours_width_and_alignment() {
+            assert_eq!(format!("{:>8}", Decimal::new(150, -2)), "    1.50");
+            assert_eq!(format!("{:08}", Decimal::new(-150, -2)), "-0001.50");
         }
     }
 
