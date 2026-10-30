@@ -20,4 +20,4 @@ pub use multiple_values::MultipleValues;
 pub use stream::MessageStream;
 pub use tag::Tag;
 pub use tokenizer::{TokenizeError, Tokenizer};
-pub use value::{Date, Decimal, InvalidValue, Time, TimePrecision, UtcTimestamp};
+pub use value::{Date, Decimal, InvalidValue, MonthYear, Time, TimePrecision, UtcTimestamp};

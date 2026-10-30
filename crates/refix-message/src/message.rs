@@ -1,4 +1,4 @@
-use crate::{Date, Decimal, InvalidValue, Tag, Time, UtcTimestamp};
+use crate::{Date, Decimal, InvalidValue, MonthYear, Tag, Time, UtcTimestamp};
 use bytes::Bytes;
 
 /// A field's position in a message's index.
@@ -101,6 +101,11 @@ impl RawMessage {
     /// First occurrence of `tag` parsed as a time of day or `Ok(None)` when absent.
     pub fn get_time(&self, tag: Tag) -> Result<Option<Time>, InvalidValue> {
         self.scope().get_time(tag)
+    }
+
+    /// First occurrence of `tag` parsed as a month or `Ok(None)` when absent.
+    pub fn get_month_year(&self, tag: Tag) -> Result<Option<MonthYear>, InvalidValue> {
+        self.scope().get_month_year(tag)
     }
 
     /// Every field as `(tag, value)`, in wire order, duplicates included.
@@ -210,6 +215,16 @@ impl<'a> Scope<'a> {
         };
 
         let value = Time::parse(value).ok_or(InvalidValue { tag })?;
+        Ok(Some(value))
+    }
+
+    /// First occurrence of `tag` parsed as a month or `Ok(None)` when absent.
+    pub fn get_month_year(&self, tag: Tag) -> Result<Option<MonthYear>, InvalidValue> {
+        let Some(value) = self.get(tag) else {
+            return Ok(None);
+        };
+
+        let value = MonthYear::parse(value).ok_or(InvalidValue { tag })?;
         Ok(Some(value))
     }
 
@@ -465,6 +480,30 @@ mod tests {
         assert_eq!(
             message.get_time(Tag(273)),
             Err(InvalidValue { tag: Tag(273) })
+        );
+    }
+
+    #[test]
+    fn get_month_year_parses_a_maturity() {
+        let message = message_of(&[(200, "202612")]);
+        assert_eq!(
+            message.get_month_year(Tag(200)),
+            Ok(MonthYear::new(2026, 12))
+        );
+    }
+
+    #[test]
+    fn get_month_year_absent_tag() {
+        let message = message_of(&[(35, "0")]);
+        assert_eq!(message.get_month_year(Tag(200)), Ok(None));
+    }
+
+    #[test]
+    fn get_month_year_rejects_garbage() {
+        let message = message_of(&[(200, "2026-12")]);
+        assert_eq!(
+            message.get_month_year(Tag(200)),
+            Err(InvalidValue { tag: Tag(200) })
         );
     }
 
