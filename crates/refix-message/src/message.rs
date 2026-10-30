@@ -1,4 +1,4 @@
-use crate::{Decimal, InvalidValue, Tag};
+use crate::{Decimal, InvalidValue, Tag, UtcTimestamp};
 use bytes::Bytes;
 
 /// A field's position in a message's index.
@@ -83,6 +83,11 @@ impl RawMessage {
         self.scope().get_decimal(tag)
     }
 
+    /// First occurrence of `tag` parsed as a UTC timestamp or `Ok(None)` when absent.
+    pub fn get_utc_timestamp(&self, tag: Tag) -> Result<Option<UtcTimestamp>, InvalidValue> {
+        self.scope().get_utc_timestamp(tag)
+    }
+
     /// Every field as `(tag, value)`, in wire order, duplicates included.
     ///
     /// Includes an entry with [`Tag::MALFORMED`] for any byte run that could
@@ -153,6 +158,16 @@ impl<'a> Scope<'a> {
         Ok(Some(value))
     }
 
+    /// First occurrence of `tag` parsed as a UTC timestamp or `Ok(None)` when absent.
+    pub fn get_utc_timestamp(&self, tag: Tag) -> Result<Option<UtcTimestamp>, InvalidValue> {
+        let Some(value) = self.get(tag) else {
+            return Ok(None);
+        };
+
+        let value = UtcTimestamp::parse(value).ok_or(InvalidValue { tag })?;
+        Ok(Some(value))
+    }
+
     /// First occurrence of `tag` at or after `from` and before the end of
     /// the scope, with its slot so the caller can continue or bound a range.
     pub(crate) fn find(&self, tag: Tag, from: Slot) -> Option<(Slot, &'a [u8])> {
@@ -193,6 +208,7 @@ impl<'a> Scope<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::TimePrecision;
     use crate::framing::SOH;
 
     fn message_of<V: AsRef<[u8]>>(fields: &[(u32, V)]) -> RawMessage {
@@ -307,6 +323,33 @@ mod tests {
         assert_eq!(
             message.get_decimal(Tag(44)),
             Err(InvalidValue { tag: Tag(44) })
+        );
+    }
+
+    #[test]
+    fn get_utc_timestamp_parses_a_sending_time() {
+        let message = message_of(&[(52, "20261030-14:29:51.123")]);
+        assert_eq!(
+            message.get_utc_timestamp(Tag(52)),
+            Ok(Some(UtcTimestamp::new(
+                1_793_370_591_123_000_000,
+                TimePrecision::MILLIS
+            )))
+        );
+    }
+
+    #[test]
+    fn get_utc_timestamp_absent_tag() {
+        let message = message_of(&[(35, "0")]);
+        assert_eq!(message.get_utc_timestamp(Tag(52)), Ok(None));
+    }
+
+    #[test]
+    fn get_utc_timestamp_rejects_garbage() {
+        let message = message_of(&[(52, "2026-10-30T14:29:51Z")]);
+        assert_eq!(
+            message.get_utc_timestamp(Tag(52)),
+            Err(InvalidValue { tag: Tag(52) })
         );
     }
 
