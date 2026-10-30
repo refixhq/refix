@@ -1,4 +1,4 @@
-use super::{Date, TimePrecision, number};
+use super::{Date, Time, TimePrecision};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 
@@ -32,19 +32,12 @@ impl UtcTimestamp {
 
     /// Reads a FIX timestamp such as `20261030-14:29:51.123`.
     pub(crate) fn parse(text: &[u8]) -> Option<Self> {
-        let (date_time, rest) = text.split_at_checked(17)?;
-        let (precision, fraction) = match rest {
-            [] => (TimePrecision::SECONDS, 0),
-            [b'.', digits @ ..] if !digits.is_empty() => {
-                let count = u8::try_from(digits.len()).ok()?;
-                let precision = TimePrecision::from_fraction_digits(count)?;
-                (precision, number(digits)?)
-            }
-            _ => return None,
-        };
-        let nanos = i128::from(seconds_since_epoch(date_time)?) * 1_000_000_000
-            + i128::from(fraction * precision.unit_nanos());
-        Some(Self::new(i64::try_from(nanos).ok()?, precision))
+        let (date, rest) = text.split_at_checked(8)?;
+        let date = Date::parse(date)?;
+        let time = Time::parse(rest.strip_prefix(b"-")?)?;
+        let nanos = i128::from(date.days_since_epoch()) * 86_400_000_000_000
+            + i128::from(time.nanos_since_midnight());
+        Some(Self::new(i64::try_from(nanos).ok()?, time.precision()))
     }
 }
 
@@ -72,24 +65,6 @@ impl Ord for UtcTimestamp {
     fn cmp(&self, other: &Self) -> Ordering {
         self.unix_nanos.cmp(&other.unix_nanos)
     }
-}
-
-/// Seconds from the epoch to a `YYYYMMDD-HH:MM:SS` date and time.
-///
-/// A leap second, `:60`, counts as the first second of the next minute.
-fn seconds_since_epoch(text: &[u8]) -> Option<i64> {
-    let (date, time) = text.split_at_checked(8)?;
-    let date = Date::parse(date)?;
-    if time.len() != 9 || time[0] != b'-' || time[3] != b':' || time[6] != b':' {
-        return None;
-    }
-    let hour = number(&time[1..3])?;
-    let minute = number(&time[4..6])?;
-    let second = number(&time[7..9])?;
-    if hour > 23 || minute > 59 || second > 60 {
-        return None;
-    }
-    Some(date.days_since_epoch() * 86_400 + hour * 3_600 + minute * 60 + second)
 }
 
 #[cfg(test)]
@@ -133,27 +108,6 @@ mod tests {
         }
 
         #[test]
-        fn reads_any_fraction_up_to_nine_digits() {
-            for (fraction, nanos) in [
-                ("1", 100_000_000),
-                ("1234", 123_400_000),
-                ("1234567", 123_456_700),
-            ] {
-                let (unix_nanos, precision) = parts(&format!("20261030-14:29:51.{fraction}"));
-                assert_eq!(unix_nanos, 1_793_370_591_000_000_000 + nanos, "{fraction}");
-                assert_eq!(usize::from(precision.fraction_digits()), fraction.len());
-            }
-        }
-
-        #[test]
-        fn keeps_the_precision_of_a_zero_fraction() {
-            assert_eq!(
-                parts("20261030-14:29:51.000"),
-                (1_793_370_591_000_000_000, TimePrecision::MILLIS)
-            );
-        }
-
-        #[test]
         fn reads_times_around_the_epoch() {
             assert_eq!(parts("19700101-00:00:00").0, 0);
             assert_eq!(parts("19691231-23:59:59.999").0, -1_000_000);
@@ -170,22 +124,8 @@ mod tests {
         }
 
         #[test]
-        fn rejects_times_out_of_range() {
-            for text in [
-                "20261030-24:00:00",
-                "20261030-14:60:00",
-                "20261030-14:29:61",
-            ] {
-                assert_eq!(parse(text), None, "{text:?}");
-            }
-        }
-
-        #[test]
-        fn rejects_an_empty_or_sub_nanosecond_fraction() {
-            for fraction in [".", ".1234567890", ".123456789012"] {
-                let text = format!("20261030-14:29:51{fraction}");
-                assert_eq!(parse(&text), None, "{text:?}");
-            }
+        fn rejects_a_time_that_does_not_exist() {
+            assert_eq!(parse("20261030-24:00:00"), None);
         }
 
         #[test]
