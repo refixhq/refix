@@ -1,4 +1,4 @@
-use crate::{Decimal, InvalidValue, Tag, UtcTimestamp};
+use crate::{Date, Decimal, InvalidValue, Tag, UtcTimestamp};
 use bytes::Bytes;
 
 /// A field's position in a message's index.
@@ -88,6 +88,11 @@ impl RawMessage {
         self.scope().get_utc_timestamp(tag)
     }
 
+    /// First occurrence of `tag` parsed as a date or `Ok(None)` when absent.
+    pub fn get_date(&self, tag: Tag) -> Result<Option<Date>, InvalidValue> {
+        self.scope().get_date(tag)
+    }
+
     /// Every field as `(tag, value)`, in wire order, duplicates included.
     ///
     /// Includes an entry with [`Tag::MALFORMED`] for any byte run that could
@@ -165,6 +170,16 @@ impl<'a> Scope<'a> {
         };
 
         let value = UtcTimestamp::parse(value).ok_or(InvalidValue { tag })?;
+        Ok(Some(value))
+    }
+
+    /// First occurrence of `tag` parsed as a date or `Ok(None)` when absent.
+    pub fn get_date(&self, tag: Tag) -> Result<Option<Date>, InvalidValue> {
+        let Some(value) = self.get(tag) else {
+            return Ok(None);
+        };
+
+        let value = Date::parse(value).ok_or(InvalidValue { tag })?;
         Ok(Some(value))
     }
 
@@ -350,6 +365,27 @@ mod tests {
         assert_eq!(
             message.get_utc_timestamp(Tag(52)),
             Err(InvalidValue { tag: Tag(52) })
+        );
+    }
+
+    #[test]
+    fn get_date_parses_a_trade_date() {
+        let message = message_of(&[(75, "20261030")]);
+        assert_eq!(message.get_date(Tag(75)), Ok(Date::new(2026, 10, 30)));
+    }
+
+    #[test]
+    fn get_date_absent_tag() {
+        let message = message_of(&[(35, "0")]);
+        assert_eq!(message.get_date(Tag(75)), Ok(None));
+    }
+
+    #[test]
+    fn get_date_rejects_garbage() {
+        let message = message_of(&[(75, "2026-10-30")]);
+        assert_eq!(
+            message.get_date(Tag(75)),
+            Err(InvalidValue { tag: Tag(75) })
         );
     }
 
