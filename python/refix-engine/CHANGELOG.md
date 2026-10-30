@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/refixhq/refix/compare/python-v0.3.0...python-v0.4.0) - 2026-10-17
+
+### Added
+
+- read decimals from Python ([#93](https://github.com/refixhq/refix/pull/93))
+
 ## [0.3.0](https://github.com/refixhq/refix/compare/python-v0.2.2...python-v0.3.0) - 2026-10-11
 
 ### Added
