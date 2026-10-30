@@ -1,4 +1,4 @@
-use super::TimePrecision;
+use super::{Date, TimePrecision, number};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 
@@ -78,61 +78,18 @@ impl Ord for UtcTimestamp {
 ///
 /// A leap second, `:60`, counts as the first second of the next minute.
 fn seconds_since_epoch(text: &[u8]) -> Option<i64> {
-    if text.len() != 17 || text[8] != b'-' || text[11] != b':' || text[14] != b':' {
+    let (date, time) = text.split_at_checked(8)?;
+    let date = Date::parse(date)?;
+    if time.len() != 9 || time[0] != b'-' || time[3] != b':' || time[6] != b':' {
         return None;
     }
-    let year = number(&text[0..4])?;
-    let month = number(&text[4..6])?;
-    let day = number(&text[6..8])?;
-    let hour = number(&text[9..11])?;
-    let minute = number(&text[12..14])?;
-    let second = number(&text[15..17])?;
-    let valid = (1..=12).contains(&month)
-        && (1..=days_in_month(year, month)).contains(&day)
-        && hour <= 23
-        && minute <= 59
-        && second <= 60;
-    if !valid {
+    let hour = number(&time[1..3])?;
+    let minute = number(&time[4..6])?;
+    let second = number(&time[7..9])?;
+    if hour > 23 || minute > 59 || second > 60 {
         return None;
     }
-    let days = days_from_civil(year, month, day);
-    Some(days * 86_400 + hour * 3_600 + minute * 60 + second)
-}
-
-/// The value of `digits`, if they're all ASCII digits.
-fn number(digits: &[u8]) -> Option<i64> {
-    digits.iter().try_fold(0, |value, &byte| {
-        byte.is_ascii_digit()
-            .then(|| value * 10 + i64::from(byte - b'0'))
-    })
-}
-
-/// Days from 1970-01-01 to a date, by Howard Hinnant's `days_from_civil`.
-///
-/// See <https://howardhinnant.github.io/date_algorithms.html#days_from_civil>.
-fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year.rem_euclid(400);
-    let month_from_march = (month + 9) % 12;
-    let day_of_year = (153 * month_from_march + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    // An era is 146,097 days, and the epoch is day 719,468 from 0000-03-01.
-    era * 146_097 + day_of_era - 719_468
-}
-
-/// The number of days in `month` of `year`.
-fn days_in_month(year: i64, month: i64) -> i64 {
-    match month {
-        2 if is_leap_year(year) => 29,
-        2 => 28,
-        4 | 6 | 9 | 11 => 30,
-        _ => 31,
-    }
-}
-
-fn is_leap_year(year: i64) -> bool {
-    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+    Some(date.days_since_epoch() * 86_400 + hour * 3_600 + minute * 60 + second)
 }
 
 #[cfg(test)]
@@ -208,21 +165,13 @@ mod tests {
         }
 
         #[test]
-        fn accepts_february_29_only_in_leap_years() {
-            assert!(parse("20240229-00:00:00").is_some());
-            assert!(parse("20000229-00:00:00").is_some());
+        fn rejects_a_date_that_does_not_exist() {
             assert_eq!(parse("20230229-00:00:00"), None);
-            assert_eq!(parse("19000229-00:00:00"), None);
         }
 
         #[test]
-        fn rejects_parts_out_of_range() {
+        fn rejects_times_out_of_range() {
             for text in [
-                "20260001-00:00:00",
-                "20261301-00:00:00",
-                "20261000-00:00:00",
-                "20261032-00:00:00",
-                "20260431-00:00:00",
                 "20261030-24:00:00",
                 "20261030-14:60:00",
                 "20261030-14:29:61",
@@ -310,51 +259,6 @@ mod tests {
                 UtcTimestamp::new(1, TimePrecision::NANOS)
                     < UtcTimestamp::new(1_000_000_000, TimePrecision::SECONDS)
             );
-        }
-    }
-
-    mod calendar {
-        use super::*;
-
-        #[test]
-        fn the_epoch_is_day_zero() {
-            assert_eq!(days_from_civil(1970, 1, 1), 0);
-            assert_eq!(days_from_civil(1969, 12, 31), -1);
-        }
-
-        #[test]
-        fn counts_days_from_the_epoch() {
-            assert_eq!(days_from_civil(2000, 3, 1), 11_017);
-            assert_eq!(days_from_civil(2026, 10, 30), 20_756);
-        }
-
-        #[test]
-        fn consecutive_dates_are_consecutive_days() {
-            for year in 1600..=2400 {
-                for month in 1..=12 {
-                    let last = days_from_civil(year, month, days_in_month(year, month));
-                    let next = match month {
-                        12 => days_from_civil(year + 1, 1, 1),
-                        _ => days_from_civil(year, month + 1, 1),
-                    };
-                    assert_eq!(last + 1, next, "{year}-{month}");
-                }
-            }
-        }
-
-        #[test]
-        fn february_has_29_days_in_leap_years() {
-            assert_eq!(days_in_month(2024, 2), 29);
-            assert_eq!(days_in_month(2000, 2), 29);
-            assert_eq!(days_in_month(2023, 2), 28);
-            assert_eq!(days_in_month(1900, 2), 28);
-        }
-
-        #[test]
-        fn other_months_have_fixed_lengths() {
-            assert_eq!(days_in_month(2026, 1), 31);
-            assert_eq!(days_in_month(2026, 4), 30);
-            assert_eq!(days_in_month(2026, 12), 31);
         }
     }
 }
