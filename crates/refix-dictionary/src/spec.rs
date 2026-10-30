@@ -145,11 +145,37 @@ pub enum DataType {
     SeqNum,
     TagNum,
     DayOfMonth,
+    Float,
+    Qty,
+    Price,
+    PriceOffset,
+    Amt,
+    Percentage,
     Char,
+    Boolean,
     MultipleCharValue,
     /// Also FIX 4.4's `MultipleValueString`.
     MultipleStringValue,
-    /// A type no consumer interprets yet, e.g. `"PRICE"`.
+    Currency,
+    Exchange,
+    Country,
+    Language,
+    Xid,
+    XidRef,
+    /// Also FIX 4.0 and 4.1's `Time`.
+    UtcTimestamp,
+    UtcTimeOnly,
+    /// Also FIX 4.2 and 4.3's `UtcDate`.
+    UtcDateOnly,
+    /// Also FIX 4.0 and 4.1's `Date`.
+    LocalMktDate,
+    LocalMktTime,
+    MonthYear,
+    TzTimestamp,
+    TzTimeOnly,
+    Data,
+    XmlData,
+    /// A type outside the standard, such as a venue's own.
     Other(String),
 }
 
@@ -164,6 +190,19 @@ impl DataType {
                 | Self::SeqNum
                 | Self::TagNum
                 | Self::DayOfMonth
+        )
+    }
+
+    /// Whether the type is `Float` or one of its subtypes.
+    pub fn is_float_based(&self) -> bool {
+        matches!(
+            self,
+            Self::Float
+                | Self::Qty
+                | Self::Price
+                | Self::PriceOffset
+                | Self::Amt
+                | Self::Percentage
         )
     }
 
@@ -236,9 +275,36 @@ mod tests {
             DataType::String,
             DataType::Char,
             DataType::MultipleStringValue,
-            DataType::Other("PRICE".to_owned()),
+            DataType::Price,
+            DataType::Other("CUSTOM".to_owned()),
         ] {
             assert!(!data_type.is_int_based(), "{data_type:?}");
+        }
+    }
+
+    #[test]
+    fn the_float_family_is_float_based() {
+        for data_type in [
+            DataType::Float,
+            DataType::Qty,
+            DataType::Price,
+            DataType::PriceOffset,
+            DataType::Amt,
+            DataType::Percentage,
+        ] {
+            assert!(data_type.is_float_based(), "{data_type:?}");
+        }
+    }
+
+    #[test]
+    fn other_types_are_not_float_based() {
+        for data_type in [
+            DataType::Int,
+            DataType::String,
+            DataType::UtcTimestamp,
+            DataType::Other("CUSTOM".to_owned()),
+        ] {
+            assert!(!data_type.is_float_based(), "{data_type:?}");
         }
     }
 
