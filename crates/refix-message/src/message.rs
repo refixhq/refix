@@ -78,6 +78,11 @@ impl RawMessage {
         self.scope().get_int(tag)
     }
 
+    /// First occurrence of `tag` parsed as a boolean or `Ok(None)` when absent.
+    pub fn get_bool(&self, tag: Tag) -> Result<Option<bool>, InvalidValue> {
+        self.scope().get_bool(tag)
+    }
+
     /// First occurrence of `tag` parsed as a decimal or `Ok(None)` when absent.
     pub fn get_decimal(&self, tag: Tag) -> Result<Option<Decimal>, InvalidValue> {
         self.scope().get_decimal(tag)
@@ -156,6 +161,16 @@ impl<'a> Scope<'a> {
 
         let value = value.parse().map_err(|_| InvalidValue { tag })?;
         Ok(Some(value))
+    }
+
+    /// First occurrence of `tag` parsed as a boolean or `Ok(None)` when absent.
+    pub fn get_bool(&self, tag: Tag) -> Result<Option<bool>, InvalidValue> {
+        match self.get(tag) {
+            None => Ok(None),
+            Some(b"Y") => Ok(Some(true)),
+            Some(b"N") => Ok(Some(false)),
+            Some(_) => Err(InvalidValue { tag }),
+        }
     }
 
     /// First occurrence of `tag` parsed as a decimal or `Ok(None)` when absent.
@@ -330,6 +345,31 @@ mod tests {
     fn get_int_rejects_invalid_utf8() {
         let message = message_of(&[(38, b"\xE9".as_slice())]);
         assert_eq!(message.get_int(Tag(38)), Err(InvalidValue { tag: Tag(38) }));
+    }
+
+    #[test]
+    fn get_bool_parses_y_and_n() {
+        let message = message_of(&[(43, "Y"), (97, "N")]);
+        assert_eq!(message.get_bool(Tag(43)), Ok(Some(true)));
+        assert_eq!(message.get_bool(Tag(97)), Ok(Some(false)));
+    }
+
+    #[test]
+    fn get_bool_absent_tag() {
+        let message = message_of(&[(35, "0")]);
+        assert_eq!(message.get_bool(Tag(43)), Ok(None));
+    }
+
+    #[test]
+    fn get_bool_rejects_anything_but_y_or_n() {
+        for value in ["y", "n", "1", "0", "YES", "true", ""] {
+            let message = message_of(&[(43, value)]);
+            assert_eq!(
+                message.get_bool(Tag(43)),
+                Err(InvalidValue { tag: Tag(43) }),
+                "{value:?}"
+            );
+        }
     }
 
     #[test]
