@@ -1,5 +1,7 @@
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyAnyMethods, PyBytes, PyDate, PyString, PyTuple, PyType};
+use pyo3::types::{
+    PyAnyMethods, PyBytes, PyDate, PyDateTime, PyString, PyTime, PyTuple, PyType, PyTzInfo,
+};
 use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, import_exception, pyclass, pymethods};
 use refix_message::{
     Group, InvalidValue, RawMessage as CoreRawMessage, Scope as CoreScope, Slot, Tag,
@@ -51,8 +53,28 @@ impl RawMessage {
         get_decimal(py, &self.0.scope(), tag)
     }
 
+    fn get_utc_timestamp<'py>(
+        &self,
+        py: Python<'py>,
+        tag: u32,
+    ) -> PyResult<Option<Bound<'py, PyDateTime>>> {
+        get_utc_timestamp(py, &self.0.scope(), tag)
+    }
+
+    fn get_utc_timestamp_ns(&self, tag: u32) -> PyResult<Option<i64>> {
+        get_utc_timestamp_ns(&self.0.scope(), tag)
+    }
+
     fn get_date<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyDate>>> {
         get_date(py, &self.0.scope(), tag)
+    }
+
+    fn get_time<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyTime>>> {
+        get_time(py, &self.0.scope(), tag)
+    }
+
+    fn get_time_ns(&self, tag: u32) -> PyResult<Option<i64>> {
+        get_time_ns(&self.0.scope(), tag)
     }
 
     fn get_month_year<'py>(
@@ -130,8 +152,28 @@ impl Scope {
         get_decimal(py, &self.scope(), tag)
     }
 
+    fn get_utc_timestamp<'py>(
+        &self,
+        py: Python<'py>,
+        tag: u32,
+    ) -> PyResult<Option<Bound<'py, PyDateTime>>> {
+        get_utc_timestamp(py, &self.scope(), tag)
+    }
+
+    fn get_utc_timestamp_ns(&self, tag: u32) -> PyResult<Option<i64>> {
+        get_utc_timestamp_ns(&self.scope(), tag)
+    }
+
     fn get_date<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyDate>>> {
         get_date(py, &self.scope(), tag)
+    }
+
+    fn get_time<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyTime>>> {
+        get_time(py, &self.scope(), tag)
+    }
+
+    fn get_time_ns(&self, tag: u32) -> PyResult<Option<i64>> {
+        get_time_ns(&self.scope(), tag)
     }
 
     fn get_month_year<'py>(
@@ -194,6 +236,37 @@ fn get_decimal<'py>(
     decimal.call1((value.to_string(),)).map(Some)
 }
 
+fn get_utc_timestamp<'py>(
+    py: Python<'py>,
+    scope: &CoreScope<'_>,
+    tag: u32,
+) -> PyResult<Option<Bound<'py, PyDateTime>>> {
+    let Some(value) = scope.get_utc_timestamp(Tag(tag)).map_err(to_py_err)? else {
+        return Ok(None);
+    };
+
+    let date = value.date();
+    let (hour, minute, second, microsecond) = clock(value.time().nanos_since_midnight());
+    let utc = PyTzInfo::utc(py)?;
+    PyDateTime::new(
+        py,
+        i32::from(date.year()),
+        date.month(),
+        date.day(),
+        hour,
+        minute,
+        second,
+        microsecond,
+        Some(&utc),
+    )
+    .map(Some)
+}
+
+fn get_utc_timestamp_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
+    let value = scope.get_utc_timestamp(Tag(tag)).map_err(to_py_err)?;
+    Ok(value.map(|value| value.unix_nanos()))
+}
+
 fn get_date<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
@@ -208,6 +281,38 @@ fn get_date<'py>(
         return Err(to_py_err(InvalidValue { tag: Tag(tag) }));
     }
     PyDate::new(py, i32::from(value.year()), value.month(), value.day()).map(Some)
+}
+
+fn get_time<'py>(
+    py: Python<'py>,
+    scope: &CoreScope<'_>,
+    tag: u32,
+) -> PyResult<Option<Bound<'py, PyTime>>> {
+    let Some(value) = scope.get_time(Tag(tag)).map_err(to_py_err)? else {
+        return Ok(None);
+    };
+
+    // Python's times stop at 23:59:59.999999, so a leap second clamps to it.
+    let nanos = value.nanos_since_midnight().min(86_399_999_999_999);
+    let (hour, minute, second, microsecond) = clock(nanos);
+    PyTime::new(py, hour, minute, second, microsecond, None).map(Some)
+}
+
+fn get_time_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
+    let value = scope.get_time(Tag(tag)).map_err(to_py_err)?;
+    Ok(value.map(|value| value.nanos_since_midnight()))
+}
+
+/// The hour, minute, second and microsecond of a time within a day, truncating nanoseconds.
+fn clock(nanos_since_midnight: i64) -> (u8, u8, u8, u32) {
+    let seconds = nanos_since_midnight / 1_000_000_000;
+    let microsecond = nanos_since_midnight % 1_000_000_000 / 1_000;
+    (
+        (seconds / 3_600) as u8,
+        (seconds / 60 % 60) as u8,
+        (seconds % 60) as u8,
+        microsecond as u32,
+    )
 }
 
 fn get_month_year<'py>(

@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import UTC, datetime, time
 from typing import Any, Protocol, TypeVar
 
 import refix
@@ -21,8 +22,15 @@ EXECUTION_REPORT_BODY = (
 )
 
 
+MARKET_DATA_BODY = "35=W|55=EURUSD|268=1|269=0|270=1.0925|273=10:00:00.123|"
+
+
 def execution_report() -> bytes:
     return construct_valid_frame("FIX.4.4", EXECUTION_REPORT_BODY)
+
+
+def market_data() -> bytes:
+    return construct_valid_frame("FIX.4.4", MARKET_DATA_BODY)
 
 
 def test_bench_tokenize(benchmark: Benchmark) -> None:
@@ -56,3 +64,35 @@ def test_bench_entries(benchmark: Benchmark) -> None:
     entries = benchmark(message.entries)
 
     assert len(entries) == 23
+
+
+def test_bench_get_time(benchmark: Benchmark) -> None:
+    message = refix.Tokenizer().tokenize(market_data())
+
+    value = benchmark(message.get_time, 273)
+
+    assert value == time(10, 0, 0, 123000)
+
+
+def test_bench_get_time_ns(benchmark: Benchmark) -> None:
+    message = refix.Tokenizer().tokenize(market_data())
+
+    value = benchmark(message.get_time_ns, 273)
+
+    assert value == 36_000_123_000_000
+
+
+def test_bench_get_utc_timestamp(benchmark: Benchmark) -> None:
+    message = refix.Tokenizer().tokenize(execution_report())
+
+    value = benchmark(message.get_utc_timestamp, 52)
+
+    assert value == datetime(2026, 7, 31, 10, 0, 0, 123000, tzinfo=UTC)
+
+
+def test_bench_get_utc_timestamp_ns(benchmark: Benchmark) -> None:
+    message = refix.Tokenizer().tokenize(execution_report())
+
+    value = benchmark(message.get_utc_timestamp_ns, 52)
+
+    assert value == 1_785_492_000_123_000_000
