@@ -1,4 +1,5 @@
 import pickle
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -48,6 +49,26 @@ class TestGetInt:
             tokenize_body("35=D|38=12x3|").get_int(38)
 
         assert excinfo.value.tag == 38
+
+
+class TestGetBool:
+    def test_reads_y_and_n(self):
+        message = tokenize_body("35=D|43=Y|97=N|")
+
+        assert message.get_bool(43) is True
+        assert message.get_bool(97) is False
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=D|").get_bool(43) is None
+
+    @pytest.mark.parametrize("value", ["", "y", "1", "YES", "true"])
+    def test_anything_but_y_or_n_raises(self, value: str):
+        message = tokenize_body(f"35=D|43={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_bool(43)
+
+        assert excinfo.value.tag == 43
 
 
 class TestGetMultipleValues:
@@ -110,3 +131,57 @@ class TestGetDecimal:
             message.get_decimal(44)
 
         assert excinfo.value.tag == 44
+
+
+class TestGetDate:
+    def test_reads_a_trade_date(self):
+        assert tokenize_body("35=8|75=20261030|").get_date(75) == date(2026, 10, 30)
+
+    def test_reads_the_last_date_fix_can_write(self):
+        assert tokenize_body("35=8|75=99991231|").get_date(75) == date(9999, 12, 31)
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=8|").get_date(75) is None
+
+    def test_year_zero_raises_though_fix_allows_it(self):
+        with pytest.raises(InvalidValueError) as excinfo:
+            tokenize_body("35=8|75=00000101|").get_date(75)
+
+        assert excinfo.value.tag == 75
+
+    @pytest.mark.parametrize("value", ["", "2026-10-30", "20261301", "20230229"])
+    def test_invalid_dates_raise(self, value: str):
+        message = tokenize_body(f"35=8|75={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_date(75)
+
+        assert excinfo.value.tag == 75
+
+
+class TestGetMonthYear:
+    def test_reads_a_month(self):
+        message = tokenize_body("35=D|200=202612|")
+        assert message.get_month_year(200) == refix.MonthYear(2026, 12)
+
+    def test_reads_a_day(self):
+        message = tokenize_body("35=D|200=20261218|")
+        assert message.get_month_year(200) == refix.MonthYear(2026, 12, day=18)
+
+    def test_reads_a_week(self):
+        message = tokenize_body("35=D|200=202612w3|")
+        assert message.get_month_year(200) == refix.MonthYear(2026, 12, week=3)
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=D|").get_month_year(200) is None
+
+    @pytest.mark.parametrize(
+        "value", ["", "2026-12", "202613", "20260231", "202612w6", "202612W3"]
+    )
+    def test_invalid_values_raise(self, value: str):
+        message = tokenize_body(f"35=D|200={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_month_year(200)
+
+        assert excinfo.value.tag == 200

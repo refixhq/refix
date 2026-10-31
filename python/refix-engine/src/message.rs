@@ -1,5 +1,5 @@
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyAnyMethods, PyBytes, PyString, PyTuple, PyType};
+use pyo3::types::{PyAnyMethods, PyBytes, PyDate, PyString, PyTuple, PyType};
 use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, import_exception, pyclass, pymethods};
 use refix_message::{
     Group, InvalidValue, RawMessage as CoreRawMessage, Scope as CoreScope, Slot, Tag,
@@ -11,6 +11,9 @@ import_exception!(refix.errors, InvalidValueError);
 
 /// Python's `decimal.Decimal`, imported on first use.
 static DECIMAL_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+
+/// `refix.values.MonthYear`, imported on first use.
+static MONTH_YEAR_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
 #[pyclass(frozen, module = "refix._core")]
 pub(crate) struct RawMessage(CoreRawMessage);
@@ -40,8 +43,24 @@ impl RawMessage {
         get_int(&self.0.scope(), tag)
     }
 
+    fn get_bool(&self, tag: u32) -> PyResult<Option<bool>> {
+        get_bool(&self.0.scope(), tag)
+    }
+
     fn get_decimal<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyAny>>> {
         get_decimal(py, &self.0.scope(), tag)
+    }
+
+    fn get_date<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyDate>>> {
+        get_date(py, &self.0.scope(), tag)
+    }
+
+    fn get_month_year<'py>(
+        &self,
+        py: Python<'py>,
+        tag: u32,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+        get_month_year(py, &self.0.scope(), tag)
     }
 
     fn get_multiple_values<'py>(
@@ -103,8 +122,24 @@ impl Scope {
         get_int(&self.scope(), tag)
     }
 
+    fn get_bool(&self, tag: u32) -> PyResult<Option<bool>> {
+        get_bool(&self.scope(), tag)
+    }
+
     fn get_decimal<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyAny>>> {
         get_decimal(py, &self.scope(), tag)
+    }
+
+    fn get_date<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyDate>>> {
+        get_date(py, &self.scope(), tag)
+    }
+
+    fn get_month_year<'py>(
+        &self,
+        py: Python<'py>,
+        tag: u32,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+        get_month_year(py, &self.scope(), tag)
     }
 
     fn get_multiple_values<'py>(
@@ -142,6 +177,10 @@ fn get_int(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
     scope.get_int(Tag(tag)).map_err(to_py_err)
 }
 
+fn get_bool(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<bool>> {
+    scope.get_bool(Tag(tag)).map_err(to_py_err)
+}
+
 fn get_decimal<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
@@ -153,6 +192,37 @@ fn get_decimal<'py>(
 
     let decimal = DECIMAL_TYPE.import(py, "decimal", "Decimal")?;
     decimal.call1((value.to_string(),)).map(Some)
+}
+
+fn get_date<'py>(
+    py: Python<'py>,
+    scope: &CoreScope<'_>,
+    tag: u32,
+) -> PyResult<Option<Bound<'py, PyDate>>> {
+    let Some(value) = scope.get_date(Tag(tag)).map_err(to_py_err)? else {
+        return Ok(None);
+    };
+
+    // Python's dates start at year 1.
+    if value.year() == 0 {
+        return Err(to_py_err(InvalidValue { tag: Tag(tag) }));
+    }
+    PyDate::new(py, i32::from(value.year()), value.month(), value.day()).map(Some)
+}
+
+fn get_month_year<'py>(
+    py: Python<'py>,
+    scope: &CoreScope<'_>,
+    tag: u32,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let Some(value) = scope.get_month_year(Tag(tag)).map_err(to_py_err)? else {
+        return Ok(None);
+    };
+
+    let month_year = MONTH_YEAR_TYPE.import(py, "refix.values", "MonthYear")?;
+    month_year
+        .call1((value.year(), value.month(), value.day(), value.week()))
+        .map(Some)
 }
 
 fn get_multiple_values<'py>(

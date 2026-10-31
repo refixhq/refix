@@ -1,4 +1,5 @@
 import gc
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -102,6 +103,42 @@ class TestGetGroup:
         assert [entry.get_decimal(270) for entry in instances] == [
             Decimal("101.25"),
             Decimal("101.50"),
+        ]
+
+    def test_an_instance_reads_booleans(self):
+        allocs = refix.GroupTable(78, 79, (79, 208), ())
+
+        message = tokenize_body("35=J|78=2|79=A1|208=Y|79=A2|208=N|")
+
+        instances = message.get_group(allocs, refix.KnownTags((35, 78, 79, 208)))
+
+        assert instances is not None
+        assert [alloc.get_bool(208) for alloc in instances] == [True, False]
+
+    def test_an_instance_reads_dates(self):
+        entries = refix.GroupTable(268, 269, (269, 272), ())
+
+        message = tokenize_body("35=W|268=2|269=0|272=20261030|269=1|272=20261031|")
+
+        instances = message.get_group(entries, refix.KnownTags((35, 268, 269, 272)))
+
+        assert instances is not None
+        assert [entry.get_date(272) for entry in instances] == [
+            date(2026, 10, 30),
+            date(2026, 10, 31),
+        ]
+
+    def test_an_instance_reads_month_years(self):
+        legs = refix.GroupTable(555, 600, (600, 610), ())
+
+        message = tokenize_body("35=AB|555=2|600=ES|610=202612|600=ES|610=202703|")
+
+        instances = message.get_group(legs, refix.KnownTags((35, 555, 600, 610)))
+
+        assert instances is not None
+        assert [leg.get_month_year(610) for leg in instances] == [
+            refix.MonthYear(2026, 12),
+            refix.MonthYear(2027, 3),
         ]
 
     def test_a_scope_cannot_be_built_directly(self):
