@@ -128,6 +128,19 @@ class TestGetGroup:
             date(2026, 10, 31),
         ]
 
+    def test_an_instance_reads_month_years(self):
+        legs = refix.GroupTable(555, 600, (600, 610), ())
+
+        message = tokenize_body("35=AB|555=2|600=ES|610=202612|600=ES|610=202703|")
+
+        instances = message.get_group(legs, refix.KnownTags((35, 555, 600, 610)))
+
+        assert instances is not None
+        assert [leg.get_month_year(610) for leg in instances] == [
+            refix.MonthYear(2026, 12),
+            refix.MonthYear(2027, 3),
+        ]
+
     def test_a_scope_cannot_be_built_directly(self):
         with pytest.raises(TypeError):
             refix.Scope()

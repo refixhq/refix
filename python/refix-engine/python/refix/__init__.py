@@ -10,6 +10,7 @@ from refix._core import (
     version,
 )
 from refix.log import read_log
+from refix.values import MonthYear
 
 __version__ = version()
 
@@ -19,6 +20,7 @@ __all__ = [
     "GroupTable",
     "KnownTags",
     "MessageStream",
+    "MonthYear",
     "RawMessage",
     "Scope",
     "Tokenizer",

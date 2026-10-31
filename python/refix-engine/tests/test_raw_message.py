@@ -157,3 +157,31 @@ class TestGetDate:
             message.get_date(75)
 
         assert excinfo.value.tag == 75
+
+
+class TestGetMonthYear:
+    def test_reads_a_month(self):
+        message = tokenize_body("35=D|200=202612|")
+        assert message.get_month_year(200) == refix.MonthYear(2026, 12)
+
+    def test_reads_a_day(self):
+        message = tokenize_body("35=D|200=20261218|")
+        assert message.get_month_year(200) == refix.MonthYear(2026, 12, day=18)
+
+    def test_reads_a_week(self):
+        message = tokenize_body("35=D|200=202612w3|")
+        assert message.get_month_year(200) == refix.MonthYear(2026, 12, week=3)
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=D|").get_month_year(200) is None
+
+    @pytest.mark.parametrize(
+        "value", ["", "2026-12", "202613", "20260231", "202612w6", "202612W3"]
+    )
+    def test_invalid_values_raise(self, value: str):
+        message = tokenize_body(f"35=D|200={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_month_year(200)
+
+        assert excinfo.value.tag == 200
