@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/refixhq/refix/compare/python-v0.4.0...python-v0.5.0) - 2026-10-31
+
+### Added
+
+- read float fields as decimals in generated code ([#104](https://github.com/refixhq/refix/pull/104))
+- read times and timestamps from Python ([#103](https://github.com/refixhq/refix/pull/103))
+- read booleans, dates and MonthYear from Python ([#101](https://github.com/refixhq/refix/pull/101))
+
 ## [0.4.0](https://github.com/refixhq/refix/compare/python-v0.3.0...python-v0.4.0) - 2026-10-17
 
 ### Added
