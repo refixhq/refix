@@ -2,6 +2,8 @@ use super::{Date, Time, TimePrecision};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 
+const NANOS_PER_DAY: i64 = 86_400_000_000_000;
+
 /// A FIX UTCTimestamp as nanoseconds since the Unix epoch, keeping its precision.
 ///
 /// Equality and ordering compare the instant and ignore the precision.
@@ -30,12 +32,24 @@ impl UtcTimestamp {
         self.precision
     }
 
+    /// The date in UTC.
+    pub fn date(&self) -> Date {
+        Date::from_days_since_epoch(self.unix_nanos.div_euclid(NANOS_PER_DAY))
+            .expect("an i64 of nanoseconds spans only years 1677 to 2262")
+    }
+
+    /// The time of day in UTC, at the timestamp's precision.
+    pub fn time(&self) -> Time {
+        Time::new(self.unix_nanos.rem_euclid(NANOS_PER_DAY), self.precision)
+            .expect("what's left of a day is within a day")
+    }
+
     /// Reads a FIX timestamp such as `20261030-14:29:51.123`.
     pub(crate) fn parse(text: &[u8]) -> Option<Self> {
         let (date, rest) = text.split_at_checked(8)?;
         let date = Date::parse(date)?;
         let time = Time::parse(rest.strip_prefix(b"-")?)?;
-        let nanos = i128::from(date.days_since_epoch()) * 86_400_000_000_000
+        let nanos = i128::from(date.days_since_epoch()) * i128::from(NANOS_PER_DAY)
             + i128::from(time.nanos_since_midnight());
         Some(Self::new(i64::try_from(nanos).ok()?, time.precision()))
     }
@@ -163,6 +177,50 @@ mod tests {
             ] {
                 assert_eq!(parse(text), None, "{text:?}");
             }
+        }
+    }
+
+    mod splitting {
+        use super::*;
+
+        fn split(value: UtcTimestamp) -> (Date, i64) {
+            (value.date(), value.time().nanos_since_midnight())
+        }
+
+        fn date(year: u16, month: u8, day: u8) -> Date {
+            Date::new(year, month, day).unwrap()
+        }
+
+        #[test]
+        fn splits_into_date_and_time() {
+            let value = parse("20261030-14:29:51.123").unwrap();
+            assert_eq!(split(value), (date(2026, 10, 30), 52_191_123_000_000));
+        }
+
+        #[test]
+        fn keeps_the_precision() {
+            let value = parse("20261030-14:29:51.123456").unwrap();
+            assert_eq!(value.time().precision(), TimePrecision::MICROS);
+        }
+
+        #[test]
+        fn splits_times_before_the_epoch() {
+            let value = parse("19691231-23:59:59.999").unwrap();
+            assert_eq!(split(value), (date(1969, 12, 31), 86_399_999_000_000));
+        }
+
+        #[test]
+        fn reads_a_leap_second_as_the_next_day() {
+            let value = parse("20161231-23:59:60").unwrap();
+            assert_eq!(split(value), (date(2017, 1, 1), 0));
+        }
+
+        #[test]
+        fn splits_the_ends_of_the_i64_range() {
+            let last = UtcTimestamp::new(i64::MAX, TimePrecision::NANOS);
+            assert_eq!(split(last), (date(2262, 4, 11), 85_636_854_775_807));
+            let first = UtcTimestamp::new(i64::MIN, TimePrecision::NANOS);
+            assert_eq!(split(first), (date(1677, 9, 21), 763_145_224_192));
         }
     }
 
