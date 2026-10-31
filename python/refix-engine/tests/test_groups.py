@@ -1,4 +1,5 @@
 import gc
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -113,6 +114,19 @@ class TestGetGroup:
 
         assert instances is not None
         assert [alloc.get_bool(208) for alloc in instances] == [True, False]
+
+    def test_an_instance_reads_dates(self):
+        entries = refix.GroupTable(268, 269, (269, 272), ())
+
+        message = tokenize_body("35=W|268=2|269=0|272=20261030|269=1|272=20261031|")
+
+        instances = message.get_group(entries, refix.KnownTags((35, 268, 269, 272)))
+
+        assert instances is not None
+        assert [entry.get_date(272) for entry in instances] == [
+            date(2026, 10, 30),
+            date(2026, 10, 31),
+        ]
 
     def test_a_scope_cannot_be_built_directly(self):
         with pytest.raises(TypeError):

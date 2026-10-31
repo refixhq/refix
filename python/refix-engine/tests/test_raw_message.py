@@ -1,4 +1,5 @@
 import pickle
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -130,3 +131,29 @@ class TestGetDecimal:
             message.get_decimal(44)
 
         assert excinfo.value.tag == 44
+
+
+class TestGetDate:
+    def test_reads_a_trade_date(self):
+        assert tokenize_body("35=8|75=20261030|").get_date(75) == date(2026, 10, 30)
+
+    def test_reads_the_last_date_fix_can_write(self):
+        assert tokenize_body("35=8|75=99991231|").get_date(75) == date(9999, 12, 31)
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=8|").get_date(75) is None
+
+    def test_year_zero_raises_though_fix_allows_it(self):
+        with pytest.raises(InvalidValueError) as excinfo:
+            tokenize_body("35=8|75=00000101|").get_date(75)
+
+        assert excinfo.value.tag == 75
+
+    @pytest.mark.parametrize("value", ["", "2026-10-30", "20261301", "20230229"])
+    def test_invalid_dates_raise(self, value: str):
+        message = tokenize_body(f"35=8|75={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_date(75)
+
+        assert excinfo.value.tag == 75
