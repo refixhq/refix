@@ -1,9 +1,10 @@
-use refix_dictionary::{DataType, Field, MemberContext, dictionary};
+use refix_dictionary::{Field, MemberContext, Tag, dictionary};
 
 use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::names::Names;
 use super::views::emit_view_accessor;
+use crate::conversion::Conversion;
 use crate::envelope::Envelope;
 use crate::groups::message_known_tags;
 
@@ -106,34 +107,46 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         Lifetime::Scope => ("&'a ", "'a"),
     };
 
-    if !field.values.is_empty() {
-        let type_name = names.enum_type(field);
-        if field.data_type.is_multiple_value() {
-            return format!(
-                "    pub fn {name}(&self) -> Result<Option<MultipleValues<{type_lifetime}, {type_name}<{type_lifetime}>>>, InvalidValue> {{\n        self.0.get_multiple_values(Tag({tag}))\n    }}\n"
-            );
-        }
-        let (conversion, enum_type) = if field.data_type.is_int_based() {
-            ("get_int", type_name.to_owned())
-        } else {
-            ("get_str", format!("{type_name}<{type_lifetime}>"))
-        };
-        return format!(
-            "    pub fn {name}(&self) -> Result<Option<{enum_type}>, InvalidValue> {{\n        Ok(self.0.{conversion}(Tag({tag}))?.map({type_name}::from_value))\n    }}\n"
-        );
-    }
-
-    match &field.data_type {
-        DataType::String | DataType::Char => format!(
+    match Conversion::of(field) {
+        Conversion::Str => format!(
             "    pub fn {name}(&self) -> Result<Option<{reference}str>, InvalidValue> {{\n        self.0.get_str(Tag({tag}))\n    }}\n"
         ),
-        data_type if data_type.is_int_based() => format!(
+        Conversion::Int => format!(
             "    pub fn {name}(&self) -> Result<Option<i64>, InvalidValue> {{\n        self.0.get_int(Tag({tag}))\n    }}\n"
         ),
-        _ => format!(
+        Conversion::StrEnum => {
+            let type_name = names.enum_type(field);
+            let enum_type = format!("{type_name}<{type_lifetime}>");
+            emit_enum_accessor(name, tag, "get_str", &enum_type, type_name)
+        }
+        Conversion::IntEnum => {
+            let type_name = names.enum_type(field);
+            emit_enum_accessor(name, tag, "get_int", type_name, type_name)
+        }
+        Conversion::MultipleValues => {
+            let type_name = names.enum_type(field);
+            format!(
+                "    pub fn {name}(&self) -> Result<Option<MultipleValues<{type_lifetime}, {type_name}<{type_lifetime}>>>, InvalidValue> {{\n        self.0.get_multiple_values(Tag({tag}))\n    }}\n"
+            )
+        }
+        Conversion::Raw => format!(
             "    pub fn {name}(&self) -> Option<{reference}[u8]> {{\n        self.0.get(Tag({tag}))\n    }}\n"
         ),
     }
+}
+
+/// An accessor reading `tag` with `getter` and classifying it into the
+/// `type_name` enum.
+fn emit_enum_accessor(
+    name: &str,
+    tag: Tag,
+    getter: &str,
+    enum_type: &str,
+    type_name: &str,
+) -> String {
+    format!(
+        "    pub fn {name}(&self) -> Result<Option<{enum_type}>, InvalidValue> {{\n        Ok(self.0.{getter}(Tag({tag}))?.map({type_name}::from_value))\n    }}\n"
+    )
 }
 
 #[cfg(test)]

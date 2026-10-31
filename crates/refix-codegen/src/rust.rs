@@ -10,8 +10,8 @@ mod views;
 use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Generated;
+use crate::conversion::{Conversion, uses};
 use crate::envelope::Envelope;
-use crate::groups::is_generated;
 use enums::emit_enum;
 pub use error::Error;
 use groups::{emit_group_module, shared_groups};
@@ -34,7 +34,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     let enums: Vec<String> = dictionary
         .fields()
         .iter()
-        .filter(|field| !field.values.is_empty())
+        .filter(|field| Conversion::of(field).is_enum())
         .map(|field| emit_enum(field, &names))
         .collect();
     let groups: Vec<String> = shared_groups(dictionary, &mut warnings)
@@ -67,11 +67,9 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     if has_groups {
         imports.extend(["GroupTable", "Instances"]);
     }
-    if reads_multiple_values(dictionary.header().chain(dictionary.trailer()))
-        || dictionary
-            .messages()
-            .any(|message| reads_multiple_values(message.members()))
-    {
+    if uses(dictionary, |conversion| {
+        conversion == Conversion::MultipleValues
+    }) {
         imports.push("MultipleValues");
     }
     imports.sort_unstable();
@@ -79,18 +77,6 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     let code = format!("{header}\n{imports}\n\n{sections}");
 
     Ok(Generated { code, warnings })
-}
-
-/// Whether an accessor generated for `members` reads a multiple-value field.
-fn reads_multiple_values<'a>(mut members: impl Iterator<Item = dictionary::Member<'a>>) -> bool {
-    members.any(|member| match member {
-        dictionary::Member::Field { field, .. } => {
-            !field.values.is_empty() && field.data_type.is_multiple_value()
-        }
-        dictionary::Member::Group(group) => {
-            is_generated(group) && reads_multiple_values(group.members())
-        }
-    })
 }
 
 #[cfg(test)]

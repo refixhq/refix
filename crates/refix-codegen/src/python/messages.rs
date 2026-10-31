@@ -1,10 +1,11 @@
-use refix_dictionary::{DataType, Field, MemberContext, dictionary};
+use refix_dictionary::{Field, MemberContext, Tag, dictionary};
 
 use super::enums::str_literal;
 use super::groups::{emit_group_class, emit_group_property, tags};
 use super::layout::{MAX_WIDTH, indent, tuple_lines};
 use super::names::Names;
 use super::views::emit_view_property;
+use crate::conversion::Conversion;
 use crate::envelope::Envelope;
 use crate::groups::message_known_tags;
 
@@ -62,42 +63,51 @@ pub(super) fn emit_message(
 pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> String {
     let name = names.property(field);
     let tag = field.tag;
-    let (return_type, body) = if field.values.is_empty() {
-        match field.data_type {
-            DataType::String | DataType::Char => (
-                "str | None".to_owned(),
-                format!("return {receiver}.get_str({tag})"),
-            ),
-            _ if field.data_type.is_int_based() => (
-                "int | None".to_owned(),
-                format!("return {receiver}.get_int({tag})"),
-            ),
-            _ => (
-                "bytes | None".to_owned(),
-                format!("return {receiver}.get({tag})"),
-            ),
+    let (return_type, body) = match Conversion::of(field) {
+        Conversion::Str => (
+            "str | None".to_owned(),
+            format!("return {receiver}.get_str({tag})"),
+        ),
+        Conversion::Int => (
+            "int | None".to_owned(),
+            format!("return {receiver}.get_int({tag})"),
+        ),
+        Conversion::StrEnum => {
+            enum_property(names.enum_class(field), receiver, tag, "get_str", "str")
         }
-    } else if field.data_type.is_multiple_value() {
-        let type_name = names.enum_class(field);
-        (
-            format!("tuple[{type_name} | Unrecognized[str], ...] | None"),
-            format!(
-                "values = {receiver}.get_multiple_values({tag})\n        return None if values is None else tuple(from_value({type_name}, value) for value in values)"
-            ),
-        )
-    } else {
-        let type_name = names.enum_class(field);
-        let (conversion, value_type) = if field.data_type.is_int_based() {
-            ("get_int", "int")
-        } else {
-            ("get_str", "str")
-        };
-        (
-            format!("{type_name} | Unrecognized[{value_type}] | None"),
-            format!(
-                "value = {receiver}.{conversion}({tag})\n        return None if value is None else from_value({type_name}, value)"
-            ),
-        )
+        Conversion::IntEnum => {
+            enum_property(names.enum_class(field), receiver, tag, "get_int", "int")
+        }
+        Conversion::MultipleValues => {
+            let type_name = names.enum_class(field);
+            (
+                format!("tuple[{type_name} | Unrecognized[str], ...] | None"),
+                format!(
+                    "values = {receiver}.get_multiple_values({tag})\n        return None if values is None else tuple(from_value({type_name}, value) for value in values)"
+                ),
+            )
+        }
+        Conversion::Raw => (
+            "bytes | None".to_owned(),
+            format!("return {receiver}.get({tag})"),
+        ),
     };
     format!("    @cached_property\n    def {name}(self) -> {return_type}:\n        {body}\n")
+}
+
+/// The return type and body of a property reading `tag` with `getter` and
+/// classifying it into the `type_name` enum.
+fn enum_property(
+    type_name: &str,
+    receiver: &str,
+    tag: Tag,
+    getter: &str,
+    value_type: &str,
+) -> (String, String) {
+    (
+        format!("{type_name} | Unrecognized[{value_type}] | None"),
+        format!(
+            "value = {receiver}.{getter}({tag})\n        return None if value is None else from_value({type_name}, value)"
+        ),
+    )
 }
