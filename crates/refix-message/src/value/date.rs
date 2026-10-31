@@ -63,6 +63,32 @@ impl Date {
         // An era is 146,097 days, and the epoch is day 719,468 from 0000-03-01.
         era * 146_097 + day_of_era - 719_468
     }
+
+    /// The date `days` after 1970-01-01, by Howard Hinnant's `civil_from_days`.
+    ///
+    /// See <https://howardhinnant.github.io/date_algorithms.html#civil_from_days>.
+    pub(super) fn from_days_since_epoch(days: i64) -> Option<Self> {
+        // Counted from 0000-03-01, as in `days_since_epoch`.
+        let days = days.checked_add(719_468)?;
+        let era = days.div_euclid(146_097);
+        let day_of_era = days.rem_euclid(146_097);
+        let year_of_era =
+            (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+        let day_of_year = day_of_era - (year_of_era * 365 + year_of_era / 4 - year_of_era / 100);
+        let month_from_march = (5 * day_of_year + 2) / 153;
+        let day = day_of_year - (153 * month_from_march + 2) / 5 + 1;
+        let month = if month_from_march < 10 {
+            month_from_march + 3
+        } else {
+            month_from_march - 9
+        };
+        let year = era * 400 + year_of_era + i64::from(month <= 2);
+        Self::new(
+            u16::try_from(year).ok()?,
+            u8::try_from(month).ok()?,
+            u8::try_from(day).ok()?,
+        )
+    }
 }
 
 /// The number of days in `month` of `year`.
@@ -207,6 +233,36 @@ mod tests {
                         "{year}-{month}"
                     );
                 }
+            }
+        }
+
+        #[test]
+        fn counts_back_from_the_epoch() {
+            assert_eq!(Date::from_days_since_epoch(0), Some(date(1970, 1, 1)));
+            assert_eq!(Date::from_days_since_epoch(-1), Some(date(1969, 12, 31)));
+            assert_eq!(Date::from_days_since_epoch(11_017), Some(date(2000, 3, 1)));
+            assert_eq!(
+                Date::from_days_since_epoch(20_756),
+                Some(date(2026, 10, 30))
+            );
+        }
+
+        #[test]
+        fn round_trips_every_day_fix_can_write() {
+            let first = date(0, 1, 1).days_since_epoch();
+            let last = date(9999, 12, 31).days_since_epoch();
+            for days in first..=last {
+                let value = Date::from_days_since_epoch(days).unwrap();
+                assert_eq!(value.days_since_epoch(), days, "{value:?}");
+            }
+        }
+
+        #[test]
+        fn has_no_date_beyond_the_years_fix_can_write() {
+            let first = date(0, 1, 1).days_since_epoch();
+            let last = date(9999, 12, 31).days_since_epoch();
+            for days in [first - 1, last + 1, i64::MIN, i64::MAX] {
+                assert_eq!(Date::from_days_since_epoch(days), None, "{days}");
             }
         }
 
