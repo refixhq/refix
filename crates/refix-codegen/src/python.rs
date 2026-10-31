@@ -74,6 +74,7 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
         });
     let reads_enums = uses(dictionary, Conversion::is_enum);
     let reads_decimals = uses(dictionary, |conversion| conversion == Conversion::Decimal);
+    let reads_dates = uses(dictionary, |conversion| conversion == Conversion::Date);
 
     let mut blocks = Vec::new();
     if has_classes {
@@ -82,6 +83,9 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
     let mut standard = Vec::new();
     if has_enums {
         standard.push("import enum\n");
+    }
+    if reads_dates {
+        standard.push("from datetime import date\n");
     }
     if reads_decimals {
         standard.push("from decimal import Decimal\n");
@@ -297,6 +301,20 @@ class NewOrderSingle:
             "    def price(self) -> Decimal | None:\n        return self._raw.get_decimal(44)\n"
         ));
         assert!(generated.code.contains("\nfrom decimal import Decimal\n"));
+    }
+
+    #[test]
+    fn a_date_reads_as_a_date() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(64)])],
+            vec![field("SettlDate", 64, DataType::LocalMktDate, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def settl_date(self) -> date | None:\n        return self._raw.get_date(64)\n"
+        ));
+        assert!(generated.code.contains("\nfrom datetime import date\n"));
     }
 
     #[test]

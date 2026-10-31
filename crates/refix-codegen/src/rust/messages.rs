@@ -117,6 +117,9 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         Conversion::Decimal => format!(
             "    pub fn {name}(&self) -> Result<Option<Decimal>, InvalidValue> {{\n        self.0.get_decimal(Tag({tag}))\n    }}\n"
         ),
+        Conversion::Date => format!(
+            "    pub fn {name}(&self) -> Result<Option<Date>, InvalidValue> {{\n        self.0.get_date(Tag({tag}))\n    }}\n"
+        ),
         Conversion::StrEnum => {
             let type_name = names.enum_type(field);
             let enum_type = format!("{type_name}<{type_lifetime}>");
@@ -211,6 +214,14 @@ mod tests {
         assert_eq!(
             scope_signature(&field("Price", 44, DataType::Price)),
             "pub fn price(&self) -> Result<Option<Decimal>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn a_date_reads_as_a_date() {
+        assert_eq!(
+            scope_signature(&field("SettlDate", 64, DataType::LocalMktDate)),
+            "pub fn settl_date(&self) -> Result<Option<Date>, InvalidValue> {"
         );
     }
 

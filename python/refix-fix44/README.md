@@ -26,8 +26,8 @@ Decimal('101.25')
 
 ```
 
-Strings, integers, decimals, enums and repeating groups are typed, and every
-message reaches its header and trailer. Timestamps read as raw bytes, as
+Strings, integers, decimals, dates, enums and repeating groups are typed, and
+every message reaches its header and trailer. Timestamps read as raw bytes, as
 `transact_time_raw` does.
 
 ## License

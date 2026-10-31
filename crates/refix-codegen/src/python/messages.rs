@@ -76,6 +76,10 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
             "Decimal | None".to_owned(),
             format!("return {receiver}.get_decimal({tag})"),
         ),
+        Conversion::Date => (
+            "date | None".to_owned(),
+            format!("return {receiver}.get_date({tag})"),
+        ),
         Conversion::StrEnum => {
             enum_property(names.enum_class(field), receiver, tag, "get_str", "str")
         }

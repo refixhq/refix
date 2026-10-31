@@ -11,6 +11,8 @@ pub(crate) enum Conversion {
     Int,
     /// A decimal, with `get_decimal`.
     Decimal,
+    /// A date, with `get_date`.
+    Date,
     /// An enum over text, with `get_str`.
     StrEnum,
     /// An enum over integers, with `get_int`.
@@ -45,6 +47,7 @@ impl Conversion {
             | DataType::XidRef => Self::Str,
             _ if data_type.is_int_based() => Self::Int,
             _ if data_type.is_float_based() => Self::Decimal,
+            DataType::UtcDateOnly | DataType::LocalMktDate => Self::Date,
             _ => Self::Raw,
         }
     }
@@ -144,6 +147,18 @@ mod tests {
     }
 
     #[test]
+    fn the_date_types_read_as_dates() {
+        assert_eq!(
+            Conversion::of(&field(DataType::UtcDateOnly)),
+            Conversion::Date
+        );
+        assert_eq!(
+            Conversion::of(&field(DataType::LocalMktDate)),
+            Conversion::Date
+        );
+    }
+
+    #[test]
     fn listed_values_read_through_an_enum() {
         assert_eq!(
             Conversion::of(&with_values(DataType::Char)),
@@ -180,6 +195,7 @@ mod tests {
         assert!(!Conversion::Str.is_enum());
         assert!(!Conversion::Int.is_enum());
         assert!(!Conversion::Decimal.is_enum());
+        assert!(!Conversion::Date.is_enum());
         assert!(!Conversion::Raw.is_enum());
     }
 }

@@ -24,6 +24,7 @@ const MODULE: &[&str] = &[
     "annotations",
     "bytes",
     "cached_property",
+    "date",
     "enum",
     "from_value",
     "int",

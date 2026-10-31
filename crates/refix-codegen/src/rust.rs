@@ -75,6 +75,9 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     if uses(dictionary, |conversion| conversion == Conversion::Decimal) {
         imports.push("Decimal");
     }
+    if uses(dictionary, |conversion| conversion == Conversion::Date) {
+        imports.push("Date");
+    }
     imports.sort_unstable();
     let imports = format!("use refix_message::{{{}}};", imports.join(", "));
     let code = format!("{header}\n{imports}\n\n{sections}");
@@ -280,23 +283,13 @@ impl NewOrderSingle {
     }
 
     #[test]
-    fn imports_decimal_only_when_read() {
+    fn imports_value_types_only_when_read() {
         let order = |members| Message {
             name: "NewOrderSingle".to_owned(),
             msg_type: "D".to_owned(),
             members,
             category: Category::App,
         };
-        let price = field("Price", 44, DataType::Price);
-        let reads = spec_of(
-            vec![order(vec![Member::Field(FieldRef {
-                tag: Tag(44),
-                is_required: false,
-            })])],
-            vec![price.clone()],
-        );
-        let unused = spec_of(vec![order(vec![])], vec![price]);
-
         let imports = |spec: Spec| {
             let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
             code.lines()
@@ -305,14 +298,31 @@ impl NewOrderSingle {
                 .to_owned()
         };
 
-        assert_eq!(
-            imports(reads),
-            "use refix_message::{Decimal, InvalidValue, KnownTags, RawMessage, Tag};"
-        );
-        assert_eq!(
-            imports(unused),
-            "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
-        );
+        for (value, expected) in [
+            (
+                field("Price", 44, DataType::Price),
+                "use refix_message::{Decimal, InvalidValue, KnownTags, RawMessage, Tag};",
+            ),
+            (
+                field("SettlDate", 64, DataType::LocalMktDate),
+                "use refix_message::{Date, InvalidValue, KnownTags, RawMessage, Tag};",
+            ),
+        ] {
+            let reads = spec_of(
+                vec![order(vec![Member::Field(FieldRef {
+                    tag: value.tag,
+                    is_required: false,
+                })])],
+                vec![value.clone()],
+            );
+            let unused = spec_of(vec![order(vec![])], vec![value]);
+
+            assert_eq!(imports(reads), expected);
+            assert_eq!(
+                imports(unused),
+                "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
+            );
+        }
     }
 
     #[test]
