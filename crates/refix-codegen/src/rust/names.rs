@@ -5,6 +5,7 @@ use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 use super::Error;
 use super::naming::{group_name, message_module_name, method_name, numbered_variant, variant_name};
 use crate::Warning;
+use crate::conversion::Conversion;
 use crate::envelope::Section;
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
@@ -16,6 +17,7 @@ use crate::namespace::{Namespace, Owner};
 /// over the root names it imports. The header and trailer views take their
 /// types and the modules of their groups.
 const ROOT: &[&str] = &[
+    "Decimal",
     "From",
     "GroupTable",
     "Header",
@@ -94,7 +96,7 @@ impl Names {
             names.name_section(section, dictionary)?;
         }
         for field in dictionary.fields() {
-            if !field.values.is_empty() {
+            if Conversion::of(field).is_enum() {
                 let type_name = root.claim_enum(&field.name, warnings)?;
                 names.name_enum(field, type_name, warnings)?;
             }

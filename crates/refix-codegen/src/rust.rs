@@ -10,8 +10,8 @@ mod views;
 use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Generated;
+use crate::conversion::{Conversion, uses};
 use crate::envelope::Envelope;
-use crate::groups::is_generated;
 use enums::emit_enum;
 pub use error::Error;
 use groups::{emit_group_module, shared_groups};
@@ -34,7 +34,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     let enums: Vec<String> = dictionary
         .fields()
         .iter()
-        .filter(|field| !field.values.is_empty())
+        .filter(|field| Conversion::of(field).is_enum())
         .map(|field| emit_enum(field, &names))
         .collect();
     let groups: Vec<String> = shared_groups(dictionary, &mut warnings)
@@ -67,30 +67,19 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     if has_groups {
         imports.extend(["GroupTable", "Instances"]);
     }
-    if reads_multiple_values(dictionary.header().chain(dictionary.trailer()))
-        || dictionary
-            .messages()
-            .any(|message| reads_multiple_values(message.members()))
-    {
+    if uses(dictionary, |conversion| {
+        conversion == Conversion::MultipleValues
+    }) {
         imports.push("MultipleValues");
+    }
+    if uses(dictionary, |conversion| conversion == Conversion::Decimal) {
+        imports.push("Decimal");
     }
     imports.sort_unstable();
     let imports = format!("use refix_message::{{{}}};", imports.join(", "));
     let code = format!("{header}\n{imports}\n\n{sections}");
 
     Ok(Generated { code, warnings })
-}
-
-/// Whether an accessor generated for `members` reads a multiple-value field.
-fn reads_multiple_values<'a>(mut members: impl Iterator<Item = dictionary::Member<'a>>) -> bool {
-    members.any(|member| match member {
-        dictionary::Member::Field { field, .. } => {
-            !field.values.is_empty() && field.data_type.is_multiple_value()
-        }
-        dictionary::Member::Group(group) => {
-            is_generated(group) && reads_multiple_values(group.members())
-        }
-    })
 }
 
 #[cfg(test)]
@@ -283,6 +272,42 @@ impl NewOrderSingle {
         assert_eq!(
             imports(reads),
             "use refix_message::{InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};"
+        );
+        assert_eq!(
+            imports(unused),
+            "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
+        );
+    }
+
+    #[test]
+    fn imports_decimal_only_when_read() {
+        let order = |members| Message {
+            name: "NewOrderSingle".to_owned(),
+            msg_type: "D".to_owned(),
+            members,
+            category: Category::App,
+        };
+        let price = field("Price", 44, DataType::Price);
+        let reads = spec_of(
+            vec![order(vec![Member::Field(FieldRef {
+                tag: Tag(44),
+                is_required: false,
+            })])],
+            vec![price.clone()],
+        );
+        let unused = spec_of(vec![order(vec![])], vec![price]);
+
+        let imports = |spec: Spec| {
+            let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+            code.lines()
+                .find(|line| line.starts_with("use "))
+                .unwrap()
+                .to_owned()
+        };
+
+        assert_eq!(
+            imports(reads),
+            "use refix_message::{Decimal, InvalidValue, KnownTags, RawMessage, Tag};"
         );
         assert_eq!(
             imports(unused),

@@ -4,7 +4,7 @@
 use bytes::Bytes;
 use refix_codegen::rust::generate;
 use refix_dictionary::quickfix;
-use refix_message::{InvalidValue, Tag, Tokenizer};
+use refix_message::{Decimal, InvalidValue, Tag, Tokenizer};
 
 // Not every generated item is read here, e.g. a leaf group's KNOWN_TAGS.
 #[allow(dead_code)]
@@ -55,7 +55,7 @@ fn typed_reads_over_a_tokenized_frame() {
     assert_eq!(order.raw().get(Tag(35)), Some(b"D".as_slice()));
     assert_eq!(order.cl_ord_id(), Ok(Some("ORDER-1")));
     assert_eq!(order.order_qty(), Ok(Some(200)));
-    assert_eq!(order.price_raw(), Some(b"101.5".as_slice()));
+    assert_eq!(order.price(), Ok(Some(Decimal::new(1015, -1))));
     assert_eq!(order.ord_type(), Ok(Some(OrdType::Market)));
 }
 
@@ -68,7 +68,7 @@ fn an_absent_field_reads_as_none() {
     let order = NewOrderSingle::from_raw(raw);
 
     assert_eq!(order.order_qty(), Ok(None));
-    assert_eq!(order.price_raw(), None);
+    assert_eq!(order.price(), Ok(None));
     assert_eq!(order.ord_type(), Ok(None));
 }
 

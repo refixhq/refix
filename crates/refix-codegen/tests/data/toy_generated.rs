@@ -2,7 +2,7 @@
 #![cfg_attr(rustfmt, rustfmt::skip)]
 #![allow(clippy::module_inception)]
 
-use refix_message::{GroupTable, Instances, InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};
+use refix_message::{Decimal, GroupTable, Instances, InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrdType<'a> {
@@ -312,8 +312,8 @@ impl NewOrderSingle {
         self.0.get_int(Tag(38))
     }
 
-    pub fn price_raw(&self) -> Option<&[u8]> {
-        self.0.get(Tag(44))
+    pub fn price(&self) -> Result<Option<Decimal>, InvalidValue> {
+        self.0.get_decimal(Tag(44))
     }
 
     pub fn ord_type(&self) -> Result<Option<OrdType<'_>>, InvalidValue> {

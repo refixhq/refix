@@ -5,6 +5,7 @@ use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 use super::Error;
 use super::naming::{group_property_name, member_name, numbered_member, property_name};
 use crate::Warning;
+use crate::conversion::Conversion;
 use crate::envelope::Section;
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
@@ -13,6 +14,7 @@ use crate::naming::group_source_name;
 /// The imports and builtins the generated module relies on.
 const MODULE: &[&str] = &[
     "ClassVar",
+    "Decimal",
     "GroupTable",
     "Header",
     "KnownTags",
@@ -108,7 +110,7 @@ impl Names {
             }
         }
         for field in dictionary.fields() {
-            if !field.values.is_empty() {
+            if Conversion::of(field).is_enum() {
                 let class = module.claim_enum(&field.name, warnings)?;
                 names.name_enum(field, class, warnings)?;
             }

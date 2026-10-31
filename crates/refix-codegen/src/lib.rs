@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod case_converter;
+mod conversion;
 mod envelope;
 mod generated;
 mod groups;

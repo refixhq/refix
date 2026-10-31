@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import enum
+from decimal import Decimal
 from functools import cached_property
 from typing import ClassVar
 
@@ -192,8 +193,8 @@ class NewOrderSingle:
         return self._raw.get_int(38)
 
     @cached_property
-    def price_raw(self) -> bytes | None:
-        return self._raw.get(44)
+    def price(self) -> Decimal | None:
+        return self._raw.get_decimal(44)
 
     @cached_property
     def ord_type(self) -> OrdType | Unrecognized[str] | None:

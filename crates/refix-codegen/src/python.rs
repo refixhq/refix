@@ -10,8 +10,8 @@ mod views;
 use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Generated;
+use crate::conversion::{Conversion, uses};
 use crate::envelope::Envelope;
-use crate::groups::is_generated;
 use enums::emit_enum;
 pub use error::Error;
 use groups::{emit_group_class, shared_groups};
@@ -29,7 +29,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     let enums: Vec<String> = dictionary
         .fields()
         .iter()
-        .filter(|field| !field.values.is_empty())
+        .filter(|field| Conversion::of(field).is_enum())
         .map(|field| emit_enum(field, &names))
         .collect();
     let groups: Vec<String> = shared_groups(dictionary, &mut warnings)
@@ -72,10 +72,8 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
                 .members()
                 .any(|member| matches!(member, dictionary::Member::Group(_)))
         });
-    let reads_enums = reads_enums(dictionary.header().chain(dictionary.trailer()))
-        || dictionary
-            .messages()
-            .any(|message| reads_enums(message.members()));
+    let reads_enums = uses(dictionary, Conversion::is_enum);
+    let reads_decimals = uses(dictionary, |conversion| conversion == Conversion::Decimal);
 
     let mut blocks = Vec::new();
     if has_classes {
@@ -84,6 +82,9 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
     let mut standard = Vec::new();
     if has_enums {
         standard.push("import enum\n");
+    }
+    if reads_decimals {
+        standard.push("from decimal import Decimal\n");
     }
     if has_properties {
         standard.push("from functools import cached_property\n");
@@ -110,15 +111,6 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
         .map(|block| block.concat())
         .collect();
     (!blocks.is_empty()).then(|| blocks.join("\n"))
-}
-
-/// Whether a property generated for `members` reads an enum, inside group
-/// instances too.
-fn reads_enums<'a>(mut members: impl Iterator<Item = dictionary::Member<'a>>) -> bool {
-    members.any(|member| match member {
-        dictionary::Member::Field { field, .. } => !field.values.is_empty(),
-        dictionary::Member::Group(group) => is_generated(group) && reads_enums(group.members()),
-    })
 }
 
 #[cfg(test)]
@@ -291,6 +283,20 @@ class NewOrderSingle:
         assert!(generated.code.contains(
             "    def opt_attribute(self) -> str | None:\n        return self._raw.get_str(206)\n"
         ));
+    }
+
+    #[test]
+    fn a_float_reads_as_a_decimal() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(44)])],
+            vec![field("Price", 44, DataType::Price, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def price(self) -> Decimal | None:\n        return self._raw.get_decimal(44)\n"
+        ));
+        assert!(generated.code.contains("\nfrom decimal import Decimal\n"));
     }
 
     #[test]

@@ -1,5 +1,6 @@
-use refix_dictionary::{DataType, Field, dictionary};
+use refix_dictionary::{Field, dictionary};
 
+use crate::conversion::Conversion;
 use crate::snake_case;
 
 /// A field accessor's name before escaping.
@@ -7,9 +8,7 @@ use crate::snake_case;
 /// A field of a type the generator does not interpret takes the `_raw` suffix.
 pub(crate) fn field_base_name(field: &Field) -> String {
     let mut name = snake_case(&field.name);
-    let interpreted = matches!(field.data_type, DataType::String | DataType::Char)
-        || field.data_type.is_int_based();
-    if field.values.is_empty() && !interpreted {
+    if Conversion::of(field) == Conversion::Raw {
         name.push_str("_raw");
     }
     name

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import assert_never
 
 import pytest
@@ -19,14 +20,14 @@ class TestReads:
         assert new_order.raw.get(35) == NewOrderSingle.MSG_TYPE
         assert new_order.cl_ord_id == "ORDER-1"
         assert new_order.order_qty == 200
-        assert new_order.price_raw == b"101.5"
+        assert new_order.price == Decimal("101.5")
         assert new_order.ord_type is OrdType.MARKET
 
     def test_an_absent_field_reads_as_none(self):
         new_order = order("35=D|11=ORDER-1|")
 
         assert new_order.order_qty is None
-        assert new_order.price_raw is None
+        assert new_order.price is None
         assert new_order.ord_type is None
         assert new_order.exec_inst is None
 
