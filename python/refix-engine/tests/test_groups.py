@@ -1,5 +1,5 @@
 import gc
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 import pytest
@@ -126,6 +126,23 @@ class TestGetGroup:
         assert [entry.get_date(272) for entry in instances] == [
             date(2026, 10, 30),
             date(2026, 10, 31),
+        ]
+
+    def test_an_instance_reads_times(self):
+        entries = refix.GroupTable(268, 269, (269, 273), ())
+
+        message = tokenize_body("35=W|268=2|269=0|273=14:29:51|269=1|273=14:29:52.5|")
+
+        instances = message.get_group(entries, refix.KnownTags((35, 268, 269, 273)))
+
+        assert instances is not None
+        assert [entry.get_time(273) for entry in instances] == [
+            time(14, 29, 51),
+            time(14, 29, 52, 500000),
+        ]
+        assert [entry.get_time_ns(273) for entry in instances] == [
+            52_191_000_000_000,
+            52_192_500_000_000,
         ]
 
     def test_an_instance_reads_month_years(self):

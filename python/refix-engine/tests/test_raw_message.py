@@ -1,5 +1,5 @@
 import pickle
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 import pytest
@@ -185,3 +185,54 @@ class TestGetMonthYear:
             message.get_month_year(200)
 
         assert excinfo.value.tag == 200
+
+
+class TestGetTime:
+    def test_reads_an_entry_time(self):
+        message = tokenize_body("35=W|273=14:29:51.123|")
+        assert message.get_time(273) == time(14, 29, 51, 123000)
+
+    def test_truncates_to_microseconds(self):
+        message = tokenize_body("35=W|273=14:29:51.123456789|")
+        assert message.get_time(273) == time(14, 29, 51, 123456)
+
+    def test_is_naive(self):
+        value = tokenize_body("35=W|273=14:29:51|").get_time(273)
+
+        assert value is not None
+        assert value.tzinfo is None
+
+    def test_clamps_a_leap_second_to_the_last_microsecond(self):
+        message = tokenize_body("35=W|273=23:59:60.5|")
+        assert message.get_time(273) == time(23, 59, 59, 999999)
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=W|").get_time(273) is None
+
+    @pytest.mark.parametrize("value", ["", "24:00:00", "14:29", "14:29:51Z"])
+    def test_invalid_times_raise(self, value: str):
+        message = tokenize_body(f"35=W|273={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_time(273)
+
+        assert excinfo.value.tag == 273
+
+
+class TestGetTimeNs:
+    def test_reads_every_digit(self):
+        message = tokenize_body("35=W|273=14:29:51.123456789|")
+        assert message.get_time_ns(273) == 52_191_123_456_789
+
+    def test_keeps_a_leap_second(self):
+        message = tokenize_body("35=W|273=23:59:60.5|")
+        assert message.get_time_ns(273) == 86_400_500_000_000
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=W|").get_time_ns(273) is None
+
+    def test_invalid_time_raises(self):
+        with pytest.raises(InvalidValueError) as excinfo:
+            tokenize_body("35=W|273=24:00:00|").get_time_ns(273)
+
+        assert excinfo.value.tag == 273
