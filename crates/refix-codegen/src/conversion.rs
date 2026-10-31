@@ -35,7 +35,14 @@ impl Conversion {
             };
         }
         match data_type {
-            DataType::String | DataType::Char => Self::Str,
+            DataType::String
+            | DataType::Char
+            | DataType::Currency
+            | DataType::Exchange
+            | DataType::Country
+            | DataType::Language
+            | DataType::Xid
+            | DataType::XidRef => Self::Str,
             _ if data_type.is_int_based() => Self::Int,
             _ if data_type.is_float_based() => Self::Decimal,
             _ => Self::Raw,
@@ -93,9 +100,23 @@ mod tests {
     }
 
     #[test]
-    fn strings_and_chars_read_as_text() {
-        assert_eq!(Conversion::of(&field(DataType::String)), Conversion::Str);
-        assert_eq!(Conversion::of(&field(DataType::Char)), Conversion::Str);
+    fn strings_chars_and_their_subtypes_read_as_text() {
+        for data_type in [
+            DataType::String,
+            DataType::Char,
+            DataType::Currency,
+            DataType::Exchange,
+            DataType::Country,
+            DataType::Language,
+            DataType::Xid,
+            DataType::XidRef,
+        ] {
+            assert_eq!(
+                Conversion::of(&field(data_type.clone())),
+                Conversion::Str,
+                "{data_type:?}"
+            );
+        }
     }
 
     #[test]
