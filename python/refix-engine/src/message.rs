@@ -1,5 +1,7 @@
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyAnyMethods, PyBytes, PyDate, PyString, PyTime, PyTuple, PyType};
+use pyo3::types::{
+    PyAnyMethods, PyBytes, PyDate, PyDateTime, PyString, PyTime, PyTuple, PyType, PyTzInfo,
+};
 use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, import_exception, pyclass, pymethods};
 use refix_message::{
     Group, InvalidValue, RawMessage as CoreRawMessage, Scope as CoreScope, Slot, Tag,
@@ -49,6 +51,18 @@ impl RawMessage {
 
     fn get_decimal<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyAny>>> {
         get_decimal(py, &self.0.scope(), tag)
+    }
+
+    fn get_utc_timestamp<'py>(
+        &self,
+        py: Python<'py>,
+        tag: u32,
+    ) -> PyResult<Option<Bound<'py, PyDateTime>>> {
+        get_utc_timestamp(py, &self.0.scope(), tag)
+    }
+
+    fn get_utc_timestamp_ns(&self, tag: u32) -> PyResult<Option<i64>> {
+        get_utc_timestamp_ns(&self.0.scope(), tag)
     }
 
     fn get_date<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyDate>>> {
@@ -138,6 +152,18 @@ impl Scope {
         get_decimal(py, &self.scope(), tag)
     }
 
+    fn get_utc_timestamp<'py>(
+        &self,
+        py: Python<'py>,
+        tag: u32,
+    ) -> PyResult<Option<Bound<'py, PyDateTime>>> {
+        get_utc_timestamp(py, &self.scope(), tag)
+    }
+
+    fn get_utc_timestamp_ns(&self, tag: u32) -> PyResult<Option<i64>> {
+        get_utc_timestamp_ns(&self.scope(), tag)
+    }
+
     fn get_date<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyDate>>> {
         get_date(py, &self.scope(), tag)
     }
@@ -208,6 +234,37 @@ fn get_decimal<'py>(
 
     let decimal = DECIMAL_TYPE.import(py, "decimal", "Decimal")?;
     decimal.call1((value.to_string(),)).map(Some)
+}
+
+fn get_utc_timestamp<'py>(
+    py: Python<'py>,
+    scope: &CoreScope<'_>,
+    tag: u32,
+) -> PyResult<Option<Bound<'py, PyDateTime>>> {
+    let Some(value) = scope.get_utc_timestamp(Tag(tag)).map_err(to_py_err)? else {
+        return Ok(None);
+    };
+
+    let date = value.date();
+    let (hour, minute, second, microsecond) = clock(value.time().nanos_since_midnight());
+    let utc = PyTzInfo::utc(py)?;
+    PyDateTime::new(
+        py,
+        i32::from(date.year()),
+        date.month(),
+        date.day(),
+        hour,
+        minute,
+        second,
+        microsecond,
+        Some(&utc),
+    )
+    .map(Some)
+}
+
+fn get_utc_timestamp_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
+    let value = scope.get_utc_timestamp(Tag(tag)).map_err(to_py_err)?;
+    Ok(value.map(|value| value.unix_nanos()))
 }
 
 fn get_date<'py>(

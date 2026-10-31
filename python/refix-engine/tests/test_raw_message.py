@@ -1,5 +1,5 @@
 import pickle
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 
 import pytest
@@ -236,3 +236,77 @@ class TestGetTimeNs:
             tokenize_body("35=W|273=24:00:00|").get_time_ns(273)
 
         assert excinfo.value.tag == 273
+
+
+class TestGetUtcTimestamp:
+    def test_reads_a_sending_time(self):
+        message = tokenize_body("35=D|52=20261030-14:29:51.123|")
+        assert message.get_utc_timestamp(52) == datetime(
+            2026, 10, 30, 14, 29, 51, 123000, tzinfo=UTC
+        )
+
+    def test_is_in_utc(self):
+        value = tokenize_body("35=D|52=20261030-14:29:51|").get_utc_timestamp(52)
+
+        assert value is not None
+        assert value.tzinfo is UTC
+
+    def test_truncates_to_microseconds(self):
+        message = tokenize_body("35=D|52=20261030-14:29:51.123456789|")
+        assert message.get_utc_timestamp(52) == datetime(
+            2026, 10, 30, 14, 29, 51, 123456, tzinfo=UTC
+        )
+
+    def test_reads_a_time_before_the_epoch(self):
+        message = tokenize_body("35=D|52=19691231-23:59:59.999|")
+        assert message.get_utc_timestamp(52) == datetime(
+            1969, 12, 31, 23, 59, 59, 999000, tzinfo=UTC
+        )
+
+    def test_folds_a_leap_second_into_the_next_day(self):
+        message = tokenize_body("35=D|52=20161231-23:59:60|")
+        assert message.get_utc_timestamp(52) == datetime(2017, 1, 1, tzinfo=UTC)
+
+    def test_reads_the_ends_of_the_i64_range(self):
+        last = tokenize_body("35=D|52=22620411-23:47:16.854775807|")
+        first = tokenize_body("35=D|52=16770921-00:12:43.145224192|")
+
+        assert last.get_utc_timestamp(52) == datetime(
+            2262, 4, 11, 23, 47, 16, 854775, tzinfo=UTC
+        )
+        assert first.get_utc_timestamp(52) == datetime(
+            1677, 9, 21, 0, 12, 43, 145224, tzinfo=UTC
+        )
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=D|").get_utc_timestamp(52) is None
+
+    @pytest.mark.parametrize(
+        "value", ["", "20261030", "2026-10-30T14:29:51Z", "20261030-24:00:00"]
+    )
+    def test_invalid_timestamps_raise(self, value: str):
+        message = tokenize_body(f"35=D|52={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_utc_timestamp(52)
+
+        assert excinfo.value.tag == 52
+
+
+class TestGetUtcTimestampNs:
+    def test_reads_every_digit(self):
+        message = tokenize_body("35=D|52=20261030-14:29:51.123456789|")
+        assert message.get_utc_timestamp_ns(52) == 1_793_370_591_123_456_789
+
+    def test_reads_a_time_before_the_epoch(self):
+        message = tokenize_body("35=D|52=19691231-23:59:59.999|")
+        assert message.get_utc_timestamp_ns(52) == -1_000_000
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=D|").get_utc_timestamp_ns(52) is None
+
+    def test_invalid_timestamp_raises(self):
+        with pytest.raises(InvalidValueError) as excinfo:
+            tokenize_body("35=D|52=20261030|").get_utc_timestamp_ns(52)
+
+        assert excinfo.value.tag == 52

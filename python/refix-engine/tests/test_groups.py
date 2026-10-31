@@ -1,5 +1,5 @@
 import gc
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 
 import pytest
@@ -143,6 +143,25 @@ class TestGetGroup:
         assert [entry.get_time_ns(273) for entry in instances] == [
             52_191_000_000_000,
             52_192_500_000_000,
+        ]
+
+    def test_an_instance_reads_timestamps(self):
+        stamps = refix.GroupTable(768, 769, (769,), ())
+
+        message = tokenize_body(
+            "35=8|768=2|769=20261030-14:29:51|769=20261030-14:29:52.5|"
+        )
+
+        instances = message.get_group(stamps, refix.KnownTags((35, 768, 769)))
+
+        assert instances is not None
+        assert [stamp.get_utc_timestamp(769) for stamp in instances] == [
+            datetime(2026, 10, 30, 14, 29, 51, tzinfo=UTC),
+            datetime(2026, 10, 30, 14, 29, 52, 500000, tzinfo=UTC),
+        ]
+        assert [stamp.get_utc_timestamp_ns(769) for stamp in instances] == [
+            1_793_370_591_000_000_000,
+            1_793_370_592_500_000_000,
         ]
 
     def test_an_instance_reads_month_years(self):
