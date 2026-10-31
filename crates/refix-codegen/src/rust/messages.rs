@@ -114,6 +114,9 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         Conversion::Int => format!(
             "    pub fn {name}(&self) -> Result<Option<i64>, InvalidValue> {{\n        self.0.get_int(Tag({tag}))\n    }}\n"
         ),
+        Conversion::Decimal => format!(
+            "    pub fn {name}(&self) -> Result<Option<Decimal>, InvalidValue> {{\n        self.0.get_decimal(Tag({tag}))\n    }}\n"
+        ),
         Conversion::StrEnum => {
             let type_name = names.enum_type(field);
             let enum_type = format!("{type_name}<{type_lifetime}>");
@@ -200,6 +203,14 @@ mod tests {
         assert_eq!(
             scope_signature(&field("MsgSeqNum", 34, DataType::SeqNum)),
             "pub fn msg_seq_num(&self) -> Result<Option<i64>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn a_float_reads_as_a_decimal() {
+        assert_eq!(
+            scope_signature(&field("Price", 44, DataType::Price)),
+            "pub fn price(&self) -> Result<Option<Decimal>, InvalidValue> {"
         );
     }
 

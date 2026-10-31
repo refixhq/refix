@@ -21,14 +21,14 @@ generated from QuickFIX's `FIX44.xml`.
 <Side.BUY: '1'>
 >>> order.ord_type
 <OrdType.LIMIT: '2'>
->>> order.price_raw
-b'101.25'
+>>> order.price
+Decimal('101.25')
 
 ```
 
-Strings, integers, enums and repeating groups are typed, and every message
-reaches its header and trailer. Prices, quantities and timestamps read as raw
-bytes, as `price_raw` does.
+Strings, integers, decimals, enums and repeating groups are typed, and every
+message reaches its header and trailer. Timestamps read as raw bytes, as
+`transact_time_raw` does.
 
 ## License
 

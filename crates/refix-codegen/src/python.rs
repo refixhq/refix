@@ -73,6 +73,7 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
                 .any(|member| matches!(member, dictionary::Member::Group(_)))
         });
     let reads_enums = uses(dictionary, Conversion::is_enum);
+    let reads_decimals = uses(dictionary, |conversion| conversion == Conversion::Decimal);
 
     let mut blocks = Vec::new();
     if has_classes {
@@ -81,6 +82,9 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
     let mut standard = Vec::new();
     if has_enums {
         standard.push("import enum\n");
+    }
+    if reads_decimals {
+        standard.push("from decimal import Decimal\n");
     }
     if has_properties {
         standard.push("from functools import cached_property\n");
@@ -279,6 +283,20 @@ class NewOrderSingle:
         assert!(generated.code.contains(
             "    def opt_attribute(self) -> str | None:\n        return self._raw.get_str(206)\n"
         ));
+    }
+
+    #[test]
+    fn a_float_reads_as_a_decimal() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(44)])],
+            vec![field("Price", 44, DataType::Price, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def price(self) -> Decimal | None:\n        return self._raw.get_decimal(44)\n"
+        ));
+        assert!(generated.code.contains("\nfrom decimal import Decimal\n"));
     }
 
     #[test]

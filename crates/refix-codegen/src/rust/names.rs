@@ -17,6 +17,7 @@ use crate::namespace::{Namespace, Owner};
 /// over the root names it imports. The header and trailer views take their
 /// types and the modules of their groups.
 const ROOT: &[&str] = &[
+    "Decimal",
     "From",
     "GroupTable",
     "Header",

@@ -14,6 +14,7 @@ use crate::naming::group_source_name;
 /// The imports and builtins the generated module relies on.
 const MODULE: &[&str] = &[
     "ClassVar",
+    "Decimal",
     "GroupTable",
     "Header",
     "KnownTags",

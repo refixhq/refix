@@ -72,6 +72,9 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     }) {
         imports.push("MultipleValues");
     }
+    if uses(dictionary, |conversion| conversion == Conversion::Decimal) {
+        imports.push("Decimal");
+    }
     imports.sort_unstable();
     let imports = format!("use refix_message::{{{}}};", imports.join(", "));
     let code = format!("{header}\n{imports}\n\n{sections}");
@@ -269,6 +272,42 @@ impl NewOrderSingle {
         assert_eq!(
             imports(reads),
             "use refix_message::{InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};"
+        );
+        assert_eq!(
+            imports(unused),
+            "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
+        );
+    }
+
+    #[test]
+    fn imports_decimal_only_when_read() {
+        let order = |members| Message {
+            name: "NewOrderSingle".to_owned(),
+            msg_type: "D".to_owned(),
+            members,
+            category: Category::App,
+        };
+        let price = field("Price", 44, DataType::Price);
+        let reads = spec_of(
+            vec![order(vec![Member::Field(FieldRef {
+                tag: Tag(44),
+                is_required: false,
+            })])],
+            vec![price.clone()],
+        );
+        let unused = spec_of(vec![order(vec![])], vec![price]);
+
+        let imports = |spec: Spec| {
+            let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+            code.lines()
+                .find(|line| line.starts_with("use "))
+                .unwrap()
+                .to_owned()
+        };
+
+        assert_eq!(
+            imports(reads),
+            "use refix_message::{Decimal, InvalidValue, KnownTags, RawMessage, Tag};"
         );
         assert_eq!(
             imports(unused),

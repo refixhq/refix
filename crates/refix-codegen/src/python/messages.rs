@@ -72,6 +72,10 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
             "int | None".to_owned(),
             format!("return {receiver}.get_int({tag})"),
         ),
+        Conversion::Decimal => (
+            "Decimal | None".to_owned(),
+            format!("return {receiver}.get_decimal({tag})"),
+        ),
         Conversion::StrEnum => {
             enum_property(names.enum_class(field), receiver, tag, "get_str", "str")
         }

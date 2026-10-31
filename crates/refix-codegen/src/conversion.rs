@@ -9,6 +9,8 @@ pub(crate) enum Conversion {
     Str,
     /// An integer, with `get_int`.
     Int,
+    /// A decimal, with `get_decimal`.
+    Decimal,
     /// An enum over text, with `get_str`.
     StrEnum,
     /// An enum over integers, with `get_int`.
@@ -35,6 +37,7 @@ impl Conversion {
         match data_type {
             DataType::String | DataType::Char => Self::Str,
             _ if data_type.is_int_based() => Self::Int,
+            _ if data_type.is_float_based() => Self::Decimal,
             _ => Self::Raw,
         }
     }
@@ -102,6 +105,24 @@ mod tests {
     }
 
     #[test]
+    fn the_float_family_reads_as_decimals() {
+        for data_type in [
+            DataType::Float,
+            DataType::Qty,
+            DataType::Price,
+            DataType::PriceOffset,
+            DataType::Amt,
+            DataType::Percentage,
+        ] {
+            assert_eq!(
+                Conversion::of(&field(data_type.clone())),
+                Conversion::Decimal,
+                "{data_type:?}"
+            );
+        }
+    }
+
+    #[test]
     fn listed_values_read_through_an_enum() {
         assert_eq!(
             Conversion::of(&with_values(DataType::Char)),
@@ -123,7 +144,7 @@ mod tests {
             Conversion::of(&field(DataType::MultipleStringValue)),
             Conversion::Raw
         );
-        assert_eq!(Conversion::of(&field(DataType::Price)), Conversion::Raw);
+        assert_eq!(Conversion::of(&field(DataType::Data)), Conversion::Raw);
         assert_eq!(
             Conversion::of(&field(DataType::Other("CUSTOM".to_owned()))),
             Conversion::Raw
@@ -137,6 +158,7 @@ mod tests {
         assert!(Conversion::MultipleValues.is_enum());
         assert!(!Conversion::Str.is_enum());
         assert!(!Conversion::Int.is_enum());
+        assert!(!Conversion::Decimal.is_enum());
         assert!(!Conversion::Raw.is_enum());
     }
 }
