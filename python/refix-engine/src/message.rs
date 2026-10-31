@@ -40,6 +40,10 @@ impl RawMessage {
         get_int(&self.0.scope(), tag)
     }
 
+    fn get_bool(&self, tag: u32) -> PyResult<Option<bool>> {
+        get_bool(&self.0.scope(), tag)
+    }
+
     fn get_decimal<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyAny>>> {
         get_decimal(py, &self.0.scope(), tag)
     }
@@ -103,6 +107,10 @@ impl Scope {
         get_int(&self.scope(), tag)
     }
 
+    fn get_bool(&self, tag: u32) -> PyResult<Option<bool>> {
+        get_bool(&self.scope(), tag)
+    }
+
     fn get_decimal<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyAny>>> {
         get_decimal(py, &self.scope(), tag)
     }
@@ -140,6 +148,10 @@ fn get_str<'py>(
 
 fn get_int(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
     scope.get_int(Tag(tag)).map_err(to_py_err)
+}
+
+fn get_bool(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<bool>> {
+    scope.get_bool(Tag(tag)).map_err(to_py_err)
 }
 
 fn get_decimal<'py>(

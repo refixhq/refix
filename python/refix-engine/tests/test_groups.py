@@ -104,6 +104,16 @@ class TestGetGroup:
             Decimal("101.50"),
         ]
 
+    def test_an_instance_reads_booleans(self):
+        allocs = refix.GroupTable(78, 79, (79, 208), ())
+
+        message = tokenize_body("35=J|78=2|79=A1|208=Y|79=A2|208=N|")
+
+        instances = message.get_group(allocs, refix.KnownTags((35, 78, 79, 208)))
+
+        assert instances is not None
+        assert [alloc.get_bool(208) for alloc in instances] == [True, False]
+
     def test_a_scope_cannot_be_built_directly(self):
         with pytest.raises(TypeError):
             refix.Scope()

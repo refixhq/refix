@@ -50,6 +50,26 @@ class TestGetInt:
         assert excinfo.value.tag == 38
 
 
+class TestGetBool:
+    def test_reads_y_and_n(self):
+        message = tokenize_body("35=D|43=Y|97=N|")
+
+        assert message.get_bool(43) is True
+        assert message.get_bool(97) is False
+
+    def test_absent_tag_is_none(self):
+        assert tokenize_body("35=D|").get_bool(43) is None
+
+    @pytest.mark.parametrize("value", ["", "y", "1", "YES", "true"])
+    def test_anything_but_y_or_n_raises(self, value: str):
+        message = tokenize_body(f"35=D|43={value}|")
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            message.get_bool(43)
+
+        assert excinfo.value.tag == 43
+
+
 class TestGetMultipleValues:
     def test_reads_values_in_wire_order_with_duplicates(self):
         message = tokenize_body("35=D|18=1 6 1|")
