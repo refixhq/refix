@@ -50,7 +50,6 @@ ReFIX.
 
 Reading and typing messages works in both languages. Planned next:
 
-- better type coverage: prices, quantities and timestamps
 - stock packages for more FIX versions
 - reading each message as its type automatically
 - building and serialising messages
