@@ -2,6 +2,8 @@
 mod chrono;
 #[cfg(feature = "jiff-02")]
 mod jiff;
+#[cfg(feature = "time-03")]
+mod time;
 
 /// The coarsest of seconds, millis, micros and nanos that holds `nanos` exactly.
 #[cfg(any(feature = "chrono-04", feature = "jiff-02"))]
