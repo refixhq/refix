@@ -28,10 +28,11 @@ pub(crate) enum Conversion {
 }
 
 impl Conversion {
-    /// The conversion for `field`. Listed values take precedence over the type.
+    /// The conversion for `field`. Listed values take precedence over the type,
+    /// but a BOOLEAN reads as `bool` whatever it lists.
     pub(crate) fn of(field: &Field) -> Self {
         let data_type = &field.data_type;
-        if !field.values.is_empty() {
+        if !field.values.is_empty() && *data_type != DataType::Boolean {
             return if data_type.is_multiple_value() {
                 Self::MultipleValues
             } else if data_type.is_int_based() {
@@ -137,6 +138,14 @@ mod tests {
     #[test]
     fn booleans_read_as_bools() {
         assert_eq!(Conversion::of(&field(DataType::Boolean)), Conversion::Bool);
+    }
+
+    #[test]
+    fn a_boolean_reads_as_a_bool_whatever_it_lists() {
+        assert_eq!(
+            Conversion::of(&with_values(DataType::Boolean)),
+            Conversion::Bool
+        );
     }
 
     #[test]
