@@ -13,3 +13,9 @@ categories.workspace = true
 
 [dependencies]
 refix-message = { workspace = true }
+
+[features]
+jiff-02 = ["refix-message/jiff-02"]
+
+[package.metadata.docs.rs]
+all-features = true

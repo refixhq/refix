@@ -8,7 +8,7 @@ mod utc_timestamp;
 
 pub use date::Date;
 pub use decimal::Decimal;
-pub use error::InvalidValue;
+pub use error::{InvalidValue, OutOfRange};
 pub use month_year::MonthYear;
 pub use time::Time;
 pub use time_precision::TimePrecision;

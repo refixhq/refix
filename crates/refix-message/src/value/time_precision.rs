@@ -23,7 +23,7 @@ impl TimePrecision {
     }
 
     /// Nanoseconds in one unit, such as `1_000_000` for `MILLIS`.
-    pub(super) const fn unit_nanos(self) -> i64 {
+    pub(crate) const fn unit_nanos(self) -> i64 {
         10_i64.pow(9 - self.0 as u32)
     }
 }
