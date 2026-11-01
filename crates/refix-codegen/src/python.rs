@@ -10,7 +10,7 @@ mod views;
 use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Generated;
-use crate::conversion::{Conversion, uses};
+use crate::conversion::{Conversion, unclaimed_types, uses};
 use crate::envelope::Envelope;
 use enums::emit_enum;
 pub use error::Error;
@@ -56,6 +56,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .join("\n\n");
     let code = format!("{header}\n{sections}");
 
+    warnings.extend(unclaimed_types(dictionary));
     Ok(Generated { code, warnings })
 }
 
@@ -301,7 +302,37 @@ class NewOrderSingle:
         return None if values is None else tuple(from_value(ExecInst, value) for value in values)
 "#;
         assert_eq!(generated.code, expected);
-        assert!(generated.warnings.is_empty());
+        assert_eq!(
+            generated.warnings,
+            [Warning::UnclaimedType {
+                field: "Price".to_owned(),
+                data_type: DataType::Other("PRICE".to_owned()),
+            }]
+        );
+    }
+
+    #[test]
+    fn an_unclaimed_type_warns_once_per_field_read() {
+        let quantity = || DataType::Other("QUANTITY".to_owned());
+        let generated = generated(
+            vec![
+                message("NewOrderSingle", "D", vec![field_ref(319)]),
+                message("ExecutionReport", "8", vec![field_ref(319)]),
+            ],
+            vec![
+                field("RatioQty", 319, quantity(), &[]),
+                field("Unread", 9000, quantity(), &[]),
+            ],
+            vec![],
+        );
+
+        assert_eq!(
+            generated.warnings,
+            [Warning::UnclaimedType {
+                field: "RatioQty".to_owned(),
+                data_type: quantity(),
+            }]
+        );
     }
 
     #[test]
@@ -413,6 +444,37 @@ class NewOrderSingle:
                 .code
                 .contains("\nfrom datetime import date, datetime, time\n")
         );
+    }
+
+    #[test]
+    fn a_multiple_value_field_without_values_reads_text_values() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(1035)])],
+            vec![field(
+                "DeskOrderHandlingInst",
+                1035,
+                DataType::MultipleStringValue,
+                &[],
+            )],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def desk_order_handling_inst(self) -> tuple[str, ...] | None:\n        return self._raw.get_multiple_values(1035)\n"
+        ));
+    }
+
+    #[test]
+    fn a_data_field_reads_as_bytes() {
+        let generated = generated(
+            vec![message("Logon", "A", vec![field_ref(96)])],
+            vec![field("RawData", 96, DataType::Data, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def raw_data(self) -> bytes | None:\n        return self._raw.get(96)\n"
+        ));
     }
 
     #[test]

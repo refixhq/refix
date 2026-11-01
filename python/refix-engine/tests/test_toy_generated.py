@@ -84,6 +84,9 @@ class TestEnums:
             Unrecognized("Z"),
         )
 
+    def test_a_multiple_value_field_without_listed_values_reads_text(self):
+        assert order("35=D|1035=ADD AON|").desk_order_handling_inst == ("ADD", "AON")
+
     def test_badly_spaced_multiple_values_raise(self):
         with pytest.raises(InvalidValueError) as excinfo:
             _ = order("35=D|18=1  6|").exec_inst
@@ -152,6 +155,7 @@ class TestHeader:
     def test_reads_the_header_and_trailer(self):
         new_order = order(
             "35=D|49=SENDER|56=TARGET|34=7|52=20261030-14:29:51.123456789|11=ORDER-1|"
+            "93=4|89=SIGN|"
         )
 
         assert new_order.header.begin_string == "FIX.4.4"
@@ -163,6 +167,7 @@ class TestHeader:
             2026, 10, 30, 14, 29, 51, 123456, tzinfo=UTC
         )
         assert new_order.header.sending_time_ns == 1_793_370_591_123_456_789
+        assert new_order.trailer.signature == b"SIGN"
         assert new_order.trailer.check_sum is not None
 
     def test_reads_a_header_without_the_message_type(self):

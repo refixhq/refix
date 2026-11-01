@@ -10,7 +10,7 @@ mod views;
 use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Generated;
-use crate::conversion::{Conversion, uses};
+use crate::conversion::{Conversion, unclaimed_types, uses};
 use crate::envelope::Envelope;
 use enums::emit_enum;
 pub use error::Error;
@@ -68,7 +68,10 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         imports.extend(["GroupTable", "Instances"]);
     }
     if uses(dictionary, |conversion| {
-        conversion == Conversion::MultipleValues
+        matches!(
+            conversion,
+            Conversion::MultipleValues | Conversion::MultipleStr
+        )
     }) {
         imports.push("MultipleValues");
     }
@@ -93,6 +96,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     let imports = format!("use refix_message::{{{}}};", imports.join(", "));
     let code = format!("{header}\n{imports}\n\n{sections}");
 
+    warnings.extend(unclaimed_types(dictionary));
     Ok(Generated { code, warnings })
 }
 
@@ -247,9 +251,14 @@ impl NewOrderSingle {
 }
 "#;
 
+        let generated = generate(&spec.resolve().unwrap(), "toy.xml").unwrap();
+        assert_eq!(generated.code, expected);
         assert_eq!(
-            generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code,
-            expected
+            generated.warnings,
+            [Warning::UnclaimedType {
+                field: "Price".to_owned(),
+                data_type: DataType::Other("PRICE".to_owned()),
+            }]
         );
     }
 
@@ -329,6 +338,10 @@ impl NewOrderSingle {
             (
                 field("TransactTime", 60, DataType::UtcTimestamp),
                 "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag, UtcTimestamp};",
+            ),
+            (
+                field("DeskOrderHandlingInst", 1035, DataType::MultipleStringValue),
+                "use refix_message::{InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};",
             ),
         ] {
             let reads = spec_of(

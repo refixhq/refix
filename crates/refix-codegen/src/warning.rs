@@ -1,4 +1,4 @@
-use refix_dictionary::MemberContext;
+use refix_dictionary::{DataType, MemberContext};
 
 use crate::NameClash;
 
@@ -9,6 +9,8 @@ pub enum Warning {
     UnsupportedGroup { context: MemberContext },
     /// The second owner of a clashing name, given `name` in its place.
     Renamed { clash: Box<NameClash>, name: String },
+    /// A field read as raw bytes, as the generator does not interpret its type.
+    UnclaimedType { field: String, data_type: DataType },
 }
 
 impl std::fmt::Display for Warning {
@@ -22,6 +24,11 @@ impl std::fmt::Display for Warning {
                 "`{}` is taken by {}, so {} is named `{name}`",
                 clash.name, clash.first, clash.second
             ),
+            Warning::UnclaimedType { field, data_type } => write!(
+                f,
+                "field '{field}' has type {data_type}, which is not interpreted, so it reads as \
+                 raw bytes"
+            ),
         }
     }
 }
@@ -30,6 +37,7 @@ impl std::fmt::Display for Warning {
 mod tests {
     use super::Warning;
     use crate::{NameClash, Owner};
+    use refix_dictionary::DataType;
 
     #[test]
     fn a_rename_names_both_owners_and_the_new_name() {
@@ -45,6 +53,18 @@ mod tests {
             warning.to_string(),
             "`SecurityStatus` is taken by message 'SecurityStatus', so the enum of field \
              'SecurityStatus' is named `SecurityStatusEnum`"
+        );
+    }
+
+    #[test]
+    fn an_unclaimed_type_names_the_field_and_its_type() {
+        let warning = Warning::UnclaimedType {
+            field: "RatioQty".to_owned(),
+            data_type: DataType::Other("QUANTITY".to_owned()),
+        };
+        assert_eq!(
+            warning.to_string(),
+            "field 'RatioQty' has type QUANTITY, which is not interpreted, so it reads as raw bytes"
         );
     }
 }

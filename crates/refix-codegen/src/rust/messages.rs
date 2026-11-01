@@ -147,7 +147,10 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
                 "    pub fn {name}(&self) -> Result<Option<MultipleValues<{type_lifetime}, {type_name}<{type_lifetime}>>>, InvalidValue> {{\n        self.0.get_multiple_values(Tag({tag}))\n    }}\n"
             )
         }
-        Conversion::Raw => format!(
+        Conversion::MultipleStr => format!(
+            "    pub fn {name}(&self) -> Result<Option<MultipleValues<{type_lifetime}, {reference}str>>, InvalidValue> {{\n        self.0.get_multiple_values(Tag({tag}))\n    }}\n"
+        ),
+        Conversion::Bytes | Conversion::Raw => format!(
             "    pub fn {name}(&self) -> Option<{reference}[u8]> {{\n        self.0.get(Tag({tag}))\n    }}\n"
         ),
     }
@@ -270,6 +273,14 @@ mod tests {
     }
 
     #[test]
+    fn a_data_field_reads_as_bytes_borrowed_for_the_scope() {
+        assert_eq!(
+            scope_signature(&field("Signature", 89, DataType::Data)),
+            "pub fn signature(&self) -> Option<&'a [u8]> {"
+        );
+    }
+
+    #[test]
     fn a_scope_raw_value_borrows_for_the_scope() {
         let price = field("Price", 44, DataType::Other("PRICE".to_owned()));
         assert_eq!(
@@ -325,11 +336,11 @@ mod tests {
     }
 
     #[test]
-    fn a_multiple_value_field_without_values_stays_raw() {
+    fn a_multiple_value_field_without_values_reads_text_values() {
         let exec_inst = field("ExecInst", 18, DataType::MultipleStringValue);
         assert_eq!(
             scope_signature(&exec_inst),
-            "pub fn exec_inst_raw(&self) -> Option<&'a [u8]> {"
+            "pub fn exec_inst(&self) -> Result<Option<MultipleValues<'a, &'a str>>, InvalidValue> {"
         );
     }
 

@@ -1,5 +1,6 @@
 use refix_dictionary::{DataType, Dictionary, Field, dictionary};
 
+use crate::Warning;
 use crate::groups::is_generated;
 
 /// How generated code reads a field's value.
@@ -27,6 +28,10 @@ pub(crate) enum Conversion {
     IntEnum,
     /// Space-separated enum values, with `get_multiple_values`.
     MultipleValues,
+    /// Space-separated text values, with `get_multiple_values`.
+    MultipleStr,
+    /// Bytes as the type declares them, with `get`.
+    Bytes,
     /// The bytes, under a `_raw` name.
     Raw,
 }
@@ -54,6 +59,7 @@ impl Conversion {
             | DataType::Language
             | DataType::Xid
             | DataType::XidRef => Self::Str,
+            _ if data_type.is_multiple_value() => Self::MultipleStr,
             _ if data_type.is_int_based() => Self::Int,
             DataType::Boolean => Self::Bool,
             _ if data_type.is_float_based() => Self::Decimal,
@@ -61,6 +67,7 @@ impl Conversion {
             DataType::MonthYear => Self::MonthYear,
             DataType::UtcTimeOnly => Self::Time,
             DataType::UtcTimestamp => Self::UtcTimestamp,
+            DataType::Data | DataType::XmlData => Self::Bytes,
             _ => Self::Raw,
         }
     }
@@ -74,21 +81,42 @@ impl Conversion {
 /// Whether an accessor generated from `dictionary` reads a field whose
 /// conversion is `wanted`.
 pub(crate) fn uses(dictionary: &Dictionary, wanted: impl Fn(Conversion) -> bool + Copy) -> bool {
-    uses_in(dictionary.header().chain(dictionary.trailer()), wanted)
-        || dictionary
-            .messages()
-            .any(|message| uses_in(message.members(), wanted))
+    reads(dictionary, |field| wanted(Conversion::of(field)))
 }
 
-/// Whether an accessor generated for `members` reads a field whose
-/// conversion is `wanted`, inside group instances too.
-fn uses_in<'a>(
+/// A warning for each field an accessor generated from `dictionary` reads raw,
+/// in the dictionary's order.
+pub(crate) fn unclaimed_types(dictionary: &Dictionary) -> impl Iterator<Item = Warning> + '_ {
+    dictionary
+        .fields()
+        .iter()
+        .filter(|field| Conversion::of(field) == Conversion::Raw)
+        .filter(|field| reads(dictionary, |read| read.tag == field.tag))
+        .map(|field| Warning::UnclaimedType {
+            field: field.name.clone(),
+            data_type: field.data_type.clone(),
+        })
+}
+
+/// Whether an accessor generated from `dictionary` reads a `wanted` field.
+fn reads(dictionary: &Dictionary, wanted: impl Fn(&Field) -> bool + Copy) -> bool {
+    reads_in(dictionary.header().chain(dictionary.trailer()), wanted)
+        || dictionary
+            .messages()
+            .any(|message| reads_in(message.members(), wanted))
+}
+
+/// Whether an accessor generated for `members` reads a `wanted` field, inside
+/// group instances too.
+fn reads_in<'a>(
     mut members: impl Iterator<Item = dictionary::Member<'a>>,
-    wanted: impl Fn(Conversion) -> bool + Copy,
+    wanted: impl Fn(&Field) -> bool + Copy,
 ) -> bool {
     members.any(|member| match member {
-        dictionary::Member::Field { field, .. } => wanted(Conversion::of(field)),
-        dictionary::Member::Group(group) => is_generated(group) && uses_in(group.members(), wanted),
+        dictionary::Member::Field { field, .. } => wanted(field),
+        dictionary::Member::Group(group) => {
+            is_generated(group) && reads_in(group.members(), wanted)
+        }
     })
 }
 
@@ -209,6 +237,12 @@ mod tests {
     }
 
     #[test]
+    fn data_and_xml_data_read_as_bytes() {
+        assert_eq!(Conversion::of(&field(DataType::Data)), Conversion::Bytes);
+        assert_eq!(Conversion::of(&field(DataType::XmlData)), Conversion::Bytes);
+    }
+
+    #[test]
     fn listed_values_read_through_an_enum() {
         assert_eq!(
             Conversion::of(&with_values(DataType::Char)),
@@ -225,12 +259,23 @@ mod tests {
     }
 
     #[test]
-    fn other_types_read_raw() {
+    fn multiple_values_without_a_list_read_as_text_values() {
+        assert_eq!(
+            Conversion::of(&field(DataType::MultipleCharValue)),
+            Conversion::MultipleStr
+        );
         assert_eq!(
             Conversion::of(&field(DataType::MultipleStringValue)),
+            Conversion::MultipleStr
+        );
+    }
+
+    #[test]
+    fn other_types_read_raw() {
+        assert_eq!(
+            Conversion::of(&field(DataType::TzTimestamp)),
             Conversion::Raw
         );
-        assert_eq!(Conversion::of(&field(DataType::Data)), Conversion::Raw);
         assert_eq!(
             Conversion::of(&field(DataType::Other("CUSTOM".to_owned()))),
             Conversion::Raw
@@ -243,6 +288,7 @@ mod tests {
         assert!(Conversion::IntEnum.is_enum());
         assert!(Conversion::MultipleValues.is_enum());
         assert!(!Conversion::Str.is_enum());
+        assert!(!Conversion::MultipleStr.is_enum());
         assert!(!Conversion::Int.is_enum());
         assert!(!Conversion::Bool.is_enum());
         assert!(!Conversion::Decimal.is_enum());
@@ -250,6 +296,7 @@ mod tests {
         assert!(!Conversion::MonthYear.is_enum());
         assert!(!Conversion::Time.is_enum());
         assert!(!Conversion::UtcTimestamp.is_enum());
+        assert!(!Conversion::Bytes.is_enum());
         assert!(!Conversion::Raw.is_enum());
     }
 }
