@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - read FIX dates ([#97](https://github.com/refixhq/refix/pull/97))
 - read FIX timestamps ([#96](https://github.com/refixhq/refix/pull/96))
 
+### Fixed
+
+- declare the minimum versions of the conversion crates ([#115](https://github.com/refixhq/refix/pull/115))
+
 ## [0.3.3](https://github.com/refixhq/refix/compare/refix-message-v0.3.2...refix-message-v0.3.3) - 2026-10-17
 
 ### Added

@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - read DATA as bytes and warn on uninterpreted types in generated code ([#108](https://github.com/refixhq/refix/pull/108))
 - model every QuickFIX data type ([#95](https://github.com/refixhq/refix/pull/95))
 
+### Changed
+
+- `DataType` has a variant for every QuickFIX type, so types such as `PRICE` and `UTCTIMESTAMP` no longer parse as `Other`
+
 ## [0.1.1](https://github.com/refixhq/refix/compare/refix-dictionary-v0.1.0...refix-dictionary-v0.1.1) - 2026-10-10
 
 ### Other

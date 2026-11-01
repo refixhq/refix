@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - read string subtypes, dates and MonthYear in generated code ([#105](https://github.com/refixhq/refix/pull/105))
 - read float fields as decimals in generated code ([#104](https://github.com/refixhq/refix/pull/104))
 
+### Changed
+
+- fields read as their types, not raw bytes, so 278 accessors lose their `_raw` suffix in Rust and Python: `price_raw` is now `price`, returning a `Decimal`, and `yield_raw` is `r#yield` in Rust and `yield_` in Python
+- the 24 BOOLEAN fields that list `Y` and `N`, such as `poss_dup_flag`, read as `bool`
+
+### Removed
+
+- the enums of those 24 fields: `AggregatedBook`, `DueToRelated`, `ExchangeForPhysical`, `ForexReq`, `GapFillFlag`, `IOINaturalFlag`, `InViewOfCommon`, `LastFragment`, `LegalConfirm`, `LocateReqd`, `MDImplicitDelete`, `NotifyBrokerOfCredit`, `OddLot`, `PossDupFlag`, `PossResend`, `PreviouslyReported`, `PublishTrdIndicator`, `ReportToExch`, `ResetSeqNumFlag`, `SolicitedFlag`, `TestMessageIndicator`, `TradedFlatSwitch`, `UnsolicitedIndicator`, `WorkingIndicator`
+
 ## [0.3.0](https://github.com/refixhq/refix/compare/refix-fix44-v0.2.0...refix-fix44-v0.3.0) - 2026-10-11
 
 ### Added

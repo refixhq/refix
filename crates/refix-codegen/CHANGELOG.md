@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - read string subtypes, dates and MonthYear in generated code ([#105](https://github.com/refixhq/refix/pull/105))
 - read float fields as decimals in generated code ([#104](https://github.com/refixhq/refix/pull/104))
 
+### Changed
+
+- generated accessors read each field as its type under its plain name, and only fields of a type the generator doesn't interpret keep the `_raw` suffix, each with a `Warning::UnclaimedType`
+- BOOLEAN fields read as `bool`, and their listed `Y` and `N` values no longer generate an enum
+- `Owner` gains `Nanos` and `Warning` gains `UnclaimedType`, which breaks exhaustive matches
+
 ## [0.1.2](https://github.com/refixhq/refix/compare/refix-codegen-v0.1.1...refix-codegen-v0.1.2) - 2026-10-11
 
 ### Added
