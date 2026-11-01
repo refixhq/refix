@@ -2,6 +2,8 @@
 mod chrono;
 #[cfg(feature = "jiff-02")]
 mod jiff;
+#[cfg(feature = "rust_decimal-1")]
+mod rust_decimal;
 #[cfg(feature = "time-03")]
 mod time;
 

@@ -15,6 +15,7 @@ categories.workspace = true
 bytes = { workspace = true }
 chrono-04 = { workspace = true, optional = true }
 jiff-02 = { workspace = true, optional = true }
+rust_decimal-1 = { workspace = true, optional = true }
 time-03 = { workspace = true, optional = true }
 
 [package.metadata.docs.rs]
