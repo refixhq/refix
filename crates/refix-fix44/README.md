@@ -5,15 +5,17 @@ generated from QuickFIX's `FIX44.xml`.
 
 ```rust
 use bytes::Bytes;
-use refix_fix44::{NewOrderSingle, OrdType, Side};
+use refix_fix44::{Message, OrdType, Side};
 use refix_message::{Decimal, TimePrecision, Tokenizer, UtcTimestamp};
 
 let frame = "8=FIX.4.4|9=118|35=D|49=SENDER|56=TARGET|34=1|52=20261008-09:30:00|\
              11=ORDER-1|55=ACME|54=1|60=20261008-09:30:00|40=2|44=101.25|38=100|10=194|";
-let raw = Tokenizer::default()
-    .tokenize(Bytes::from(frame.replace('|', "\x01")))
-    .unwrap();
-let order = NewOrderSingle::from_raw(raw);
+let raw = Tokenizer::default ()
+.tokenize(Bytes::from(frame.replace('|', "\x01")))
+.unwrap();
+let Message::NewOrderSingle(order) = Message::from_raw(raw) else {
+panic ! ("expected a NewOrderSingle");
+};
 
 assert_eq!(order.header().sender_comp_id(), Ok(Some("SENDER")));
 assert_eq!(order.header().msg_seq_num(), Ok(Some(1)));
@@ -28,8 +30,8 @@ assert_eq!(
 );
 ```
 
-Strings, integers, decimals, booleans, dates, times, timestamps, enums and
-repeating groups are typed, and every message reaches its header and trailer.
+`Message::from_raw` reads each message as the type its MsgType names, and any
+other as `Message::Unrecognized`.
 
 ## License
 
