@@ -42,6 +42,7 @@ impl<'a> Resolver<'a> {
     fn new(spec: &'a Spec) -> Result<Self, Error> {
         check_int_values(&spec.fields)?;
         check_unique_codes(&spec.fields)?;
+        check_unique_msg_types(&spec.messages)?;
         Ok(Self {
             spec,
             fields_by_tag: index_fields(&spec.fields)?,
@@ -269,6 +270,21 @@ fn check_unique_codes(fields: &[Field]) -> Result<(), Error> {
                     second: value.value.clone(),
                 });
             }
+        }
+    }
+    Ok(())
+}
+
+/// Checks that no two messages declare the same MsgType.
+fn check_unique_msg_types(messages: &[spec::Message]) -> Result<(), Error> {
+    let mut names = HashMap::new();
+    for message in messages {
+        if let Some(first) = names.insert(message.msg_type.as_str(), &message.name) {
+            return Err(Error::DuplicateMsgType {
+                msg_type: message.msg_type.clone(),
+                first: first.clone(),
+                second: message.name.clone(),
+            });
         }
     }
     Ok(())

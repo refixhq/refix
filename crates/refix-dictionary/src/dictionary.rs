@@ -724,6 +724,27 @@ mod tests {
     }
 
     #[test]
+    fn messages_sharing_a_msg_type_are_an_error() {
+        let spec = spec_of(
+            vec![],
+            vec![],
+            vec![
+                message("NewOrderSingle", vec![]),
+                message("NewOrderCross", vec![]),
+            ],
+        );
+
+        assert_eq!(
+            spec.resolve().unwrap_err(),
+            Error::DuplicateMsgType {
+                msg_type: "D".to_owned(),
+                first: "NewOrderSingle".to_owned(),
+                second: "NewOrderCross".to_owned(),
+            }
+        );
+    }
+
+    #[test]
     fn duplicate_field_tags_are_an_error() {
         let spec = spec_of(
             vec![field("ClOrdID", 11), field("OrigClOrdID", 11)],

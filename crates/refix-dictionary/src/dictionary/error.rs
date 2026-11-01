@@ -23,6 +23,12 @@ pub enum Error {
     DuplicateComponent {
         component: String,
     },
+    /// Two messages declaring the same MsgType.
+    DuplicateMsgType {
+        msg_type: String,
+        first: String,
+        second: String,
+    },
     DuplicateField {
         tag: Tag,
         first: MemberContext,
@@ -73,6 +79,16 @@ impl fmt::Display for Error {
             Error::DuplicateComponent { component } => {
                 write!(f, "component '{component}' is defined more than once")
             }
+            Error::DuplicateMsgType {
+                msg_type,
+                first,
+                second,
+            } => {
+                write!(
+                    f,
+                    "messages '{first}' and '{second}' share MsgType '{msg_type}'"
+                )
+            }
             Error::DuplicateField { tag, first, second } if first == second => {
                 write!(f, "{first} contains tag {tag} more than once")
             }
@@ -113,6 +129,20 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "component 'Top' contains tag 58 more than once"
+        );
+    }
+
+    #[test]
+    fn a_shared_msg_type_names_both_messages() {
+        let error = Error::DuplicateMsgType {
+            msg_type: "D".to_owned(),
+            first: "NewOrderSingle".to_owned(),
+            second: "NewOrderCross".to_owned(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "messages 'NewOrderSingle' and 'NewOrderCross' share MsgType 'D'"
         );
     }
 
