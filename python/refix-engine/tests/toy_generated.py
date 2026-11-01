@@ -154,7 +154,7 @@ class Trailer:
         return self._raw.get_int(93)
 
     @cached_property
-    def signature_raw(self) -> bytes | None:
+    def signature(self) -> bytes | None:
         return self._raw.get(89)
 
     @cached_property

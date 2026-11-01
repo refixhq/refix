@@ -178,7 +178,7 @@ fn a_header_field_after_a_group_ends_it() {
 fn reads_the_header_and_trailer() {
     let raw = Tokenizer::default()
         .tokenize(frame(
-            "35=D|49=SENDER|56=TARGET|34=7|52=20261030-14:29:51.123456789|11=ORDER-1|",
+            "35=D|49=SENDER|56=TARGET|34=7|52=20261030-14:29:51.123456789|11=ORDER-1|93=4|89=SIGN|",
         ))
         .unwrap();
 
@@ -196,6 +196,7 @@ fn reads_the_header_and_trailer() {
             TimePrecision::NANOS
         )))
     );
+    assert_eq!(order.trailer().signature(), Some(b"SIGN".as_slice()));
     assert!(order.trailer().check_sum().unwrap().is_some());
 }
 

@@ -27,6 +27,8 @@ pub(crate) enum Conversion {
     IntEnum,
     /// Space-separated enum values, with `get_multiple_values`.
     MultipleValues,
+    /// Bytes as the type declares them, with `get`.
+    Bytes,
     /// The bytes, under a `_raw` name.
     Raw,
 }
@@ -61,6 +63,7 @@ impl Conversion {
             DataType::MonthYear => Self::MonthYear,
             DataType::UtcTimeOnly => Self::Time,
             DataType::UtcTimestamp => Self::UtcTimestamp,
+            DataType::Data | DataType::XmlData => Self::Bytes,
             _ => Self::Raw,
         }
     }
@@ -209,6 +212,12 @@ mod tests {
     }
 
     #[test]
+    fn data_and_xml_data_read_as_bytes() {
+        assert_eq!(Conversion::of(&field(DataType::Data)), Conversion::Bytes);
+        assert_eq!(Conversion::of(&field(DataType::XmlData)), Conversion::Bytes);
+    }
+
+    #[test]
     fn listed_values_read_through_an_enum() {
         assert_eq!(
             Conversion::of(&with_values(DataType::Char)),
@@ -230,7 +239,10 @@ mod tests {
             Conversion::of(&field(DataType::MultipleStringValue)),
             Conversion::Raw
         );
-        assert_eq!(Conversion::of(&field(DataType::Data)), Conversion::Raw);
+        assert_eq!(
+            Conversion::of(&field(DataType::TzTimestamp)),
+            Conversion::Raw
+        );
         assert_eq!(
             Conversion::of(&field(DataType::Other("CUSTOM".to_owned()))),
             Conversion::Raw
@@ -250,6 +262,7 @@ mod tests {
         assert!(!Conversion::MonthYear.is_enum());
         assert!(!Conversion::Time.is_enum());
         assert!(!Conversion::UtcTimestamp.is_enum());
+        assert!(!Conversion::Bytes.is_enum());
         assert!(!Conversion::Raw.is_enum());
     }
 }

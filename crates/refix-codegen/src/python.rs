@@ -416,6 +416,19 @@ class NewOrderSingle:
     }
 
     #[test]
+    fn a_data_field_reads_as_bytes() {
+        let generated = generated(
+            vec![message("Logon", "A", vec![field_ref(96)])],
+            vec![field("RawData", 96, DataType::Data, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def raw_data(self) -> bytes | None:\n        return self._raw.get(96)\n"
+        ));
+    }
+
+    #[test]
     fn a_month_year_reads_as_a_month_year() {
         let generated = generated(
             vec![message("NewOrderSingle", "D", vec![field_ref(200)])],

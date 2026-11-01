@@ -147,7 +147,7 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
                 "    pub fn {name}(&self) -> Result<Option<MultipleValues<{type_lifetime}, {type_name}<{type_lifetime}>>>, InvalidValue> {{\n        self.0.get_multiple_values(Tag({tag}))\n    }}\n"
             )
         }
-        Conversion::Raw => format!(
+        Conversion::Bytes | Conversion::Raw => format!(
             "    pub fn {name}(&self) -> Option<{reference}[u8]> {{\n        self.0.get(Tag({tag}))\n    }}\n"
         ),
     }
@@ -266,6 +266,14 @@ mod tests {
         assert_eq!(
             scope_signature(&field("TransactTime", 60, DataType::UtcTimestamp)),
             "pub fn transact_time(&self) -> Result<Option<UtcTimestamp>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn a_data_field_reads_as_bytes_borrowed_for_the_scope() {
+        assert_eq!(
+            scope_signature(&field("Signature", 89, DataType::Data)),
+            "pub fn signature(&self) -> Option<&'a [u8]> {"
         );
     }
 

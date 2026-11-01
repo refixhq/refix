@@ -112,7 +112,7 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
                 ),
             )
         }
-        Conversion::Raw => (
+        Conversion::Bytes | Conversion::Raw => (
             "bytes | None".to_owned(),
             format!("return {receiver}.get({tag})"),
         ),

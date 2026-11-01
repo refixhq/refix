@@ -264,7 +264,7 @@ impl<'a> Trailer<'a> {
         self.0.get_int(Tag(93))
     }
 
-    pub fn signature_raw(&self) -> Option<&'a [u8]> {
+    pub fn signature(&self) -> Option<&'a [u8]> {
         self.0.get(Tag(89))
     }
 
