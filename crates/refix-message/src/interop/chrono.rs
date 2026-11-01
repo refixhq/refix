@@ -1,6 +1,6 @@
 use super::exact_precision;
-use crate::{Date, OutOfRange, Time};
-use chrono_04::{Datelike, NaiveDate, NaiveTime, Timelike};
+use crate::{Date, OutOfRange, Time, UtcTimestamp};
+use chrono_04::{DateTime, Datelike, NaiveDate, NaiveTime, Timelike, Utc};
 
 impl From<Date> for NaiveDate {
     fn from(date: Date) -> Self {
@@ -37,6 +37,22 @@ impl From<NaiveTime> for Time {
         let nanos = i64::from(time.num_seconds_from_midnight()) * 1_000_000_000
             + i64::from(time.nanosecond());
         Time::new(nanos, exact_precision(nanos)).expect("a chrono time is within a day")
+    }
+}
+
+impl From<UtcTimestamp> for DateTime<Utc> {
+    fn from(timestamp: UtcTimestamp) -> Self {
+        DateTime::from_timestamp_nanos(timestamp.unix_nanos())
+    }
+}
+
+impl TryFrom<DateTime<Utc>> for UtcTimestamp {
+    type Error = OutOfRange;
+
+    /// A leap second counts as the first second of the next minute, as in a message.
+    fn try_from(timestamp: DateTime<Utc>) -> Result<Self, Self::Error> {
+        let nanos = timestamp.timestamp_nanos_opt().ok_or(OutOfRange)?;
+        Ok(UtcTimestamp::new(nanos, exact_precision(nanos)))
     }
 }
 
@@ -120,6 +136,66 @@ mod tests {
         fn reads_an_earlier_leap_second_as_the_next_minute() {
             let time = Time::from(naive_time(14, 29, 59, 1_500_000_000));
             assert_eq!(time.nanos_since_midnight(), 52_200_500_000_000);
+        }
+    }
+
+    mod timestamp {
+        use super::*;
+        use chrono_04::TimeDelta;
+
+        fn date_time(seconds: i64, nanos: u32) -> DateTime<Utc> {
+            DateTime::from_timestamp(seconds, nanos).unwrap()
+        }
+
+        #[test]
+        fn converts_to_chrono() {
+            let timestamp = UtcTimestamp::new(1_791_451_800_123_000_000, TimePrecision::MILLIS);
+            assert_eq!(
+                DateTime::<Utc>::from(timestamp),
+                date_time(1_791_451_800, 123_000_000)
+            );
+        }
+
+        #[test]
+        fn converts_from_chrono() {
+            let timestamp = UtcTimestamp::try_from(date_time(1_791_451_800, 123_000_000)).unwrap();
+            assert_eq!(timestamp.unix_nanos(), 1_791_451_800_123_000_000);
+            assert_eq!(timestamp.precision(), TimePrecision::MILLIS);
+        }
+
+        #[test]
+        fn round_trips_the_ends_of_an_i64() {
+            for nanos in [i64::MIN, i64::MAX] {
+                let timestamp = UtcTimestamp::new(nanos, TimePrecision::NANOS);
+                assert_eq!(
+                    UtcTimestamp::try_from(DateTime::<Utc>::from(timestamp)),
+                    Ok(timestamp)
+                );
+            }
+        }
+
+        #[test]
+        fn rejects_a_timestamp_beyond_an_i64_of_nanoseconds() {
+            let past_the_end = DateTime::from_timestamp_nanos(i64::MAX)
+                .checked_add_signed(TimeDelta::nanoseconds(1))
+                .unwrap();
+            for chrono in [
+                past_the_end,
+                DateTime::<Utc>::MIN_UTC,
+                DateTime::<Utc>::MAX_UTC,
+            ] {
+                assert_eq!(UtcTimestamp::try_from(chrono), Err(OutOfRange));
+            }
+        }
+
+        #[test]
+        fn reads_a_leap_second_as_the_next_day() {
+            let leap = naive_date(2016, 12, 31)
+                .and_hms_nano_opt(23, 59, 59, 1_500_000_000)
+                .unwrap()
+                .and_utc();
+            let timestamp = UtcTimestamp::try_from(leap).unwrap();
+            assert_eq!(timestamp.unix_nanos(), 1_483_228_800_500_000_000);
         }
     }
 }
