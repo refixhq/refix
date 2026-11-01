@@ -3,11 +3,20 @@ from decimal import Decimal
 from typing import assert_never
 
 import pytest
-from refix import MonthYear
+from refix import MonthYear, RawMessage
 from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
 from test_tokenizer import tokenize_body
-from toy_generated import ExecInst, Header, Logon, NewOrderSingle, OrdType, PartyRole
+from toy_generated import (
+    ExecInst,
+    Header,
+    Logon,
+    Message,
+    NewOrderSingle,
+    OrdType,
+    PartyRole,
+    from_raw,
+)
 
 
 def order(body: str) -> NewOrderSingle:
@@ -56,6 +65,36 @@ class TestReads:
         new_order = order("35=D|11=ORDER-1|")
 
         assert new_order.cl_ord_id is new_order.cl_ord_id
+
+
+class TestDispatch:
+    def test_reads_each_message_as_its_msg_type_names(self):
+        new_order = from_raw(tokenize_body("35=D|11=ORDER-1|"))
+
+        assert isinstance(new_order, NewOrderSingle)
+        assert new_order.cl_ord_id == "ORDER-1"
+        assert isinstance(from_raw(tokenize_body("35=A|")), Logon)
+
+    def test_an_unknown_msg_type_reads_as_the_raw_message(self):
+        raw = tokenize_body("35=ZZ|58=hello|")
+
+        assert from_raw(raw) is raw
+
+    def test_a_match_handles_every_message(self):
+        def describe(message: Message | RawMessage) -> str:
+            match message:
+                case NewOrderSingle():
+                    return "order"
+                case Logon():
+                    return "logon"
+                case RawMessage():
+                    return "unrecognized"
+                case _:
+                    assert_never(message)
+
+        assert describe(from_raw(tokenize_body("35=D|"))) == "order"
+        assert describe(from_raw(tokenize_body("35=A|"))) == "logon"
+        assert describe(from_raw(tokenize_body("35=ZZ|"))) == "unrecognized"
 
 
 class TestEnums:

@@ -280,3 +280,18 @@ class Logon:
     def msg_types(self) -> tuple[Logon.MsgTypes.Instance, ...]:
         scopes = self._raw.get_group(Logon.MsgTypes.TABLE, Logon.KNOWN_TAGS)
         return () if scopes is None else tuple(Logon.MsgTypes.Instance(scope) for scope in scopes)
+
+
+type Message = NewOrderSingle | Logon
+
+
+_MESSAGES: dict[bytes, type[Message]] = {
+    NewOrderSingle.MSG_TYPE: NewOrderSingle,
+    Logon.MSG_TYPE: Logon,
+}
+
+
+def from_raw(raw: RawMessage) -> Message | RawMessage:
+    msg_type = raw.get(35)
+    message = None if msg_type is None else _MESSAGES.get(msg_type)
+    return raw if message is None else message(raw)

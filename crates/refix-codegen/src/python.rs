@@ -1,3 +1,4 @@
+mod dispatch;
 mod enums;
 mod error;
 mod groups;
@@ -12,6 +13,7 @@ use refix_dictionary::{Dictionary, dictionary};
 use crate::Generated;
 use crate::conversion::{Conversion, unclaimed_types, uses};
 use crate::envelope::Envelope;
+use dispatch::emit_dispatch;
 use enums::emit_enum;
 pub use error::Error;
 use groups::{emit_group_class, shared_groups};
@@ -52,6 +54,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .chain(groups)
         .chain(views)
         .chain(messages)
+        .chain(emit_dispatch(dictionary))
         .collect::<Vec<String>>()
         .join("\n\n");
     let code = format!("{header}\n{sections}");
@@ -300,6 +303,20 @@ class NewOrderSingle:
     def exec_inst(self) -> tuple[ExecInst | Unrecognized[str], ...] | None:
         values = self._raw.get_multiple_values(18)
         return None if values is None else tuple(from_value(ExecInst, value) for value in values)
+
+
+type Message = NewOrderSingle
+
+
+_MESSAGES: dict[bytes, type[Message]] = {
+    NewOrderSingle.MSG_TYPE: NewOrderSingle,
+}
+
+
+def from_raw(raw: RawMessage) -> Message | RawMessage:
+    msg_type = raw.get(35)
+    message = None if msg_type is None else _MESSAGES.get(msg_type)
+    return raw if message is None else message(raw)
 "#;
         assert_eq!(generated.code, expected);
         assert_eq!(
@@ -309,6 +326,32 @@ class NewOrderSingle:
                 data_type: DataType::Other("PRICE".to_owned()),
             }]
         );
+    }
+
+    #[test]
+    fn a_dictionary_without_messages_has_no_dispatch() {
+        let code = generated(vec![], vec![], vec![]).code;
+
+        assert!(!code.contains("type Message"));
+        assert!(!code.contains("def from_raw"));
+    }
+
+    #[test]
+    fn a_long_message_alias_puts_a_class_per_line() {
+        let code = generated(
+            vec![
+                message("NetworkCounterpartySystemStatusRequest", "BC", vec![]),
+                message("NetworkCounterpartySystemStatusResponse", "BD", vec![]),
+                message("RegistrationInstructionsResponse", "p", vec![]),
+            ],
+            vec![],
+            vec![],
+        )
+        .code;
+
+        assert!(code.contains(
+            "type Message = (\n    NetworkCounterpartySystemStatusRequest\n    | NetworkCounterpartySystemStatusResponse\n    | RegistrationInstructionsResponse\n)\n"
+        ));
     }
 
     #[test]
@@ -641,6 +684,20 @@ class NewOrderSingle:
     def parties(self) -> tuple[Parties.Instance, ...]:
         scopes = self._raw.get_group(Parties.TABLE, NewOrderSingle.KNOWN_TAGS)
         return () if scopes is None else tuple(Parties.Instance(scope) for scope in scopes)
+
+
+type Message = NewOrderSingle
+
+
+_MESSAGES: dict[bytes, type[Message]] = {
+    NewOrderSingle.MSG_TYPE: NewOrderSingle,
+}
+
+
+def from_raw(raw: RawMessage) -> Message | RawMessage:
+    msg_type = raw.get(35)
+    message = None if msg_type is None else _MESSAGES.get(msg_type)
+    return raw if message is None else message(raw)
 "#;
         assert_eq!(generated.code, expected);
         assert!(generated.warnings.is_empty());

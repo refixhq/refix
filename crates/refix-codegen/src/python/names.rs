@@ -14,24 +14,28 @@ use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
 use crate::naming::group_source_name;
 
-/// The imports and builtins the generated module relies on.
+/// Names the generated module defines or relies on.
 const MODULE: &[&str] = &[
     "ClassVar",
     "Decimal",
     "GroupTable",
     "Header",
     "KnownTags",
+    "Message",
     "MonthYear",
     "RawMessage",
     "Trailer",
     "Unrecognized",
+    "_MESSAGES",
     "annotations",
     "bool",
     "bytes",
     "cached_property",
     "date",
     "datetime",
+    "dict",
     "enum",
+    "from_raw",
     "from_value",
     "int",
     "property",
@@ -39,6 +43,7 @@ const MODULE: &[&str] = &[
     "str",
     "time",
     "tuple",
+    "type",
 ];
 
 /// The members every message class defines, and the decorators its body
