@@ -46,14 +46,14 @@ check-cli:
 
 # Run the Rust test suite
 cargo-test:
-    cargo test
+    cargo test --all-features
 
 # Run all tests
 test: cargo-test pytest
 
 # Run the Rust test suite with coverage (lcov output for codecov)
 coverage-rust:
-    cargo llvm-cov --lcov --output-path target/lcov.info
+    cargo llvm-cov --all-features --lcov --output-path target/lcov.info
 
 # Run the Python test suite with coverage (xml output for codecov)
 coverage-python:
@@ -67,7 +67,7 @@ fmt:
 # Check formatting and lints without modifying anything
 lint:
     cargo fmt --all -- --check
-    cargo clippy --all-targets
+    cargo clippy --all-targets --all-features
     cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check
     cargo clippy --manifest-path fuzz/Cargo.toml --all-targets
     cd {{ py }} && uv run ruff format --check

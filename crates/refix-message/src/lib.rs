@@ -2,6 +2,7 @@
 
 pub mod framing;
 pub mod group;
+mod interop;
 mod length_tags;
 mod message;
 pub mod multiple_values;
@@ -20,4 +21,6 @@ pub use multiple_values::MultipleValues;
 pub use stream::MessageStream;
 pub use tag::Tag;
 pub use tokenizer::{TokenizeError, Tokenizer};
-pub use value::{Date, Decimal, InvalidValue, MonthYear, Time, TimePrecision, UtcTimestamp};
+pub use value::{
+    Date, Decimal, InvalidValue, MonthYear, OutOfRange, Time, TimePrecision, UtcTimestamp,
+};

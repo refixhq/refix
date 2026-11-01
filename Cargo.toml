@@ -26,6 +26,7 @@ categories = ["encoding", "parsing", "finance"]
 [workspace.dependencies]
 bytes = "1.12.1"
 clap = { version = "4.6.5", features = ["derive"] }
+jiff-02 = { package = "jiff", version = "0.2.38", default-features = false }
 pyo3 = "0.29.0"
 # Major and minor only, so a patch release doesn't re-release dependents.
 refix-codegen = { version = "0.1", path = "crates/refix-codegen" }

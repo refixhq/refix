@@ -13,3 +13,4 @@ categories.workspace = true
 
 [dependencies]
 bytes = { workspace = true }
+jiff-02 = { workspace = true, optional = true }
