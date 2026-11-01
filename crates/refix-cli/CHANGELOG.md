@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/refixhq/refix/compare/refix-cli-v0.1.2...refix-cli-v0.1.3) - 2026-11-01
+
+### Changed
+
+- generates typed accessors with refix-codegen 0.2, so regenerating renames accessors as its changelog lists, and warns about each field it reads raw
+
 ## [0.1.2](https://github.com/refixhq/refix/compare/refix-cli-v0.1.1...refix-cli-v0.1.2) - 2026-10-11
 
 ### Added

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4](https://github.com/refixhq/refix/compare/refix-message-v0.3.3...refix-message-v0.3.4) - 2026-11-01
+
+### Added
+
+- convert decimals to and from bigdecimal ([#114](https://github.com/refixhq/refix/pull/114))
+- convert decimals to and from rust_decimal ([#113](https://github.com/refixhq/refix/pull/113))
+- convert dates, times and timestamps to and from time ([#112](https://github.com/refixhq/refix/pull/112))
+- convert dates, times and timestamps to and from chrono ([#111](https://github.com/refixhq/refix/pull/111))
+- convert dates, times and timestamps to and from jiff ([#110](https://github.com/refixhq/refix/pull/110))
+- split timestamps into dates and times ([#102](https://github.com/refixhq/refix/pull/102))
+- read FIX MonthYear fields ([#100](https://github.com/refixhq/refix/pull/100))
+- read FIX booleans ([#99](https://github.com/refixhq/refix/pull/99))
+- read FIX times ([#98](https://github.com/refixhq/refix/pull/98))
+- read FIX dates ([#97](https://github.com/refixhq/refix/pull/97))
+- read FIX timestamps ([#96](https://github.com/refixhq/refix/pull/96))
+
+### Fixed
+
+- declare the minimum versions of the conversion crates ([#115](https://github.com/refixhq/refix/pull/115))
+
 ## [0.3.3](https://github.com/refixhq/refix/compare/refix-message-v0.3.2...refix-message-v0.3.3) - 2026-10-17
 
 ### Added
