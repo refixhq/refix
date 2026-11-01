@@ -26,6 +26,10 @@ fn main() {
 `Tokenizer::tokenize` reads a single frame. Typed messages are generated on top of it: `refix-fix44` for FIX 4.4, or
 `refix-cli` for your own dictionary.
 
+## Features
+
+`jiff-02` converts `Date`, `Time` and `UtcTimestamp` to and from jiff 0.2.
+
 ## License
 
 Licensed under either of Apache License, Version 2.0 or MIT license at your option.
