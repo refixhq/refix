@@ -35,3 +35,4 @@ refix-dictionary = { version = "0.1", path = "crates/refix-dictionary" }
 refix-message = { version = "0.3", path = "crates/refix-message" }
 roxmltree = "0.21.0"
 serde = "1.0.229"
+time-03 = { package = "time", version = "0.3.55", default-features = false }
