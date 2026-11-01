@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import assert_never
 
@@ -17,7 +17,8 @@ def order(body: str) -> NewOrderSingle:
 class TestReads:
     def test_typed_reads_over_a_tokenized_frame(self):
         new_order = order(
-            "35=D|11=ORDER-1|38=200|44=101.5|64=20261103|200=202612|114=Y|40=1|"
+            "35=D|11=ORDER-1|38=200|44=101.5|64=20261103|200=202612|114=Y|"
+            "273=14:29:51.123456789|40=1|"
         )
 
         assert NewOrderSingle.MSG_TYPE == b"D"
@@ -28,6 +29,8 @@ class TestReads:
         assert new_order.settl_date == date(2026, 11, 3)
         assert new_order.maturity_month_year == MonthYear(2026, 12)
         assert new_order.locate_reqd is True
+        assert new_order.md_entry_time == time(14, 29, 51, 123456)
+        assert new_order.md_entry_time_ns == 52_191_123_456_789
         assert new_order.ord_type is OrdType.MARKET
 
     def test_an_absent_field_reads_as_none(self):
@@ -38,6 +41,8 @@ class TestReads:
         assert new_order.settl_date is None
         assert new_order.maturity_month_year is None
         assert new_order.locate_reqd is None
+        assert new_order.md_entry_time is None
+        assert new_order.md_entry_time_ns is None
         assert new_order.ord_type is None
         assert new_order.exec_inst is None
 
@@ -145,13 +150,19 @@ class TestGroups:
 
 class TestHeader:
     def test_reads_the_header_and_trailer(self):
-        new_order = order("35=D|49=SENDER|56=TARGET|34=7|11=ORDER-1|")
+        new_order = order(
+            "35=D|49=SENDER|56=TARGET|34=7|52=20261030-14:29:51.123456789|11=ORDER-1|"
+        )
 
         assert new_order.header.begin_string == "FIX.4.4"
         assert new_order.header.msg_seq_num == 7
         assert new_order.header.msg_type == "D"
         assert new_order.header.sender_comp_id == "SENDER"
         assert new_order.header.target_comp_id == "TARGET"
+        assert new_order.header.sending_time == datetime(
+            2026, 10, 30, 14, 29, 51, 123456, tzinfo=UTC
+        )
+        assert new_order.header.sending_time_ns == 1_793_370_591_123_456_789
         assert new_order.trailer.check_sum is not None
 
     def test_reads_a_header_without_the_message_type(self):

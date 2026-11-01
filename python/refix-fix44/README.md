@@ -23,12 +23,17 @@ generated from QuickFIX's `FIX44.xml`.
 <OrdType.LIMIT: '2'>
 >>> order.price
 Decimal('101.25')
+>>> order.transact_time
+datetime.datetime(2026, 10, 8, 9, 30, tzinfo=datetime.timezone.utc)
+>>> order.transact_time_ns
+1791451800000000000
 
 ```
 
-Strings, integers, decimals, dates, booleans, enums and repeating groups are
-typed, and every message reaches its header and trailer. Timestamps read as
-raw bytes, as `transact_time_raw` does.
+Strings, integers, decimals, booleans, dates, times, timestamps, enums and
+repeating groups are typed, and every message reaches its header and trailer.
+Each time and timestamp also reads as exact nanoseconds, as `transact_time_ns`
+does.
 
 ## License
 

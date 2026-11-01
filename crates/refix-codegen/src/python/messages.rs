@@ -4,6 +4,7 @@ use super::enums::str_literal;
 use super::groups::{emit_group_class, emit_group_property, tags};
 use super::layout::{MAX_WIDTH, indent, tuple_lines};
 use super::names::Names;
+use super::naming::nanos_getter;
 use super::views::emit_view_property;
 use crate::conversion::Conversion;
 use crate::envelope::Envelope;
@@ -88,6 +89,14 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
             "MonthYear | None".to_owned(),
             format!("return {receiver}.get_month_year({tag})"),
         ),
+        Conversion::Time => (
+            "time | None".to_owned(),
+            format!("return {receiver}.get_time({tag})"),
+        ),
+        Conversion::UtcTimestamp => (
+            "datetime | None".to_owned(),
+            format!("return {receiver}.get_utc_timestamp({tag})"),
+        ),
         Conversion::StrEnum => {
             enum_property(names.enum_class(field), receiver, tag, "get_str", "str")
         }
@@ -108,7 +117,17 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
             format!("return {receiver}.get({tag})"),
         ),
     };
-    format!("    @cached_property\n    def {name}(self) -> {return_type}:\n        {body}\n")
+    let property =
+        format!("    @cached_property\n    def {name}(self) -> {return_type}:\n        {body}\n");
+    match nanos_getter(field) {
+        Some(getter) => {
+            let nanos = names.nanos_property(field);
+            format!(
+                "{property}\n    @cached_property\n    def {nanos}(self) -> int | None:\n        return {receiver}.{getter}({tag})\n"
+            )
+        }
+        None => property,
+    }
 }
 
 /// The return type and body of a property reading `tag` with `getter` and

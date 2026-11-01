@@ -6,7 +6,7 @@ generated from QuickFIX's `FIX44.xml`.
 ```rust
 use bytes::Bytes;
 use refix_fix44::{NewOrderSingle, OrdType, Side};
-use refix_message::{Decimal, Tokenizer};
+use refix_message::{Decimal, TimePrecision, Tokenizer, UtcTimestamp};
 
 let frame = "8=FIX.4.4|9=118|35=D|49=SENDER|56=TARGET|34=1|52=20261008-09:30:00|\
              11=ORDER-1|55=ACME|54=1|60=20261008-09:30:00|40=2|44=101.25|38=100|10=194|";
@@ -22,11 +22,14 @@ assert_eq!(order.symbol(), Ok(Some("ACME")));
 assert_eq!(order.side(), Ok(Some(Side::Buy)));
 assert_eq!(order.ord_type(), Ok(Some(OrdType::Limit)));
 assert_eq!(order.price(), Ok(Some(Decimal::new(10125, -2))));
+assert_eq!(
+    order.transact_time(),
+    Ok(Some(UtcTimestamp::new(1_791_451_800_000_000_000, TimePrecision::SECONDS)))
+);
 ```
 
-Strings, integers, decimals, dates, booleans, enums and repeating groups are
-typed, and every message reaches its header and trailer. Timestamps read as
-raw bytes, as `transact_time_raw()` does.
+Strings, integers, decimals, booleans, dates, times, timestamps, enums and
+repeating groups are typed, and every message reaches its header and trailer.
 
 ## License
 

@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 
 use super::Error;
-use super::naming::{group_property_name, member_name, numbered_member, property_name};
+use super::naming::{
+    group_property_name, member_name, nanos_getter, nanos_property_name, numbered_member,
+    property_name,
+};
 use crate::Warning;
 use crate::conversion::Conversion;
 use crate::envelope::Section;
@@ -27,12 +30,14 @@ const MODULE: &[&str] = &[
     "bytes",
     "cached_property",
     "date",
+    "datetime",
     "enum",
     "from_value",
     "int",
     "property",
     "refix",
     "str",
+    "time",
     "tuple",
 ];
 
@@ -74,6 +79,7 @@ const INSTANCE: &[&str] = &["__init__", "_scope", "cached_property", "property",
 pub(super) struct Names {
     enums: HashMap<Tag, EnumNames>,
     properties: HashMap<Tag, String>,
+    nanos_properties: HashMap<Tag, String>,
     groups: HashMap<MemberContext, GroupNames>,
 }
 
@@ -96,6 +102,7 @@ impl Names {
         let mut names = Names {
             enums: HashMap::new(),
             properties: HashMap::new(),
+            nanos_properties: HashMap::new(),
             groups: HashMap::new(),
         };
         let mut module = Namespace::with_generated(MODULE);
@@ -217,6 +224,11 @@ impl Names {
                     let name = property_name(field);
                     namespace.claim(&name, Owner::Field(field.name.clone()))?;
                     self.properties.insert(field.tag, name);
+                    if nanos_getter(field).is_some() {
+                        let name = nanos_property_name(field);
+                        namespace.claim(&name, Owner::Nanos(field.name.clone()))?;
+                        self.nanos_properties.insert(field.tag, name);
+                    }
                 }
                 dictionary::Member::Group(group) if is_generated(group) => {
                     namespace.claim(
@@ -243,6 +255,11 @@ impl Names {
     /// The property reading a field.
     pub(super) fn property(&self, field: &Field) -> &str {
         &self.properties[&field.tag]
+    }
+
+    /// The property reading a field's nanoseconds.
+    pub(super) fn nanos_property(&self, field: &Field) -> &str {
+        &self.nanos_properties[&field.tag]
     }
 
     /// A group's class.
@@ -479,6 +496,21 @@ mod tests {
                 name: "order_qty".to_owned(),
                 first: Owner::Field("OrderQty".to_owned()),
                 second: Owner::Field("OrderQTY".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_field_named_like_a_nanosecond_property_clashes() {
+        assert_eq!(
+            clash(vec![
+                field("MDEntryTime", 273, DataType::UtcTimeOnly),
+                field("MDEntryTimeNs", 9000, DataType::Int),
+            ]),
+            NameClash {
+                name: "md_entry_time_ns".to_owned(),
+                first: Owner::Nanos("MDEntryTime".to_owned()),
+                second: Owner::Field("MDEntryTimeNs".to_owned()),
             }
         );
     }

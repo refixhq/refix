@@ -76,6 +76,10 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
     let reads_decimals = uses(dictionary, |conversion| conversion == Conversion::Decimal);
     let reads_dates = uses(dictionary, |conversion| conversion == Conversion::Date);
     let reads_month_years = uses(dictionary, |conversion| conversion == Conversion::MonthYear);
+    let reads_times = uses(dictionary, |conversion| conversion == Conversion::Time);
+    let reads_timestamps = uses(dictionary, |conversion| {
+        conversion == Conversion::UtcTimestamp
+    });
 
     let mut blocks = Vec::new();
     if has_classes {
@@ -85,8 +89,19 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
     if has_enums {
         standard.push("import enum\n");
     }
+    let mut datetime_names = Vec::new();
     if reads_dates {
-        standard.push("from datetime import date\n");
+        datetime_names.push("date");
+    }
+    if reads_timestamps {
+        datetime_names.push("datetime");
+    }
+    if reads_times {
+        datetime_names.push("time");
+    }
+    let from_datetime = format!("from datetime import {}\n", datetime_names.join(", "));
+    if !datetime_names.is_empty() {
+        standard.push(from_datetime.as_str());
     }
     if reads_decimals {
         standard.push("from decimal import Decimal\n");
@@ -347,6 +362,57 @@ class NewOrderSingle:
             "    def settl_date(self) -> date | None:\n        return self._raw.get_date(64)\n"
         ));
         assert!(generated.code.contains("\nfrom datetime import date\n"));
+    }
+
+    #[test]
+    fn a_utc_time_reads_as_a_time_beside_its_nanoseconds() {
+        let generated = generated(
+            vec![message("MarketDataSnapshot", "W", vec![field_ref(273)])],
+            vec![field("MDEntryTime", 273, DataType::UtcTimeOnly, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def md_entry_time(self) -> time | None:\n        return self._raw.get_time(273)\n\n    @cached_property\n    def md_entry_time_ns(self) -> int | None:\n        return self._raw.get_time_ns(273)\n"
+        ));
+        assert!(generated.code.contains("\nfrom datetime import time\n"));
+    }
+
+    #[test]
+    fn a_utc_timestamp_reads_as_a_datetime_beside_its_nanoseconds() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(60)])],
+            vec![field("TransactTime", 60, DataType::UtcTimestamp, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def transact_time(self) -> datetime | None:\n        return self._raw.get_utc_timestamp(60)\n\n    @cached_property\n    def transact_time_ns(self) -> int | None:\n        return self._raw.get_utc_timestamp_ns(60)\n"
+        ));
+        assert!(generated.code.contains("\nfrom datetime import datetime\n"));
+    }
+
+    #[test]
+    fn imports_dates_and_times_from_one_line() {
+        let generated = generated(
+            vec![message(
+                "MarketDataSnapshot",
+                "W",
+                vec![field_ref(272), field_ref(273), field_ref(60)],
+            )],
+            vec![
+                field("MDEntryDate", 272, DataType::UtcDateOnly, &[]),
+                field("MDEntryTime", 273, DataType::UtcTimeOnly, &[]),
+                field("TransactTime", 60, DataType::UtcTimestamp, &[]),
+            ],
+            vec![],
+        );
+
+        assert!(
+            generated
+                .code
+                .contains("\nfrom datetime import date, datetime, time\n")
+        );
     }
 
     #[test]

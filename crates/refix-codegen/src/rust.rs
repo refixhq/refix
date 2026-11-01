@@ -81,6 +81,14 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     if uses(dictionary, |conversion| conversion == Conversion::MonthYear) {
         imports.push("MonthYear");
     }
+    if uses(dictionary, |conversion| conversion == Conversion::Time) {
+        imports.push("Time");
+    }
+    if uses(dictionary, |conversion| {
+        conversion == Conversion::UtcTimestamp
+    }) {
+        imports.push("UtcTimestamp");
+    }
     imports.sort_unstable();
     let imports = format!("use refix_message::{{{}}};", imports.join(", "));
     let code = format!("{header}\n{imports}\n\n{sections}");
@@ -313,6 +321,14 @@ impl NewOrderSingle {
             (
                 field("MaturityMonthYear", 200, DataType::MonthYear),
                 "use refix_message::{InvalidValue, KnownTags, MonthYear, RawMessage, Tag};",
+            ),
+            (
+                field("MDEntryTime", 273, DataType::UtcTimeOnly),
+                "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag, Time};",
+            ),
+            (
+                field("TransactTime", 60, DataType::UtcTimestamp),
+                "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag, UtcTimestamp};",
             ),
         ] {
             let reads = spec_of(

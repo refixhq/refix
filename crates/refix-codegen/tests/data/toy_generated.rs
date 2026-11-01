@@ -2,7 +2,7 @@
 #![cfg_attr(rustfmt, rustfmt::skip)]
 #![allow(clippy::module_inception)]
 
-use refix_message::{Date, Decimal, GroupTable, Instances, InvalidValue, KnownTags, MonthYear, MultipleValues, RawMessage, Tag};
+use refix_message::{Date, Decimal, GroupTable, Instances, InvalidValue, KnownTags, MonthYear, MultipleValues, RawMessage, Tag, Time, UtcTimestamp};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrdType<'a> {
@@ -203,8 +203,8 @@ impl<'a> Header<'a> {
         self.0.get_int(Tag(34))
     }
 
-    pub fn sending_time_raw(&self) -> Option<&'a [u8]> {
-        self.0.get(Tag(52))
+    pub fn sending_time(&self) -> Result<Option<UtcTimestamp>, InvalidValue> {
+        self.0.get_utc_timestamp(Tag(52))
     }
 
     pub fn hops(&self) -> Result<Instances<'a, header::hops::Instance<'a>>, InvalidValue> {
@@ -280,8 +280,8 @@ impl NewOrderSingle {
 
     pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
         Tag(8), Tag(9), Tag(10), Tag(11), Tag(18), Tag(34), Tag(35), Tag(38), Tag(40), Tag(44),
-        Tag(49), Tag(52), Tag(56), Tag(64), Tag(89), Tag(93), Tag(114), Tag(200), Tag(448),
-        Tag(452), Tag(453), Tag(523), Tag(627), Tag(628), Tag(802),
+        Tag(49), Tag(52), Tag(56), Tag(64), Tag(89), Tag(93), Tag(114), Tag(200), Tag(273),
+        Tag(448), Tag(452), Tag(453), Tag(523), Tag(627), Tag(628), Tag(802),
     ]);
 
     pub fn from_raw(raw: RawMessage) -> Self {
@@ -326,6 +326,10 @@ impl NewOrderSingle {
 
     pub fn locate_reqd(&self) -> Result<Option<bool>, InvalidValue> {
         self.0.get_bool(Tag(114))
+    }
+
+    pub fn md_entry_time(&self) -> Result<Option<Time>, InvalidValue> {
+        self.0.get_time(Tag(273))
     }
 
     pub fn ord_type(&self) -> Result<Option<OrdType<'_>>, InvalidValue> {
