@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4](https://github.com/refixhq/refix/compare/refix-v0.1.3...refix-v0.1.4) - 2026-11-01
+
+### Added
+
+- convert decimals to and from bigdecimal ([#114](https://github.com/refixhq/refix/pull/114))
+- convert decimals to and from rust_decimal ([#113](https://github.com/refixhq/refix/pull/113))
+- convert dates, times and timestamps to and from time ([#112](https://github.com/refixhq/refix/pull/112))
+- convert dates, times and timestamps to and from chrono ([#111](https://github.com/refixhq/refix/pull/111))
+- convert dates, times and timestamps to and from jiff ([#110](https://github.com/refixhq/refix/pull/110))
+
+### Fixed
+
+- declare the minimum versions of the conversion crates ([#115](https://github.com/refixhq/refix/pull/115))
+
 ## [0.1.3](https://github.com/refixhq/refix/compare/refix-v0.1.2...refix-v0.1.3) - 2026-10-11
 
 ### Added

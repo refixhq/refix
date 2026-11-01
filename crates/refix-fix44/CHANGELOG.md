@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/refixhq/refix/compare/refix-fix44-v0.3.0...refix-fix44-v0.4.0) - 2026-11-01
+
+### Added
+
+- read DATA as bytes and warn on uninterpreted types in generated code ([#108](https://github.com/refixhq/refix/pull/108))
+- read times and timestamps in generated code ([#107](https://github.com/refixhq/refix/pull/107))
+- read BOOLEAN fields as bool in generated code ([#106](https://github.com/refixhq/refix/pull/106))
+- read string subtypes, dates and MonthYear in generated code ([#105](https://github.com/refixhq/refix/pull/105))
+- read float fields as decimals in generated code ([#104](https://github.com/refixhq/refix/pull/104))
+
 ## [0.3.0](https://github.com/refixhq/refix/compare/refix-fix44-v0.2.0...refix-fix44-v0.3.0) - 2026-10-11
 
 ### Added
