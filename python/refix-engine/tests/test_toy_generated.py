@@ -84,6 +84,9 @@ class TestEnums:
             Unrecognized("Z"),
         )
 
+    def test_a_multiple_value_field_without_listed_values_reads_text(self):
+        assert order("35=D|1035=ADD AON|").desk_order_handling_inst == ("ADD", "AON")
+
     def test_badly_spaced_multiple_values_raise(self):
         with pytest.raises(InvalidValueError) as excinfo:
             _ = order("35=D|18=1  6|").exec_inst

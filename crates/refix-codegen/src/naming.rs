@@ -84,8 +84,8 @@ mod tests {
 
     #[test]
     fn an_unclaimed_type_takes_the_suffix_even_when_modelled() {
-        let exec_inst = field("ExecInst", DataType::MultipleStringValue);
-        assert_eq!(field_base_name(&exec_inst), "exec_inst_raw");
+        let tz_transact_time = field("TZTransactTime", DataType::TzTimestamp);
+        assert_eq!(field_base_name(&tz_transact_time), "tz_transact_time_raw");
     }
 
     #[test]

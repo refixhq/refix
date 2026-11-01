@@ -416,6 +416,24 @@ class NewOrderSingle:
     }
 
     #[test]
+    fn a_multiple_value_field_without_values_reads_text_values() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(1035)])],
+            vec![field(
+                "DeskOrderHandlingInst",
+                1035,
+                DataType::MultipleStringValue,
+                &[],
+            )],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def desk_order_handling_inst(self) -> tuple[str, ...] | None:\n        return self._raw.get_multiple_values(1035)\n"
+        ));
+    }
+
+    #[test]
     fn a_data_field_reads_as_bytes() {
         let generated = generated(
             vec![message("Logon", "A", vec![field_ref(96)])],

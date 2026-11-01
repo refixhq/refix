@@ -27,6 +27,8 @@ pub(crate) enum Conversion {
     IntEnum,
     /// Space-separated enum values, with `get_multiple_values`.
     MultipleValues,
+    /// Space-separated text values, with `get_multiple_values`.
+    MultipleStr,
     /// Bytes as the type declares them, with `get`.
     Bytes,
     /// The bytes, under a `_raw` name.
@@ -56,6 +58,7 @@ impl Conversion {
             | DataType::Language
             | DataType::Xid
             | DataType::XidRef => Self::Str,
+            _ if data_type.is_multiple_value() => Self::MultipleStr,
             _ if data_type.is_int_based() => Self::Int,
             DataType::Boolean => Self::Bool,
             _ if data_type.is_float_based() => Self::Decimal,
@@ -234,11 +237,19 @@ mod tests {
     }
 
     #[test]
-    fn other_types_read_raw() {
+    fn multiple_values_without_a_list_read_as_text_values() {
+        assert_eq!(
+            Conversion::of(&field(DataType::MultipleCharValue)),
+            Conversion::MultipleStr
+        );
         assert_eq!(
             Conversion::of(&field(DataType::MultipleStringValue)),
-            Conversion::Raw
+            Conversion::MultipleStr
         );
+    }
+
+    #[test]
+    fn other_types_read_raw() {
         assert_eq!(
             Conversion::of(&field(DataType::TzTimestamp)),
             Conversion::Raw
@@ -255,6 +266,7 @@ mod tests {
         assert!(Conversion::IntEnum.is_enum());
         assert!(Conversion::MultipleValues.is_enum());
         assert!(!Conversion::Str.is_enum());
+        assert!(!Conversion::MultipleStr.is_enum());
         assert!(!Conversion::Int.is_enum());
         assert!(!Conversion::Bool.is_enum());
         assert!(!Conversion::Decimal.is_enum());

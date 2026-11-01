@@ -147,6 +147,9 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
                 "    pub fn {name}(&self) -> Result<Option<MultipleValues<{type_lifetime}, {type_name}<{type_lifetime}>>>, InvalidValue> {{\n        self.0.get_multiple_values(Tag({tag}))\n    }}\n"
             )
         }
+        Conversion::MultipleStr => format!(
+            "    pub fn {name}(&self) -> Result<Option<MultipleValues<{type_lifetime}, {reference}str>>, InvalidValue> {{\n        self.0.get_multiple_values(Tag({tag}))\n    }}\n"
+        ),
         Conversion::Bytes | Conversion::Raw => format!(
             "    pub fn {name}(&self) -> Option<{reference}[u8]> {{\n        self.0.get(Tag({tag}))\n    }}\n"
         ),
@@ -333,11 +336,11 @@ mod tests {
     }
 
     #[test]
-    fn a_multiple_value_field_without_values_stays_raw() {
+    fn a_multiple_value_field_without_values_reads_text_values() {
         let exec_inst = field("ExecInst", 18, DataType::MultipleStringValue);
         assert_eq!(
             scope_signature(&exec_inst),
-            "pub fn exec_inst_raw(&self) -> Option<&'a [u8]> {"
+            "pub fn exec_inst(&self) -> Result<Option<MultipleValues<'a, &'a str>>, InvalidValue> {"
         );
     }
 

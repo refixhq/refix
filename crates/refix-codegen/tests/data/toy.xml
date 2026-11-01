@@ -23,6 +23,7 @@
       <field name="MDEntryTime" required="N"/>
       <field name="OrdType" required="N"/>
       <field name="ExecInst" required="N"/>
+      <field name="DeskOrderHandlingInst" required="N"/>
     </message>
     <message name="Logon" msgtype="A" msgcat="admin">
       <group name="NoMsgTypes" required="N">
@@ -83,6 +84,7 @@
       <value enum="1" description="NOT_HELD"/>
       <value enum="6" description="PARTICIPATE_DONT_INITIATE"/>
     </field>
+    <field number="1035" name="DeskOrderHandlingInst" type="MULTIPLESTRINGVALUE"/>
     <field number="453" name="NoPartyIDs" type="NUMINGROUP"/>
     <field number="448" name="PartyID" type="STRING"/>
     <field number="452" name="PartyRole" type="INT">

@@ -68,7 +68,10 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         imports.extend(["GroupTable", "Instances"]);
     }
     if uses(dictionary, |conversion| {
-        conversion == Conversion::MultipleValues
+        matches!(
+            conversion,
+            Conversion::MultipleValues | Conversion::MultipleStr
+        )
     }) {
         imports.push("MultipleValues");
     }
@@ -329,6 +332,10 @@ impl NewOrderSingle {
             (
                 field("TransactTime", 60, DataType::UtcTimestamp),
                 "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag, UtcTimestamp};",
+            ),
+            (
+                field("DeskOrderHandlingInst", 1035, DataType::MultipleStringValue),
+                "use refix_message::{InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};",
             ),
         ] {
             let reads = spec_of(

@@ -167,7 +167,7 @@ class NewOrderSingle:
 
     KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((
         8, 9, 10, 11, 18, 34, 35, 38, 40, 44, 49, 52, 56, 64, 89, 93, 114, 200, 273, 448, 452, 453,
-        523, 627, 628, 802,
+        523, 627, 628, 802, 1035,
     ))
 
     def __init__(self, raw: RawMessage) -> None:
@@ -231,6 +231,10 @@ class NewOrderSingle:
     def exec_inst(self) -> tuple[ExecInst | Unrecognized[str], ...] | None:
         values = self._raw.get_multiple_values(18)
         return None if values is None else tuple(from_value(ExecInst, value) for value in values)
+
+    @cached_property
+    def desk_order_handling_inst(self) -> tuple[str, ...] | None:
+        return self._raw.get_multiple_values(1035)
 
 
 class Logon:

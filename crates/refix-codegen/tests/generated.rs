@@ -319,6 +319,23 @@ fn a_multiple_value_field_reads_every_value() {
 }
 
 #[test]
+fn a_multiple_value_field_without_listed_values_reads_text() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|1035=ADD AON|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+    let values: Vec<&str> = order
+        .desk_order_handling_inst()
+        .unwrap()
+        .unwrap()
+        .iter()
+        .collect();
+
+    assert_eq!(values, ["ADD", "AON"]);
+}
+
+#[test]
 fn badly_spaced_multiple_values_are_an_error() {
     let raw = Tokenizer::default()
         .tokenize(frame("35=D|18=1  6|"))
