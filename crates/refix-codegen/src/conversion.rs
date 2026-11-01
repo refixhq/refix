@@ -11,6 +11,10 @@ pub(crate) enum Conversion {
     Int,
     /// A decimal, with `get_decimal`.
     Decimal,
+    /// A date, with `get_date`.
+    Date,
+    /// A month and year, with `get_month_year`.
+    MonthYear,
     /// An enum over text, with `get_str`.
     StrEnum,
     /// An enum over integers, with `get_int`.
@@ -35,9 +39,18 @@ impl Conversion {
             };
         }
         match data_type {
-            DataType::String | DataType::Char => Self::Str,
+            DataType::String
+            | DataType::Char
+            | DataType::Currency
+            | DataType::Exchange
+            | DataType::Country
+            | DataType::Language
+            | DataType::Xid
+            | DataType::XidRef => Self::Str,
             _ if data_type.is_int_based() => Self::Int,
             _ if data_type.is_float_based() => Self::Decimal,
+            DataType::UtcDateOnly | DataType::LocalMktDate => Self::Date,
+            DataType::MonthYear => Self::MonthYear,
             _ => Self::Raw,
         }
     }
@@ -93,9 +106,23 @@ mod tests {
     }
 
     #[test]
-    fn strings_and_chars_read_as_text() {
-        assert_eq!(Conversion::of(&field(DataType::String)), Conversion::Str);
-        assert_eq!(Conversion::of(&field(DataType::Char)), Conversion::Str);
+    fn strings_chars_and_their_subtypes_read_as_text() {
+        for data_type in [
+            DataType::String,
+            DataType::Char,
+            DataType::Currency,
+            DataType::Exchange,
+            DataType::Country,
+            DataType::Language,
+            DataType::Xid,
+            DataType::XidRef,
+        ] {
+            assert_eq!(
+                Conversion::of(&field(data_type.clone())),
+                Conversion::Str,
+                "{data_type:?}"
+            );
+        }
     }
 
     #[test]
@@ -120,6 +147,26 @@ mod tests {
                 "{data_type:?}"
             );
         }
+    }
+
+    #[test]
+    fn the_date_types_read_as_dates() {
+        assert_eq!(
+            Conversion::of(&field(DataType::UtcDateOnly)),
+            Conversion::Date
+        );
+        assert_eq!(
+            Conversion::of(&field(DataType::LocalMktDate)),
+            Conversion::Date
+        );
+    }
+
+    #[test]
+    fn month_year_reads_as_a_month_year() {
+        assert_eq!(
+            Conversion::of(&field(DataType::MonthYear)),
+            Conversion::MonthYear
+        );
     }
 
     #[test]
@@ -159,6 +206,8 @@ mod tests {
         assert!(!Conversion::Str.is_enum());
         assert!(!Conversion::Int.is_enum());
         assert!(!Conversion::Decimal.is_enum());
+        assert!(!Conversion::Date.is_enum());
+        assert!(!Conversion::MonthYear.is_enum());
         assert!(!Conversion::Raw.is_enum());
     }
 }
