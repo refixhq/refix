@@ -78,6 +78,9 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     if uses(dictionary, |conversion| conversion == Conversion::Date) {
         imports.push("Date");
     }
+    if uses(dictionary, |conversion| conversion == Conversion::MonthYear) {
+        imports.push("MonthYear");
+    }
     imports.sort_unstable();
     let imports = format!("use refix_message::{{{}}};", imports.join(", "));
     let code = format!("{header}\n{imports}\n\n{sections}");
@@ -306,6 +309,10 @@ impl NewOrderSingle {
             (
                 field("SettlDate", 64, DataType::LocalMktDate),
                 "use refix_message::{Date, InvalidValue, KnownTags, RawMessage, Tag};",
+            ),
+            (
+                field("MaturityMonthYear", 200, DataType::MonthYear),
+                "use refix_message::{InvalidValue, KnownTags, MonthYear, RawMessage, Tag};",
             ),
         ] {
             let reads = spec_of(

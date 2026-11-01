@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import assert_never
 
 import pytest
+from refix import MonthYear
 from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
 from test_tokenizer import tokenize_body
@@ -15,7 +16,9 @@ def order(body: str) -> NewOrderSingle:
 
 class TestReads:
     def test_typed_reads_over_a_tokenized_frame(self):
-        new_order = order("35=D|11=ORDER-1|38=200|44=101.5|64=20261103|40=1|")
+        new_order = order(
+            "35=D|11=ORDER-1|38=200|44=101.5|64=20261103|200=202612|40=1|"
+        )
 
         assert NewOrderSingle.MSG_TYPE == b"D"
         assert new_order.raw.get(35) == NewOrderSingle.MSG_TYPE
@@ -23,6 +26,7 @@ class TestReads:
         assert new_order.order_qty == 200
         assert new_order.price == Decimal("101.5")
         assert new_order.settl_date == date(2026, 11, 3)
+        assert new_order.maturity_month_year == MonthYear(2026, 12)
         assert new_order.ord_type is OrdType.MARKET
 
     def test_an_absent_field_reads_as_none(self):
@@ -31,6 +35,7 @@ class TestReads:
         assert new_order.order_qty is None
         assert new_order.price is None
         assert new_order.settl_date is None
+        assert new_order.maturity_month_year is None
         assert new_order.ord_type is None
         assert new_order.exec_inst is None
 

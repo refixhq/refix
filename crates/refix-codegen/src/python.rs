@@ -75,6 +75,7 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
     let reads_enums = uses(dictionary, Conversion::is_enum);
     let reads_decimals = uses(dictionary, |conversion| conversion == Conversion::Decimal);
     let reads_dates = uses(dictionary, |conversion| conversion == Conversion::Date);
+    let reads_month_years = uses(dictionary, |conversion| conversion == Conversion::MonthYear);
 
     let mut blocks = Vec::new();
     if has_classes {
@@ -97,13 +98,25 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
         standard.push("from typing import ClassVar\n");
     }
     blocks.push(standard);
-    let mut refix = Vec::new();
     // `Scope` stays qualified: FIX44's `Scope(546)` generates an enum of that name.
+    let mut names = Vec::new();
+    if has_groups {
+        names.push("GroupTable");
+    }
+    if has_classes {
+        names.extend(["KnownTags", "RawMessage"]);
+    }
+    if reads_month_years {
+        names.push("MonthYear");
+    }
+    names.sort_unstable();
+    let from_refix = format!("from refix import {}\n", names.join(", "));
+    let mut refix = Vec::new();
     if has_groups {
         refix.push("import refix\n");
-        refix.push("from refix import GroupTable, KnownTags, RawMessage\n");
-    } else if has_classes {
-        refix.push("from refix import KnownTags, RawMessage\n");
+    }
+    if !names.is_empty() {
+        refix.push(from_refix.as_str());
     }
     if reads_enums {
         refix.push("from refix.enums import Unrecognized, from_value\n");
@@ -315,6 +328,24 @@ class NewOrderSingle:
             "    def settl_date(self) -> date | None:\n        return self._raw.get_date(64)\n"
         ));
         assert!(generated.code.contains("\nfrom datetime import date\n"));
+    }
+
+    #[test]
+    fn a_month_year_reads_as_a_month_year() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(200)])],
+            vec![field("MaturityMonthYear", 200, DataType::MonthYear, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def maturity_month_year(self) -> MonthYear | None:\n        return self._raw.get_month_year(200)\n"
+        ));
+        assert!(
+            generated
+                .code
+                .contains("\nfrom refix import KnownTags, MonthYear, RawMessage\n")
+        );
     }
 
     #[test]

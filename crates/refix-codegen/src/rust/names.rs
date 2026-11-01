@@ -26,6 +26,7 @@ const ROOT: &[&str] = &[
     "Instances",
     "InvalidValue",
     "KnownTags",
+    "MonthYear",
     "MultipleValues",
     "Ok",
     "Option",

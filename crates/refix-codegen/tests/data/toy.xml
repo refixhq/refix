@@ -18,6 +18,7 @@
       <component name="OrderQtyData" required="N"/>
       <field name="Price" required="N"/>
       <field name="SettlDate" required="N"/>
+      <field name="MaturityMonthYear" required="N"/>
       <field name="OrdType" required="N"/>
       <field name="ExecInst" required="N"/>
     </message>
@@ -66,6 +67,7 @@
     <field number="38" name="OrderQty" type="INT"/>
     <field number="44" name="Price" type="PRICE"/>
     <field number="64" name="SettlDate" type="LOCALMKTDATE"/>
+    <field number="200" name="MaturityMonthYear" type="MONTHYEAR"/>
     <field number="40" name="OrdType" type="CHAR">
       <value enum="1" description="MARKET"/>
       <value enum="2" description="LIMIT"/>

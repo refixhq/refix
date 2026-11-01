@@ -10,7 +10,7 @@ from functools import cached_property
 from typing import ClassVar
 
 import refix
-from refix import GroupTable, KnownTags, RawMessage
+from refix import GroupTable, KnownTags, MonthYear, RawMessage
 from refix.enums import Unrecognized, from_value
 
 
@@ -162,8 +162,8 @@ class NewOrderSingle:
     MSG_TYPE: ClassVar[bytes] = b"D"
 
     KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((
-        8, 9, 10, 11, 18, 34, 35, 38, 40, 44, 49, 52, 56, 64, 89, 93, 448, 452, 453, 523, 627, 628,
-        802,
+        8, 9, 10, 11, 18, 34, 35, 38, 40, 44, 49, 52, 56, 64, 89, 93, 200, 448, 452, 453, 523, 627,
+        628, 802,
     ))
 
     def __init__(self, raw: RawMessage) -> None:
@@ -201,6 +201,10 @@ class NewOrderSingle:
     @cached_property
     def settl_date(self) -> date | None:
         return self._raw.get_date(64)
+
+    @cached_property
+    def maturity_month_year(self) -> MonthYear | None:
+        return self._raw.get_month_year(200)
 
     @cached_property
     def ord_type(self) -> OrdType | Unrecognized[str] | None:

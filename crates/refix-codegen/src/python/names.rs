@@ -18,6 +18,7 @@ const MODULE: &[&str] = &[
     "GroupTable",
     "Header",
     "KnownTags",
+    "MonthYear",
     "RawMessage",
     "Trailer",
     "Unrecognized",

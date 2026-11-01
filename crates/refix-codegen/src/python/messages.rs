@@ -80,6 +80,10 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
             "date | None".to_owned(),
             format!("return {receiver}.get_date({tag})"),
         ),
+        Conversion::MonthYear => (
+            "MonthYear | None".to_owned(),
+            format!("return {receiver}.get_month_year({tag})"),
+        ),
         Conversion::StrEnum => {
             enum_property(names.enum_class(field), receiver, tag, "get_str", "str")
         }

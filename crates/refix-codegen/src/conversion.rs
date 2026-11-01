@@ -13,6 +13,8 @@ pub(crate) enum Conversion {
     Decimal,
     /// A date, with `get_date`.
     Date,
+    /// A month and year, with `get_month_year`.
+    MonthYear,
     /// An enum over text, with `get_str`.
     StrEnum,
     /// An enum over integers, with `get_int`.
@@ -48,6 +50,7 @@ impl Conversion {
             _ if data_type.is_int_based() => Self::Int,
             _ if data_type.is_float_based() => Self::Decimal,
             DataType::UtcDateOnly | DataType::LocalMktDate => Self::Date,
+            DataType::MonthYear => Self::MonthYear,
             _ => Self::Raw,
         }
     }
@@ -159,6 +162,14 @@ mod tests {
     }
 
     #[test]
+    fn month_year_reads_as_a_month_year() {
+        assert_eq!(
+            Conversion::of(&field(DataType::MonthYear)),
+            Conversion::MonthYear
+        );
+    }
+
+    #[test]
     fn listed_values_read_through_an_enum() {
         assert_eq!(
             Conversion::of(&with_values(DataType::Char)),
@@ -196,6 +207,7 @@ mod tests {
         assert!(!Conversion::Int.is_enum());
         assert!(!Conversion::Decimal.is_enum());
         assert!(!Conversion::Date.is_enum());
+        assert!(!Conversion::MonthYear.is_enum());
         assert!(!Conversion::Raw.is_enum());
     }
 }
