@@ -303,6 +303,25 @@ class NewOrderSingle:
     }
 
     #[test]
+    fn a_boolean_reads_as_a_bool_without_an_enum() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(114)])],
+            vec![field(
+                "LocateReqd",
+                114,
+                DataType::Boolean,
+                &[("Y", "YES"), ("N", "NO")],
+            )],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def locate_reqd(self) -> bool | None:\n        return self._raw.get_bool(114)\n"
+        ));
+        assert!(!generated.code.contains("class LocateReqd"));
+    }
+
+    #[test]
     fn a_float_reads_as_a_decimal() {
         let generated = generated(
             vec![message("NewOrderSingle", "D", vec![field_ref(44)])],

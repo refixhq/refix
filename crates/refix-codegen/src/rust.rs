@@ -333,6 +333,34 @@ impl NewOrderSingle {
     }
 
     #[test]
+    fn a_boolean_reads_as_a_bool_without_an_enum() {
+        let mut locate_reqd = field("LocateReqd", 114, DataType::Boolean);
+        locate_reqd.values = [("Y", "YES"), ("N", "NO")]
+            .map(|(value, description)| EnumValue {
+                value: value.to_owned(),
+                description: description.to_owned(),
+            })
+            .to_vec();
+        let spec = spec_of(
+            vec![Message {
+                name: "NewOrderSingle".to_owned(),
+                msg_type: "D".to_owned(),
+                members: vec![Member::Field(FieldRef {
+                    tag: Tag(114),
+                    is_required: false,
+                })],
+                category: Category::App,
+            }],
+            vec![locate_reqd],
+        );
+
+        let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+
+        assert!(code.contains("pub fn locate_reqd(&self) -> Result<Option<bool>, InvalidValue> {"));
+        assert!(!code.contains("enum LocateReqd"));
+    }
+
+    #[test]
     fn an_enum_named_like_a_message_is_renamed_with_a_warning() {
         let mut security_status = field("SecurityStatus", 965, DataType::String);
         security_status.values = vec![EnumValue {

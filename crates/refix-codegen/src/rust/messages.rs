@@ -114,6 +114,9 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         Conversion::Int => format!(
             "    pub fn {name}(&self) -> Result<Option<i64>, InvalidValue> {{\n        self.0.get_int(Tag({tag}))\n    }}\n"
         ),
+        Conversion::Bool => format!(
+            "    pub fn {name}(&self) -> Result<Option<bool>, InvalidValue> {{\n        self.0.get_bool(Tag({tag}))\n    }}\n"
+        ),
         Conversion::Decimal => format!(
             "    pub fn {name}(&self) -> Result<Option<Decimal>, InvalidValue> {{\n        self.0.get_decimal(Tag({tag}))\n    }}\n"
         ),
@@ -209,6 +212,14 @@ mod tests {
         assert_eq!(
             scope_signature(&field("MsgSeqNum", 34, DataType::SeqNum)),
             "pub fn msg_seq_num(&self) -> Result<Option<i64>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn a_boolean_reads_as_a_bool() {
+        assert_eq!(
+            scope_signature(&field("LocateReqd", 114, DataType::Boolean)),
+            "pub fn locate_reqd(&self) -> Result<Option<bool>, InvalidValue> {"
         );
     }
 

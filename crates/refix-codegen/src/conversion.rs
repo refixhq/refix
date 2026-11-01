@@ -9,6 +9,8 @@ pub(crate) enum Conversion {
     Str,
     /// An integer, with `get_int`.
     Int,
+    /// `Y` or `N`, with `get_bool`.
+    Bool,
     /// A decimal, with `get_decimal`.
     Decimal,
     /// A date, with `get_date`.
@@ -26,10 +28,11 @@ pub(crate) enum Conversion {
 }
 
 impl Conversion {
-    /// The conversion for `field`. Listed values take precedence over the type.
+    /// The conversion for `field`. Listed values take precedence over the type,
+    /// but a BOOLEAN reads as `bool` whatever it lists.
     pub(crate) fn of(field: &Field) -> Self {
         let data_type = &field.data_type;
-        if !field.values.is_empty() {
+        if !field.values.is_empty() && *data_type != DataType::Boolean {
             return if data_type.is_multiple_value() {
                 Self::MultipleValues
             } else if data_type.is_int_based() {
@@ -48,6 +51,7 @@ impl Conversion {
             | DataType::Xid
             | DataType::XidRef => Self::Str,
             _ if data_type.is_int_based() => Self::Int,
+            DataType::Boolean => Self::Bool,
             _ if data_type.is_float_based() => Self::Decimal,
             DataType::UtcDateOnly | DataType::LocalMktDate => Self::Date,
             DataType::MonthYear => Self::MonthYear,
@@ -132,6 +136,19 @@ mod tests {
     }
 
     #[test]
+    fn booleans_read_as_bools() {
+        assert_eq!(Conversion::of(&field(DataType::Boolean)), Conversion::Bool);
+    }
+
+    #[test]
+    fn a_boolean_reads_as_a_bool_whatever_it_lists() {
+        assert_eq!(
+            Conversion::of(&with_values(DataType::Boolean)),
+            Conversion::Bool
+        );
+    }
+
+    #[test]
     fn the_float_family_reads_as_decimals() {
         for data_type in [
             DataType::Float,
@@ -205,6 +222,7 @@ mod tests {
         assert!(Conversion::MultipleValues.is_enum());
         assert!(!Conversion::Str.is_enum());
         assert!(!Conversion::Int.is_enum());
+        assert!(!Conversion::Bool.is_enum());
         assert!(!Conversion::Decimal.is_enum());
         assert!(!Conversion::Date.is_enum());
         assert!(!Conversion::MonthYear.is_enum());

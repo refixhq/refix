@@ -72,6 +72,10 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
             "int | None".to_owned(),
             format!("return {receiver}.get_int({tag})"),
         ),
+        Conversion::Bool => (
+            "bool | None".to_owned(),
+            format!("return {receiver}.get_bool({tag})"),
+        ),
         Conversion::Decimal => (
             "Decimal | None".to_owned(),
             format!("return {receiver}.get_decimal({tag})"),
