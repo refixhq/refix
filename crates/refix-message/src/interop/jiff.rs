@@ -1,5 +1,5 @@
-use crate::{Date, OutOfRange, Time, TimePrecision};
-use jiff_02::civil;
+use crate::{Date, OutOfRange, Time, TimePrecision, UtcTimestamp};
+use jiff_02::{Timestamp, civil};
 
 impl From<Date> for civil::Date {
     fn from(date: Date) -> Self {
@@ -41,6 +41,22 @@ impl From<civil::Time> for Time {
             + i64::from(time.second());
         let nanos = seconds * 1_000_000_000 + i64::from(time.subsec_nanosecond());
         Time::new(nanos, exact_precision(nanos)).expect("a jiff time is within a day")
+    }
+}
+
+impl From<UtcTimestamp> for Timestamp {
+    fn from(timestamp: UtcTimestamp) -> Self {
+        Timestamp::from_nanosecond(i128::from(timestamp.unix_nanos()))
+            .expect("an i64 of nanoseconds is within jiff's range")
+    }
+}
+
+impl TryFrom<Timestamp> for UtcTimestamp {
+    type Error = OutOfRange;
+
+    fn try_from(timestamp: Timestamp) -> Result<Self, Self::Error> {
+        let nanos = i64::try_from(timestamp.as_nanosecond()).map_err(|_| OutOfRange)?;
+        Ok(UtcTimestamp::new(nanos, exact_precision(nanos)))
     }
 }
 
@@ -134,6 +150,53 @@ mod tests {
                 let time = Time::from(civil::time(14, 29, 51, subsec_nanosecond));
                 assert_eq!(time.precision(), precision, "{subsec_nanosecond}");
             }
+        }
+    }
+
+    mod timestamp {
+        use super::*;
+
+        #[test]
+        fn converts_to_jiff() {
+            let timestamp = UtcTimestamp::new(1_791_451_800_123_000_000, TimePrecision::MILLIS);
+            assert_eq!(
+                Timestamp::from(timestamp),
+                Timestamp::new(1_791_451_800, 123_000_000).unwrap()
+            );
+        }
+
+        #[test]
+        fn converts_from_jiff() {
+            let jiff = Timestamp::new(1_791_451_800, 123_000_000).unwrap();
+            let timestamp = UtcTimestamp::try_from(jiff).unwrap();
+            assert_eq!(timestamp.unix_nanos(), 1_791_451_800_123_000_000);
+            assert_eq!(timestamp.precision(), TimePrecision::MILLIS);
+        }
+
+        #[test]
+        fn round_trips_the_ends_of_an_i64() {
+            for nanos in [i64::MIN, i64::MAX] {
+                let timestamp = UtcTimestamp::new(nanos, TimePrecision::NANOS);
+                assert_eq!(
+                    UtcTimestamp::try_from(Timestamp::from(timestamp)),
+                    Ok(timestamp)
+                );
+            }
+        }
+
+        #[test]
+        fn rejects_a_timestamp_beyond_an_i64_of_nanoseconds() {
+            let past_the_end = Timestamp::from_nanosecond(i128::from(i64::MAX) + 1).unwrap();
+            for jiff in [past_the_end, Timestamp::MIN, Timestamp::MAX] {
+                assert_eq!(UtcTimestamp::try_from(jiff), Err(OutOfRange));
+            }
+        }
+
+        #[test]
+        fn takes_the_coarsest_exact_precision_before_the_epoch() {
+            let jiff = Timestamp::from_nanosecond(-500_000_000).unwrap();
+            let timestamp = UtcTimestamp::try_from(jiff).unwrap();
+            assert_eq!(timestamp.precision(), TimePrecision::MILLIS);
         }
     }
 }
