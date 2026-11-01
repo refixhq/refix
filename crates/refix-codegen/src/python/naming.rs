@@ -13,6 +13,7 @@ pub(super) fn property_name(field: &Field) -> String {
 pub(super) fn nanos_getter(field: &Field) -> Option<&'static str> {
     match Conversion::of(field) {
         Conversion::Time => Some("get_time_ns"),
+        Conversion::UtcTimestamp => Some("get_utc_timestamp_ns"),
         _ => None,
     }
 }

@@ -4,7 +4,9 @@
 use bytes::Bytes;
 use refix_codegen::rust::generate;
 use refix_dictionary::quickfix;
-use refix_message::{Date, Decimal, InvalidValue, MonthYear, Tag, Time, TimePrecision, Tokenizer};
+use refix_message::{
+    Date, Decimal, InvalidValue, MonthYear, Tag, Time, TimePrecision, Tokenizer, UtcTimestamp,
+};
 
 // Not every generated item is read here, e.g. a leaf group's KNOWN_TAGS.
 #[allow(dead_code)]
@@ -175,7 +177,9 @@ fn a_header_field_after_a_group_ends_it() {
 #[test]
 fn reads_the_header_and_trailer() {
     let raw = Tokenizer::default()
-        .tokenize(frame("35=D|49=SENDER|56=TARGET|34=7|11=ORDER-1|"))
+        .tokenize(frame(
+            "35=D|49=SENDER|56=TARGET|34=7|52=20261030-14:29:51.123456789|11=ORDER-1|",
+        ))
         .unwrap();
 
     let order = NewOrderSingle::from_raw(raw);
@@ -185,6 +189,13 @@ fn reads_the_header_and_trailer() {
     assert_eq!(order.header().msg_type(), Ok(Some("D")));
     assert_eq!(order.header().sender_comp_id(), Ok(Some("SENDER")));
     assert_eq!(order.header().target_comp_id(), Ok(Some("TARGET")));
+    assert_eq!(
+        order.header().sending_time(),
+        Ok(Some(UtcTimestamp::new(
+            1_793_370_591_123_456_789,
+            TimePrecision::NANOS
+        )))
+    );
     assert!(order.trailer().check_sum().unwrap().is_some());
 }
 

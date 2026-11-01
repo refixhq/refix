@@ -30,6 +30,7 @@ const MODULE: &[&str] = &[
     "bytes",
     "cached_property",
     "date",
+    "datetime",
     "enum",
     "from_value",
     "int",

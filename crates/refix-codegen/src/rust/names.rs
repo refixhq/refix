@@ -35,6 +35,7 @@ const ROOT: &[&str] = &[
     "Tag",
     "Time",
     "Trailer",
+    "UtcTimestamp",
     "bool",
     "header",
     "i64",

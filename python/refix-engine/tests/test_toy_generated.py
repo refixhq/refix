@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import assert_never
 
@@ -150,13 +150,19 @@ class TestGroups:
 
 class TestHeader:
     def test_reads_the_header_and_trailer(self):
-        new_order = order("35=D|49=SENDER|56=TARGET|34=7|11=ORDER-1|")
+        new_order = order(
+            "35=D|49=SENDER|56=TARGET|34=7|52=20261030-14:29:51.123456789|11=ORDER-1|"
+        )
 
         assert new_order.header.begin_string == "FIX.4.4"
         assert new_order.header.msg_seq_num == 7
         assert new_order.header.msg_type == "D"
         assert new_order.header.sender_comp_id == "SENDER"
         assert new_order.header.target_comp_id == "TARGET"
+        assert new_order.header.sending_time == datetime(
+            2026, 10, 30, 14, 29, 51, 123456, tzinfo=UTC
+        )
+        assert new_order.header.sending_time_ns == 1_793_370_591_123_456_789
         assert new_order.trailer.check_sum is not None
 
     def test_reads_a_header_without_the_message_type(self):

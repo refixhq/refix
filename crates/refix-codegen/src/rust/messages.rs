@@ -129,6 +129,9 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         Conversion::Time => format!(
             "    pub fn {name}(&self) -> Result<Option<Time>, InvalidValue> {{\n        self.0.get_time(Tag({tag}))\n    }}\n"
         ),
+        Conversion::UtcTimestamp => format!(
+            "    pub fn {name}(&self) -> Result<Option<UtcTimestamp>, InvalidValue> {{\n        self.0.get_utc_timestamp(Tag({tag}))\n    }}\n"
+        ),
         Conversion::StrEnum => {
             let type_name = names.enum_type(field);
             let enum_type = format!("{type_name}<{type_lifetime}>");
@@ -255,6 +258,14 @@ mod tests {
         assert_eq!(
             scope_signature(&field("MDEntryTime", 273, DataType::UtcTimeOnly)),
             "pub fn md_entry_time(&self) -> Result<Option<Time>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn a_utc_timestamp_reads_as_a_utc_timestamp() {
+        assert_eq!(
+            scope_signature(&field("TransactTime", 60, DataType::UtcTimestamp)),
+            "pub fn transact_time(&self) -> Result<Option<UtcTimestamp>, InvalidValue> {"
         );
     }
 

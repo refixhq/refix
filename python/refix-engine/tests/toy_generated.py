@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import enum
-from datetime import date, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from functools import cached_property
 from typing import ClassVar
@@ -128,8 +128,12 @@ class Header:
         return self._raw.get_int(34)
 
     @cached_property
-    def sending_time_raw(self) -> bytes | None:
-        return self._raw.get(52)
+    def sending_time(self) -> datetime | None:
+        return self._raw.get_utc_timestamp(52)
+
+    @cached_property
+    def sending_time_ns(self) -> int | None:
+        return self._raw.get_utc_timestamp_ns(52)
 
     @cached_property
     def hops(self) -> tuple[Header.Hops.Instance, ...]:

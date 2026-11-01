@@ -93,6 +93,10 @@ pub(super) fn emit_property(field: &Field, names: &Names, receiver: &str) -> Str
             "time | None".to_owned(),
             format!("return {receiver}.get_time({tag})"),
         ),
+        Conversion::UtcTimestamp => (
+            "datetime | None".to_owned(),
+            format!("return {receiver}.get_utc_timestamp({tag})"),
+        ),
         Conversion::StrEnum => {
             enum_property(names.enum_class(field), receiver, tag, "get_str", "str")
         }

@@ -2,7 +2,7 @@
 #![cfg_attr(rustfmt, rustfmt::skip)]
 #![allow(clippy::module_inception)]
 
-use refix_message::{Date, Decimal, GroupTable, Instances, InvalidValue, KnownTags, MonthYear, MultipleValues, RawMessage, Tag, Time};
+use refix_message::{Date, Decimal, GroupTable, Instances, InvalidValue, KnownTags, MonthYear, MultipleValues, RawMessage, Tag, Time, UtcTimestamp};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrdType<'a> {
@@ -203,8 +203,8 @@ impl<'a> Header<'a> {
         self.0.get_int(Tag(34))
     }
 
-    pub fn sending_time_raw(&self) -> Option<&'a [u8]> {
-        self.0.get(Tag(52))
+    pub fn sending_time(&self) -> Result<Option<UtcTimestamp>, InvalidValue> {
+        self.0.get_utc_timestamp(Tag(52))
     }
 
     pub fn hops(&self) -> Result<Instances<'a, header::hops::Instance<'a>>, InvalidValue> {

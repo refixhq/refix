@@ -77,6 +77,9 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
     let reads_dates = uses(dictionary, |conversion| conversion == Conversion::Date);
     let reads_month_years = uses(dictionary, |conversion| conversion == Conversion::MonthYear);
     let reads_times = uses(dictionary, |conversion| conversion == Conversion::Time);
+    let reads_timestamps = uses(dictionary, |conversion| {
+        conversion == Conversion::UtcTimestamp
+    });
 
     let mut blocks = Vec::new();
     if has_classes {
@@ -89,6 +92,9 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
     let mut datetime_names = Vec::new();
     if reads_dates {
         datetime_names.push("date");
+    }
+    if reads_timestamps {
+        datetime_names.push("datetime");
     }
     if reads_times {
         datetime_names.push("time");
@@ -373,16 +379,31 @@ class NewOrderSingle:
     }
 
     #[test]
+    fn a_utc_timestamp_reads_as_a_datetime_beside_its_nanoseconds() {
+        let generated = generated(
+            vec![message("NewOrderSingle", "D", vec![field_ref(60)])],
+            vec![field("TransactTime", 60, DataType::UtcTimestamp, &[])],
+            vec![],
+        );
+
+        assert!(generated.code.contains(
+            "    def transact_time(self) -> datetime | None:\n        return self._raw.get_utc_timestamp(60)\n\n    @cached_property\n    def transact_time_ns(self) -> int | None:\n        return self._raw.get_utc_timestamp_ns(60)\n"
+        ));
+        assert!(generated.code.contains("\nfrom datetime import datetime\n"));
+    }
+
+    #[test]
     fn imports_dates_and_times_from_one_line() {
         let generated = generated(
             vec![message(
                 "MarketDataSnapshot",
                 "W",
-                vec![field_ref(272), field_ref(273)],
+                vec![field_ref(272), field_ref(273), field_ref(60)],
             )],
             vec![
                 field("MDEntryDate", 272, DataType::UtcDateOnly, &[]),
                 field("MDEntryTime", 273, DataType::UtcTimeOnly, &[]),
+                field("TransactTime", 60, DataType::UtcTimestamp, &[]),
             ],
             vec![],
         );
@@ -390,7 +411,7 @@ class NewOrderSingle:
         assert!(
             generated
                 .code
-                .contains("\nfrom datetime import date, time\n")
+                .contains("\nfrom datetime import date, datetime, time\n")
         );
     }
 
