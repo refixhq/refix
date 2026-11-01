@@ -1,2 +1,19 @@
+#[cfg(feature = "chrono-04")]
+mod chrono;
 #[cfg(feature = "jiff-02")]
 mod jiff;
+
+/// The coarsest of seconds, millis, micros and nanos that holds `nanos` exactly.
+#[cfg(any(feature = "chrono-04", feature = "jiff-02"))]
+fn exact_precision(nanos: i64) -> crate::TimePrecision {
+    use crate::TimePrecision;
+
+    [
+        TimePrecision::SECONDS,
+        TimePrecision::MILLIS,
+        TimePrecision::MICROS,
+    ]
+    .into_iter()
+    .find(|precision| nanos % precision.unit_nanos() == 0)
+    .unwrap_or(TimePrecision::NANOS)
+}
