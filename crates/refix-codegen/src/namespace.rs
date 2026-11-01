@@ -16,6 +16,8 @@ pub enum Owner {
     Generated,
     /// A field's accessor.
     Field(String),
+    /// The accessor of a field's value in nanoseconds.
+    Nanos(String),
     /// The enum of a field's values.
     Enum(String),
     /// A message's type or module.
@@ -35,6 +37,7 @@ impl fmt::Display for Owner {
         match self {
             Owner::Generated => write!(f, "the generated code"),
             Owner::Field(field) => write!(f, "field '{field}'"),
+            Owner::Nanos(field) => write!(f, "the nanosecond accessor of field '{field}'"),
             Owner::Enum(field) => write!(f, "the enum of field '{field}'"),
             Owner::Message(message) => write!(f, "message '{message}'"),
             Owner::Group(context) => write!(f, "{context}"),

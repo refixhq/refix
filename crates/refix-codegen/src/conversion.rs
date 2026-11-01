@@ -17,6 +17,8 @@ pub(crate) enum Conversion {
     Date,
     /// A month and year, with `get_month_year`.
     MonthYear,
+    /// A time of day, with `get_time`.
+    Time,
     /// An enum over text, with `get_str`.
     StrEnum,
     /// An enum over integers, with `get_int`.
@@ -55,6 +57,7 @@ impl Conversion {
             _ if data_type.is_float_based() => Self::Decimal,
             DataType::UtcDateOnly | DataType::LocalMktDate => Self::Date,
             DataType::MonthYear => Self::MonthYear,
+            DataType::UtcTimeOnly => Self::Time,
             _ => Self::Raw,
         }
     }
@@ -187,6 +190,14 @@ mod tests {
     }
 
     #[test]
+    fn a_utc_time_reads_as_a_time() {
+        assert_eq!(
+            Conversion::of(&field(DataType::UtcTimeOnly)),
+            Conversion::Time
+        );
+    }
+
+    #[test]
     fn listed_values_read_through_an_enum() {
         assert_eq!(
             Conversion::of(&with_values(DataType::Char)),
@@ -226,6 +237,7 @@ mod tests {
         assert!(!Conversion::Decimal.is_enum());
         assert!(!Conversion::Date.is_enum());
         assert!(!Conversion::MonthYear.is_enum());
+        assert!(!Conversion::Time.is_enum());
         assert!(!Conversion::Raw.is_enum());
     }
 }

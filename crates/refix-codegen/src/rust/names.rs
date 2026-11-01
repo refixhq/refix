@@ -33,6 +33,7 @@ const ROOT: &[&str] = &[
     "RawMessage",
     "Result",
     "Tag",
+    "Time",
     "Trailer",
     "bool",
     "header",

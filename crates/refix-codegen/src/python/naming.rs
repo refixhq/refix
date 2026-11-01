@@ -1,10 +1,25 @@
 use refix_dictionary::{EnumValue, Field, dictionary};
 
+use crate::conversion::Conversion;
 use crate::naming::{field_base_name, group_base_name};
 use crate::python::Error;
 
 pub(super) fn property_name(field: &Field) -> String {
     identifier(field_base_name(field))
+}
+
+/// The getter of a field's exact nanoseconds, for a value Python holds only to
+/// the microsecond.
+pub(super) fn nanos_getter(field: &Field) -> Option<&'static str> {
+    match Conversion::of(field) {
+        Conversion::Time => Some("get_time_ns"),
+        _ => None,
+    }
+}
+
+/// The property reading a field's nanoseconds, beside the one reading its value.
+pub(super) fn nanos_property_name(field: &Field) -> String {
+    format!("{}_ns", field_base_name(field))
 }
 
 pub(super) fn group_property_name(group: dictionary::Group<'_>) -> String {

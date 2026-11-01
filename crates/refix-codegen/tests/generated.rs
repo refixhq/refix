@@ -4,7 +4,7 @@
 use bytes::Bytes;
 use refix_codegen::rust::generate;
 use refix_dictionary::quickfix;
-use refix_message::{Date, Decimal, InvalidValue, MonthYear, Tag, Tokenizer};
+use refix_message::{Date, Decimal, InvalidValue, MonthYear, Tag, Time, TimePrecision, Tokenizer};
 
 // Not every generated item is read here, e.g. a leaf group's KNOWN_TAGS.
 #[allow(dead_code)]
@@ -47,7 +47,7 @@ fn frame(body: &str) -> Bytes {
 fn typed_reads_over_a_tokenized_frame() {
     let raw = Tokenizer::default()
         .tokenize(frame(
-            "35=D|11=ORDER-1|38=200|44=101.5|64=20261103|200=202612|114=Y|40=1|",
+            "35=D|11=ORDER-1|38=200|44=101.5|64=20261103|200=202612|114=Y|273=14:29:51.123456789|40=1|",
         ))
         .unwrap();
 
@@ -67,6 +67,12 @@ fn typed_reads_over_a_tokenized_frame() {
         Ok(Some(MonthYear::new(2026, 12).unwrap()))
     );
     assert_eq!(order.locate_reqd(), Ok(Some(true)));
+    assert_eq!(
+        order.md_entry_time(),
+        Ok(Some(
+            Time::new(52_191_123_456_789, TimePrecision::NANOS).unwrap()
+        ))
+    );
     assert_eq!(order.ord_type(), Ok(Some(OrdType::Market)));
 }
 
@@ -83,6 +89,7 @@ fn an_absent_field_reads_as_none() {
     assert_eq!(order.settl_date(), Ok(None));
     assert_eq!(order.maturity_month_year(), Ok(None));
     assert_eq!(order.locate_reqd(), Ok(None));
+    assert_eq!(order.md_entry_time(), Ok(None));
     assert_eq!(order.ord_type(), Ok(None));
 }
 

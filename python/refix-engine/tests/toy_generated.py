@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import enum
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 from functools import cached_property
 from typing import ClassVar
@@ -162,8 +162,8 @@ class NewOrderSingle:
     MSG_TYPE: ClassVar[bytes] = b"D"
 
     KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((
-        8, 9, 10, 11, 18, 34, 35, 38, 40, 44, 49, 52, 56, 64, 89, 93, 114, 200, 448, 452, 453, 523,
-        627, 628, 802,
+        8, 9, 10, 11, 18, 34, 35, 38, 40, 44, 49, 52, 56, 64, 89, 93, 114, 200, 273, 448, 452, 453,
+        523, 627, 628, 802,
     ))
 
     def __init__(self, raw: RawMessage) -> None:
@@ -209,6 +209,14 @@ class NewOrderSingle:
     @cached_property
     def locate_reqd(self) -> bool | None:
         return self._raw.get_bool(114)
+
+    @cached_property
+    def md_entry_time(self) -> time | None:
+        return self._raw.get_time(273)
+
+    @cached_property
+    def md_entry_time_ns(self) -> int | None:
+        return self._raw.get_time_ns(273)
 
     @cached_property
     def ord_type(self) -> OrdType | Unrecognized[str] | None:

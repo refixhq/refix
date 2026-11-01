@@ -126,6 +126,9 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         Conversion::MonthYear => format!(
             "    pub fn {name}(&self) -> Result<Option<MonthYear>, InvalidValue> {{\n        self.0.get_month_year(Tag({tag}))\n    }}\n"
         ),
+        Conversion::Time => format!(
+            "    pub fn {name}(&self) -> Result<Option<Time>, InvalidValue> {{\n        self.0.get_time(Tag({tag}))\n    }}\n"
+        ),
         Conversion::StrEnum => {
             let type_name = names.enum_type(field);
             let enum_type = format!("{type_name}<{type_lifetime}>");
@@ -244,6 +247,14 @@ mod tests {
         assert_eq!(
             scope_signature(&field("MaturityMonthYear", 200, DataType::MonthYear)),
             "pub fn maturity_month_year(&self) -> Result<Option<MonthYear>, InvalidValue> {"
+        );
+    }
+
+    #[test]
+    fn a_utc_time_reads_as_a_time() {
+        assert_eq!(
+            scope_signature(&field("MDEntryTime", 273, DataType::UtcTimeOnly)),
+            "pub fn md_entry_time(&self) -> Result<Option<Time>, InvalidValue> {"
         );
     }
 

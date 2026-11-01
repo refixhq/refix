@@ -20,6 +20,7 @@
       <field name="SettlDate" required="N"/>
       <field name="MaturityMonthYear" required="N"/>
       <field name="LocateReqd" required="N"/>
+      <field name="MDEntryTime" required="N"/>
       <field name="OrdType" required="N"/>
       <field name="ExecInst" required="N"/>
     </message>
@@ -69,6 +70,7 @@
     <field number="44" name="Price" type="PRICE"/>
     <field number="64" name="SettlDate" type="LOCALMKTDATE"/>
     <field number="200" name="MaturityMonthYear" type="MONTHYEAR"/>
+    <field number="273" name="MDEntryTime" type="UTCTIMEONLY"/>
     <field number="114" name="LocateReqd" type="BOOLEAN">
       <value enum="Y" description="YES"/>
       <value enum="N" description="NO"/>
