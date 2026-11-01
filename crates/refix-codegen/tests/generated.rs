@@ -47,7 +47,7 @@ fn frame(body: &str) -> Bytes {
 fn typed_reads_over_a_tokenized_frame() {
     let raw = Tokenizer::default()
         .tokenize(frame(
-            "35=D|11=ORDER-1|38=200|44=101.5|64=20261103|200=202612|40=1|",
+            "35=D|11=ORDER-1|38=200|44=101.5|64=20261103|200=202612|114=Y|40=1|",
         ))
         .unwrap();
 
@@ -66,6 +66,7 @@ fn typed_reads_over_a_tokenized_frame() {
         order.maturity_month_year(),
         Ok(Some(MonthYear::new(2026, 12).unwrap()))
     );
+    assert_eq!(order.locate_reqd(), Ok(Some(true)));
     assert_eq!(order.ord_type(), Ok(Some(OrdType::Market)));
 }
 
@@ -81,6 +82,7 @@ fn an_absent_field_reads_as_none() {
     assert_eq!(order.price(), Ok(None));
     assert_eq!(order.settl_date(), Ok(None));
     assert_eq!(order.maturity_month_year(), Ok(None));
+    assert_eq!(order.locate_reqd(), Ok(None));
     assert_eq!(order.ord_type(), Ok(None));
 }
 

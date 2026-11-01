@@ -23,6 +23,7 @@ const MODULE: &[&str] = &[
     "Trailer",
     "Unrecognized",
     "annotations",
+    "bool",
     "bytes",
     "cached_property",
     "date",

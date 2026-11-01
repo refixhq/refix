@@ -34,6 +34,7 @@ const ROOT: &[&str] = &[
     "Result",
     "Tag",
     "Trailer",
+    "bool",
     "header",
     "i64",
     "refix_message",

@@ -9,6 +9,8 @@ pub(crate) enum Conversion {
     Str,
     /// An integer, with `get_int`.
     Int,
+    /// `Y` or `N`, with `get_bool`.
+    Bool,
     /// A decimal, with `get_decimal`.
     Decimal,
     /// A date, with `get_date`.
@@ -48,6 +50,7 @@ impl Conversion {
             | DataType::Xid
             | DataType::XidRef => Self::Str,
             _ if data_type.is_int_based() => Self::Int,
+            DataType::Boolean => Self::Bool,
             _ if data_type.is_float_based() => Self::Decimal,
             DataType::UtcDateOnly | DataType::LocalMktDate => Self::Date,
             DataType::MonthYear => Self::MonthYear,
@@ -132,6 +135,11 @@ mod tests {
     }
 
     #[test]
+    fn booleans_read_as_bools() {
+        assert_eq!(Conversion::of(&field(DataType::Boolean)), Conversion::Bool);
+    }
+
+    #[test]
     fn the_float_family_reads_as_decimals() {
         for data_type in [
             DataType::Float,
@@ -205,6 +213,7 @@ mod tests {
         assert!(Conversion::MultipleValues.is_enum());
         assert!(!Conversion::Str.is_enum());
         assert!(!Conversion::Int.is_enum());
+        assert!(!Conversion::Bool.is_enum());
         assert!(!Conversion::Decimal.is_enum());
         assert!(!Conversion::Date.is_enum());
         assert!(!Conversion::MonthYear.is_enum());
