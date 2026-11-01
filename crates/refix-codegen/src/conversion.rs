@@ -1,5 +1,6 @@
 use refix_dictionary::{DataType, Dictionary, Field, dictionary};
 
+use crate::Warning;
 use crate::groups::is_generated;
 
 /// How generated code reads a field's value.
@@ -80,21 +81,42 @@ impl Conversion {
 /// Whether an accessor generated from `dictionary` reads a field whose
 /// conversion is `wanted`.
 pub(crate) fn uses(dictionary: &Dictionary, wanted: impl Fn(Conversion) -> bool + Copy) -> bool {
-    uses_in(dictionary.header().chain(dictionary.trailer()), wanted)
-        || dictionary
-            .messages()
-            .any(|message| uses_in(message.members(), wanted))
+    reads(dictionary, |field| wanted(Conversion::of(field)))
 }
 
-/// Whether an accessor generated for `members` reads a field whose
-/// conversion is `wanted`, inside group instances too.
-fn uses_in<'a>(
+/// A warning for each field an accessor generated from `dictionary` reads raw,
+/// in the dictionary's order.
+pub(crate) fn unclaimed_types(dictionary: &Dictionary) -> impl Iterator<Item = Warning> + '_ {
+    dictionary
+        .fields()
+        .iter()
+        .filter(|field| Conversion::of(field) == Conversion::Raw)
+        .filter(|field| reads(dictionary, |read| read.tag == field.tag))
+        .map(|field| Warning::UnclaimedType {
+            field: field.name.clone(),
+            data_type: field.data_type.clone(),
+        })
+}
+
+/// Whether an accessor generated from `dictionary` reads a `wanted` field.
+fn reads(dictionary: &Dictionary, wanted: impl Fn(&Field) -> bool + Copy) -> bool {
+    reads_in(dictionary.header().chain(dictionary.trailer()), wanted)
+        || dictionary
+            .messages()
+            .any(|message| reads_in(message.members(), wanted))
+}
+
+/// Whether an accessor generated for `members` reads a `wanted` field, inside
+/// group instances too.
+fn reads_in<'a>(
     mut members: impl Iterator<Item = dictionary::Member<'a>>,
-    wanted: impl Fn(Conversion) -> bool + Copy,
+    wanted: impl Fn(&Field) -> bool + Copy,
 ) -> bool {
     members.any(|member| match member {
-        dictionary::Member::Field { field, .. } => wanted(Conversion::of(field)),
-        dictionary::Member::Group(group) => is_generated(group) && uses_in(group.members(), wanted),
+        dictionary::Member::Field { field, .. } => wanted(field),
+        dictionary::Member::Group(group) => {
+            is_generated(group) && reads_in(group.members(), wanted)
+        }
     })
 }
 
