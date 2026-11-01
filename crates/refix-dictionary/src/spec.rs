@@ -179,6 +179,50 @@ pub enum DataType {
     Other(String),
 }
 
+/// The type's name in upper case, as dictionaries declare it, or a type outside
+/// the standard as given.
+impl fmt::Display for DataType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::String => "STRING",
+            Self::Int => "INT",
+            Self::Length => "LENGTH",
+            Self::NumInGroup => "NUMINGROUP",
+            Self::SeqNum => "SEQNUM",
+            Self::TagNum => "TAGNUM",
+            Self::DayOfMonth => "DAYOFMONTH",
+            Self::Float => "FLOAT",
+            Self::Qty => "QTY",
+            Self::Price => "PRICE",
+            Self::PriceOffset => "PRICEOFFSET",
+            Self::Amt => "AMT",
+            Self::Percentage => "PERCENTAGE",
+            Self::Char => "CHAR",
+            Self::Boolean => "BOOLEAN",
+            Self::MultipleCharValue => "MULTIPLECHARVALUE",
+            Self::MultipleStringValue => "MULTIPLESTRINGVALUE",
+            Self::Currency => "CURRENCY",
+            Self::Exchange => "EXCHANGE",
+            Self::Country => "COUNTRY",
+            Self::Language => "LANGUAGE",
+            Self::Xid => "XID",
+            Self::XidRef => "XIDREF",
+            Self::UtcTimestamp => "UTCTIMESTAMP",
+            Self::UtcTimeOnly => "UTCTIMEONLY",
+            Self::UtcDateOnly => "UTCDATEONLY",
+            Self::LocalMktDate => "LOCALMKTDATE",
+            Self::LocalMktTime => "LOCALMKTTIME",
+            Self::MonthYear => "MONTHYEAR",
+            Self::TzTimestamp => "TZTIMESTAMP",
+            Self::TzTimeOnly => "TZTIMEONLY",
+            Self::Data => "DATA",
+            Self::XmlData => "XMLDATA",
+            Self::Other(name) => name,
+        };
+        f.write_str(name)
+    }
+}
+
 impl DataType {
     /// Whether the type is `Int` or one of its subtypes.
     pub fn is_int_based(&self) -> bool {

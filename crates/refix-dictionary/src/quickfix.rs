@@ -648,9 +648,8 @@ mod tests {
             );
         }
 
-        #[test]
-        fn maps_type_names_to_data_types() {
-            let cases = [
+        fn type_names() -> Vec<(&'static str, DataType)> {
+            vec![
                 ("STRING", DataType::String),
                 ("INT", DataType::Int),
                 ("LENGTH", DataType::Length),
@@ -689,9 +688,23 @@ mod tests {
                 ("DATA", DataType::Data),
                 ("XMLDATA", DataType::XmlData),
                 ("CUSTOM", DataType::Other("CUSTOM".to_owned())),
-            ];
-            for (name, data_type) in cases {
+            ]
+        }
+
+        #[test]
+        fn maps_type_names_to_data_types() {
+            for (name, data_type) in type_names() {
                 assert_eq!(parse_data_type(name.to_owned()), data_type, "{name}");
+            }
+        }
+
+        #[test]
+        fn a_data_type_displays_as_its_name_not_an_alias() {
+            let aliases = ["MULTIPLEVALUESTRING", "TIME", "UTCDATE", "DATE"];
+            for (name, data_type) in type_names() {
+                if !aliases.contains(&name) {
+                    assert_eq!(data_type.to_string(), name);
+                }
             }
         }
 
