@@ -1,3 +1,5 @@
+#[cfg(feature = "bigdecimal-04")]
+mod bigdecimal;
 #[cfg(feature = "chrono-04")]
 mod chrono;
 #[cfg(feature = "jiff-02")]

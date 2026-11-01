@@ -28,6 +28,7 @@ fn main() {
 
 ## Features
 
+- `bigdecimal-04` converts `Decimal` to and from bigdecimal 0.4.
 - `chrono-04` converts `Date`, `Time` and `UtcTimestamp` to and from chrono 0.4.
 - `jiff-02` converts `Date`, `Time` and `UtcTimestamp` to and from jiff 0.2.
 - `rust_decimal-1` converts `Decimal` to and from rust_decimal 1.

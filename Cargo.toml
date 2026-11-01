@@ -24,6 +24,7 @@ keywords = ["fix", "fix-protocol", "fix-engine", "trading", "finance"]
 categories = ["encoding", "parsing", "finance"]
 
 [workspace.dependencies]
+bigdecimal-04 = { package = "bigdecimal", version = "0.4.11", default-features = false }
 bytes = "1.12.1"
 chrono-04 = { package = "chrono", version = "0.4.45", default-features = false }
 clap = { version = "4.6.5", features = ["derive"] }
