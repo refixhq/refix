@@ -1,4 +1,5 @@
-use crate::{Date, OutOfRange, Time, TimePrecision, UtcTimestamp};
+use super::exact_precision;
+use crate::{Date, OutOfRange, Time, UtcTimestamp};
 use jiff_02::{Timestamp, civil};
 
 impl From<Date> for civil::Date {
@@ -60,21 +61,10 @@ impl TryFrom<Timestamp> for UtcTimestamp {
     }
 }
 
-/// The coarsest of seconds, millis, micros and nanos that holds `nanos` exactly.
-fn exact_precision(nanos: i64) -> TimePrecision {
-    [
-        TimePrecision::SECONDS,
-        TimePrecision::MILLIS,
-        TimePrecision::MICROS,
-    ]
-    .into_iter()
-    .find(|precision| nanos % precision.unit_nanos() == 0)
-    .unwrap_or(TimePrecision::NANOS)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::TimePrecision;
 
     mod date {
         use super::*;
