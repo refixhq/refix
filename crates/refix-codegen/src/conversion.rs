@@ -65,7 +65,7 @@ impl Conversion {
             _ if data_type.is_float_based() => Self::Decimal,
             DataType::UtcDateOnly | DataType::LocalMktDate => Self::Date,
             DataType::MonthYear => Self::MonthYear,
-            DataType::UtcTimeOnly => Self::Time,
+            DataType::UtcTimeOnly | DataType::LocalMktTime => Self::Time,
             DataType::UtcTimestamp => Self::UtcTimestamp,
             DataType::Data | DataType::XmlData => Self::Bytes,
             _ => Self::Raw,
@@ -221,9 +221,13 @@ mod tests {
     }
 
     #[test]
-    fn a_utc_time_reads_as_a_time() {
+    fn the_time_types_read_as_times() {
         assert_eq!(
             Conversion::of(&field(DataType::UtcTimeOnly)),
+            Conversion::Time
+        );
+        assert_eq!(
+            Conversion::of(&field(DataType::LocalMktTime)),
             Conversion::Time
         );
     }
