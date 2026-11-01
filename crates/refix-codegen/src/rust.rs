@@ -1,3 +1,4 @@
+mod dispatch;
 mod enums;
 mod error;
 mod groups;
@@ -12,6 +13,7 @@ use refix_dictionary::{Dictionary, dictionary};
 use crate::Generated;
 use crate::conversion::{Conversion, unclaimed_types, uses};
 use crate::envelope::Envelope;
+use dispatch::emit_dispatch;
 use enums::emit_enum;
 pub use error::Error;
 use groups::{emit_group_module, shared_groups};
@@ -55,6 +57,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .chain(groups)
         .chain(views)
         .chain(messages)
+        .chain(emit_dispatch(dictionary))
         .collect::<Vec<String>>()
         .join("\n");
     let has_groups = !envelope.with_groups.is_empty()
@@ -249,6 +252,20 @@ impl NewOrderSingle {
         Ok(self.0.get_str(Tag(40))?.map(OrdType::from_value))
     }
 }
+
+pub enum Message {
+    NewOrderSingle(NewOrderSingle),
+    Unrecognized(RawMessage),
+}
+
+impl Message {
+    pub fn from_raw(raw: RawMessage) -> Self {
+        match raw.get(Tag(35)) {
+            Some(NewOrderSingle::MSG_TYPE) => Self::NewOrderSingle(NewOrderSingle::from_raw(raw)),
+            _ => Self::Unrecognized(raw),
+        }
+    }
+}
 "#;
 
         let generated = generate(&spec.resolve().unwrap(), "toy.xml").unwrap();
@@ -260,6 +277,15 @@ impl NewOrderSingle {
                 data_type: DataType::Other("PRICE".to_owned()),
             }]
         );
+    }
+
+    #[test]
+    fn a_dictionary_without_messages_has_no_message_enum() {
+        let spec = spec_of(vec![], vec![]);
+
+        let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+
+        assert!(!code.contains("pub enum Message"));
     }
 
     #[test]
@@ -618,6 +644,20 @@ impl NewOrderSingle {
 
     pub fn parties(&self) -> Result<Instances<'_, parties::Instance<'_>>, InvalidValue> {
         self.0.get_group(&parties::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
+    }
+}
+
+pub enum Message {
+    NewOrderSingle(NewOrderSingle),
+    Unrecognized(RawMessage),
+}
+
+impl Message {
+    pub fn from_raw(raw: RawMessage) -> Self {
+        match raw.get(Tag(35)) {
+            Some(NewOrderSingle::MSG_TYPE) => Self::NewOrderSingle(NewOrderSingle::from_raw(raw)),
+            _ => Self::Unrecognized(raw),
+        }
     }
 }
 "#;
