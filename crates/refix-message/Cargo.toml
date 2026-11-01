@@ -13,6 +13,7 @@ categories.workspace = true
 
 [dependencies]
 bytes = { workspace = true }
+chrono-04 = { workspace = true, optional = true }
 jiff-02 = { workspace = true, optional = true }
 
 [package.metadata.docs.rs]
