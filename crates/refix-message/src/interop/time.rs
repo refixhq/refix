@@ -1,6 +1,6 @@
 use super::exact_precision;
-use crate::{Date, OutOfRange, Time};
-use time_03::Month;
+use crate::{Date, OutOfRange, Time, UtcTimestamp};
+use time_03::{Month, UtcDateTime};
 
 impl From<Date> for time_03::Date {
     fn from(date: Date) -> Self {
@@ -42,6 +42,22 @@ impl From<time_03::Time> for Time {
         let seconds = i64::from(hour) * 3_600 + i64::from(minute) * 60 + i64::from(second);
         let nanos = seconds * 1_000_000_000 + i64::from(nanosecond);
         Time::new(nanos, exact_precision(nanos)).expect("a time from time is within a day")
+    }
+}
+
+impl From<UtcTimestamp> for UtcDateTime {
+    fn from(timestamp: UtcTimestamp) -> Self {
+        UtcDateTime::from_unix_timestamp_nanos(i128::from(timestamp.unix_nanos()))
+            .expect("an i64 of nanoseconds is within time's range")
+    }
+}
+
+impl TryFrom<UtcDateTime> for UtcTimestamp {
+    type Error = OutOfRange;
+
+    fn try_from(timestamp: UtcDateTime) -> Result<Self, Self::Error> {
+        let nanos = i64::try_from(timestamp.unix_timestamp_nanos()).map_err(|_| OutOfRange)?;
+        Ok(UtcTimestamp::new(nanos, exact_precision(nanos)))
     }
 }
 
@@ -124,6 +140,50 @@ mod tests {
         fn clamps_a_leap_second_to_the_end_of_the_day() {
             let leap = Time::new(86_400_500_000_000, TimePrecision::MILLIS).unwrap();
             assert_eq!(time_03::Time::from(leap), time_03::Time::MAX);
+        }
+    }
+
+    mod timestamp {
+        use super::*;
+
+        fn transact_time() -> UtcDateTime {
+            calendar_date(2026, Month::October, 8)
+                .with_hms_milli(9, 30, 0, 123)
+                .unwrap()
+                .as_utc()
+        }
+
+        #[test]
+        fn converts_to_time() {
+            let timestamp = UtcTimestamp::new(1_791_451_800_123_000_000, TimePrecision::MILLIS);
+            assert_eq!(UtcDateTime::from(timestamp), transact_time());
+        }
+
+        #[test]
+        fn converts_from_time() {
+            let timestamp = UtcTimestamp::try_from(transact_time()).unwrap();
+            assert_eq!(timestamp.unix_nanos(), 1_791_451_800_123_000_000);
+            assert_eq!(timestamp.precision(), TimePrecision::MILLIS);
+        }
+
+        #[test]
+        fn round_trips_the_ends_of_an_i64() {
+            for nanos in [i64::MIN, i64::MAX] {
+                let timestamp = UtcTimestamp::new(nanos, TimePrecision::NANOS);
+                assert_eq!(
+                    UtcTimestamp::try_from(UtcDateTime::from(timestamp)),
+                    Ok(timestamp)
+                );
+            }
+        }
+
+        #[test]
+        fn rejects_a_timestamp_beyond_an_i64_of_nanoseconds() {
+            let past_the_end =
+                UtcDateTime::from_unix_timestamp_nanos(i128::from(i64::MAX) + 1).unwrap();
+            for time in [past_the_end, UtcDateTime::MIN, UtcDateTime::MAX] {
+                assert_eq!(UtcTimestamp::try_from(time), Err(OutOfRange));
+            }
         }
     }
 }
