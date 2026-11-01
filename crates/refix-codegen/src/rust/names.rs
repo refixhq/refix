@@ -10,12 +10,10 @@ use crate::envelope::Section;
 use crate::groups::{declared_groups, instance_context, is_generated};
 use crate::namespace::{Namespace, Owner};
 
-/// Names the generated root relies on.
+/// Names the generated root defines or relies on.
 ///
-/// These are its imports, the standard names its signatures use, the crate
-/// its paths start from, and `Instance`, which each group module defines
-/// over the root names it imports. The header and trailer views take their
-/// types and the modules of their groups.
+/// `Instance` is here because each group module imports the root and
+/// defines its own.
 const ROOT: &[&str] = &[
     "Date",
     "Decimal",
@@ -26,12 +24,14 @@ const ROOT: &[&str] = &[
     "Instances",
     "InvalidValue",
     "KnownTags",
+    "Message",
     "MonthYear",
     "MultipleValues",
     "Ok",
     "Option",
     "RawMessage",
     "Result",
+    "Some",
     "Tag",
     "Time",
     "Trailer",
@@ -84,8 +84,10 @@ impl Names {
             message_modules: HashMap::new(),
         };
         let mut root = Namespace::with_generated(ROOT);
+        let mut message_variants = Namespace::with_generated(&["Unrecognized"]);
         for message in dictionary.messages() {
             root.claim(message.name(), Owner::Message(message.name().to_owned()))?;
+            message_variants.claim(message.name(), Owner::Message(message.name().to_owned()))?;
         }
         for message in dictionary.messages() {
             names.name_message_module(message, &mut root)?;
@@ -360,6 +362,42 @@ mod tests {
             &[("1", "UNRECOGNIZED")],
         );
         assert_eq!(clash(vec![field]).first, Owner::Generated);
+    }
+
+    #[test]
+    fn a_message_named_like_the_catch_all_clashes() {
+        let dictionary = Spec {
+            version: Version {
+                protocol: Protocol::Fix,
+                major: 4,
+                minor: 4,
+                service_pack: 0,
+            },
+            header: vec![],
+            trailer: vec![],
+            messages: vec![Message {
+                name: "Unrecognized".to_owned(),
+                msg_type: "U1".to_owned(),
+                members: vec![],
+                category: Category::App,
+            }],
+            fields: vec![],
+            components: vec![],
+        }
+        .resolve()
+        .unwrap();
+
+        let Err(Error::NameClash(clash)) = Names::new(&dictionary, &mut Vec::new()) else {
+            panic!("expected a name clash");
+        };
+        assert_eq!(
+            *clash,
+            NameClash {
+                name: "Unrecognized".to_owned(),
+                first: Owner::Generated,
+                second: Owner::Message("Unrecognized".to_owned()),
+            }
+        );
     }
 
     #[test]

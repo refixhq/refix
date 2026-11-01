@@ -409,3 +409,19 @@ pub mod logon {
         }
     }
 }
+
+pub enum Message {
+    NewOrderSingle(NewOrderSingle),
+    Logon(Logon),
+    Unrecognized(RawMessage),
+}
+
+impl Message {
+    pub fn from_raw(raw: RawMessage) -> Self {
+        match raw.get(Tag(35)) {
+            Some(NewOrderSingle::MSG_TYPE) => Self::NewOrderSingle(NewOrderSingle::from_raw(raw)),
+            Some(Logon::MSG_TYPE) => Self::Logon(Logon::from_raw(raw)),
+            _ => Self::Unrecognized(raw),
+        }
+    }
+}

@@ -5,12 +5,14 @@ generated from QuickFIX's `FIX44.xml`.
 
 ```pycon
 >>> from refix import Tokenizer
->>> from refix_fix44 import NewOrderSingle
+>>> from refix_fix44 import from_raw
 >>> frame = (
 ...     "8=FIX.4.4|9=118|35=D|49=SENDER|56=TARGET|34=1|52=20261008-09:30:00|"
 ...     "11=ORDER-1|55=ACME|54=1|60=20261008-09:30:00|40=2|44=101.25|38=100|10=194|"
 ... )
->>> order = NewOrderSingle(Tokenizer().tokenize(frame.replace("|", "\x01").encode()))
+>>> order = from_raw(Tokenizer().tokenize(frame.replace("|", "\x01").encode()))
+>>> type(order)
+<class 'refix_fix44.NewOrderSingle'>
 >>> order.header.sender_comp_id
 'SENDER'
 >>> order.header.msg_seq_num
@@ -30,10 +32,8 @@ datetime.datetime(2026, 10, 8, 9, 30, tzinfo=datetime.timezone.utc)
 
 ```
 
-Strings, integers, decimals, booleans, dates, times, timestamps, enums and
-repeating groups are typed, and every message reaches its header and trailer.
-Each time and timestamp also reads as exact nanoseconds, as `transact_time_ns`
-does.
+`from_raw` reads each message as the class its MsgType names, and returns any
+other unchanged.
 
 ## License
 

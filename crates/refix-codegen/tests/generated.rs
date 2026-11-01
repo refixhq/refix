@@ -13,7 +13,7 @@ use refix_message::{
 #[path = "data/toy_generated.rs"]
 mod toy;
 
-use toy::{ExecInst, Header, Logon, NewOrderSingle, OrdType, PartyRole};
+use toy::{ExecInst, Header, Logon, Message, NewOrderSingle, OrdType, PartyRole};
 
 const TOY_XML: &str = include_str!("data/toy.xml");
 const TOY_GENERATED: &str = include_str!("data/toy_generated.rs");
@@ -76,6 +76,32 @@ fn typed_reads_over_a_tokenized_frame() {
         ))
     );
     assert_eq!(order.ord_type(), Ok(Some(OrdType::Market)));
+}
+
+#[test]
+fn reads_each_message_as_its_msg_type_names() {
+    let order = Tokenizer::default()
+        .tokenize(frame("35=D|11=ORDER-1|"))
+        .unwrap();
+    let logon = Tokenizer::default().tokenize(frame("35=A|")).unwrap();
+
+    let Message::NewOrderSingle(order) = Message::from_raw(order) else {
+        panic!("expected a NewOrderSingle");
+    };
+    assert_eq!(order.cl_ord_id(), Ok(Some("ORDER-1")));
+    assert!(matches!(Message::from_raw(logon), Message::Logon(_)));
+}
+
+#[test]
+fn an_unknown_msg_type_reads_as_unrecognized() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=ZZ|58=hello|"))
+        .unwrap();
+
+    let Message::Unrecognized(raw) = Message::from_raw(raw) else {
+        panic!("expected an unrecognized message");
+    };
+    assert_eq!(raw.get(Tag(58)), Some(b"hello".as_slice()));
 }
 
 #[test]

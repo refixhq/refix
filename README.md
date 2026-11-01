@@ -51,7 +51,6 @@ ReFIX.
 Reading and typing messages works in both languages. Planned next:
 
 - stock packages for more FIX versions
-- reading each message as its type automatically
 - building and serialising messages
 - the session layer
 
