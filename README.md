@@ -29,12 +29,11 @@ pip install refix refix-fix44
 
 ```python
 import refix
-from refix_fix44 import NewOrderSingle
+from refix_fix44 import CODEC, NewOrderSingle
 
-for message in refix.read_log("fix.log"):
-    if isinstance(message, refix.RawMessage) and message.get(35) == b"D":
-        order = NewOrderSingle(message)
-        print(order.header.sender_comp_id, order.cl_ord_id, order.symbol)
+for message in refix.decode_log("fix.log", CODEC):
+    if isinstance(message, NewOrderSingle):
+        print(message.header.sender_comp_id, message.cl_ord_id, message.symbol)
 ```
 
 In Rust, `cargo add refix-fix44`; see [refix-fix44].
