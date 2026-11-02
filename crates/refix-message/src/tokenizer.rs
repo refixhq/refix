@@ -1,6 +1,6 @@
 use crate::framing::{GarbledReason, Outcome, SOH, Scanner};
 use crate::message::RawField;
-use crate::{RawMessage, Tag, length_tags};
+use crate::{Dialect, RawMessage, Tag, length_tags};
 use bytes::Bytes;
 
 /// Splits a framed FIX message into its fields.
@@ -11,23 +11,19 @@ pub struct Tokenizer {
 
 impl Default for Tokenizer {
     fn default() -> Self {
-        Self {
-            length_tags: length_tags::STANDARD.iter().copied().map(Tag).collect(),
-        }
+        Self::new(Dialect::new())
     }
 }
 
 impl Tokenizer {
-    /// Constructs a [`Tokenizer`] with additional (non-standard) length tags.
-    ///
-    /// The supplied values are additive, they never replace the standard set.
-    /// Tag 0 is reserved as the malformed-field sentinel and is ignored.
-    pub fn with_extra_length_tags(extras: impl IntoIterator<Item = Tag>) -> Self {
+    /// A tokenizer for `dialect`.
+    pub fn new(dialect: Dialect<'_>) -> Self {
+        let extras = dialect.extra_length_tags.iter().copied();
         let mut length_tags: Vec<Tag> = length_tags::STANDARD
             .iter()
             .copied()
             .map(Tag)
-            .chain(extras.into_iter().filter(|&tag| tag != Tag::MALFORMED))
+            .chain(extras.filter(|&tag| tag != Tag::MALFORMED))
             .collect();
         length_tags.sort_unstable();
         length_tags.dedup();
@@ -198,7 +194,7 @@ fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
 #[cfg(test)]
 mod tests {
     use crate::test_utils::{construct_valid_frame, to_wire};
-    use crate::{RawMessage, Tag, TokenizeError, Tokenizer};
+    use crate::{Dialect, RawMessage, Tag, TokenizeError, Tokenizer};
     use bytes::Bytes;
 
     /// Tokenises a `|`-delimited body wrapped in a valid FIX.4.4 frame,
@@ -526,7 +522,7 @@ mod tests {
         #[test]
         fn dialect_extra_delimits_data() {
             let frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|58=ok|");
-            let message = Tokenizer::with_extra_length_tags([Tag(5001)])
+            let message = Tokenizer::new(Dialect::new().with_extra_length_tags(&[Tag(5001)]))
                 .tokenize(Bytes::from(frame))
                 .unwrap();
             assert_tiles(&message);
@@ -544,7 +540,7 @@ mod tests {
         #[test]
         fn standard_set_survives_extras() {
             let frame = construct_valid_frame("FIX.4.4", "35=0|95=3|96=a|b|");
-            let message = Tokenizer::with_extra_length_tags([Tag(5001)])
+            let message = Tokenizer::new(Dialect::new().with_extra_length_tags(&[Tag(5001)]))
                 .tokenize(Bytes::from(frame))
                 .unwrap();
             assert_tiles(&message);
@@ -557,7 +553,7 @@ mod tests {
         #[test]
         fn extra_below_the_standard_minimum() {
             let frame = construct_valid_frame("FIX.4.4", "35=0|42=3|58=a|b|11=ok|");
-            let message = Tokenizer::with_extra_length_tags([Tag(42)])
+            let message = Tokenizer::new(Dialect::new().with_extra_length_tags(&[Tag(42)]))
                 .tokenize(Bytes::from(frame))
                 .unwrap();
             assert_tiles(&message);
@@ -574,7 +570,7 @@ mod tests {
 
         #[test]
         fn tag_zero_extra_is_ignored() {
-            let tokenizer = Tokenizer::with_extra_length_tags([Tag(0)]);
+            let tokenizer = Tokenizer::new(Dialect::new().with_extra_length_tags(&[Tag(0)]));
             assert!(!tokenizer.is_length_tag(Tag::MALFORMED));
         }
     }
