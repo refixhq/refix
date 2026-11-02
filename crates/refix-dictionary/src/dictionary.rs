@@ -238,6 +238,7 @@ mod tests {
             name: name.to_owned(),
             tag: Tag(tag),
             data_type: DataType::String,
+            length_tag: None,
             values: vec![],
         }
     }
@@ -767,6 +768,7 @@ mod tests {
                 name: "PartyRole".to_owned(),
                 tag: Tag(452),
                 data_type,
+                length_tag: None,
                 values: values
                     .iter()
                     .map(|value| EnumValue {
@@ -844,6 +846,137 @@ mod tests {
         #[test]
         fn values_of_other_types_are_not_checked() {
             assert!(resolve(enum_field(DataType::Char, &["A"])).is_ok());
+        }
+    }
+
+    mod length_tags {
+        use super::*;
+
+        fn typed(name: &str, tag: u32, data_type: DataType) -> Field {
+            Field {
+                data_type,
+                ..field(name, tag)
+            }
+        }
+
+        fn data(name: &str, tag: u32, length_tag: u32) -> Field {
+            Field {
+                length_tag: Some(Tag(length_tag)),
+                ..typed(name, tag, DataType::Data)
+            }
+        }
+
+        fn resolve(fields: Vec<Field>) -> Result<Dictionary, Error> {
+            spec_of(fields, vec![], vec![]).resolve()
+        }
+
+        #[test]
+        fn a_data_field_takes_its_length_from_a_length_field() {
+            let fields = vec![
+                typed("RawDataLength", 95, DataType::Length),
+                data("RawData", 96, 95),
+            ];
+
+            assert!(resolve(fields).is_ok());
+        }
+
+        #[test]
+        fn an_xml_data_field_takes_its_length_from_a_length_field() {
+            let fields = vec![
+                typed("XmlDataLen", 212, DataType::Length),
+                Field {
+                    data_type: DataType::XmlData,
+                    ..data("XmlData", 213, 212)
+                },
+            ];
+
+            assert!(resolve(fields).is_ok());
+        }
+
+        #[test]
+        fn a_length_tag_on_another_type_is_an_error() {
+            let fields = vec![
+                typed("RawDataLength", 95, DataType::Length),
+                Field {
+                    length_tag: Some(Tag(95)),
+                    ..field("Text", 58)
+                },
+            ];
+
+            assert_eq!(
+                resolve(fields).unwrap_err(),
+                Error::UnexpectedLengthTag {
+                    field: "Text".to_owned(),
+                    tag: Tag(95),
+                }
+            );
+        }
+
+        #[test]
+        fn an_unknown_length_tag_is_an_error() {
+            assert_eq!(
+                resolve(vec![data("RawData", 96, 95)]).unwrap_err(),
+                Error::UnknownLengthTag {
+                    field: "RawData".to_owned(),
+                    tag: Tag(95),
+                }
+            );
+        }
+
+        #[test]
+        fn a_length_field_of_another_type_is_an_error() {
+            let fields = vec![
+                typed("RawDataLength", 95, DataType::Int),
+                data("RawData", 96, 95),
+            ];
+
+            assert_eq!(
+                resolve(fields).unwrap_err(),
+                Error::NonLengthField {
+                    field: "RawData".to_owned(),
+                    length_field: "RawDataLength".to_owned(),
+                }
+            );
+        }
+
+        #[test]
+        fn data_fields_sharing_a_length_field_are_an_error() {
+            let fields = vec![
+                typed("RawDataLength", 95, DataType::Length),
+                data("RawData", 96, 95),
+                data("SecureData", 91, 95),
+            ];
+
+            assert_eq!(
+                resolve(fields).unwrap_err(),
+                Error::SharedLengthField {
+                    length_field: "RawDataLength".to_owned(),
+                    first: "RawData".to_owned(),
+                    second: "SecureData".to_owned(),
+                }
+            );
+        }
+
+        #[test]
+        fn a_used_data_field_without_a_length_tag_is_an_error() {
+            let spec = spec_of(
+                vec![typed("RawData", 96, DataType::Data)],
+                vec![],
+                vec![message("News", vec![field_ref(96, false)])],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::MissingLengthTag {
+                    field: "RawData".to_owned(),
+                    context: MemberContext::Message("News".to_owned()),
+                }
+            );
+        }
+
+        #[test]
+        fn an_unused_data_field_needs_no_length_tag() {
+            assert!(resolve(vec![typed("RawData", 96, DataType::Data)]).is_ok());
         }
     }
 

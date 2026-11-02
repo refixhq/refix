@@ -41,6 +41,7 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
         &tags_by_name,
         &mut warnings,
     )?;
+    let fields = link_length_fields(fields, &header, &trailer, &messages, &components)?;
 
     let spec = Spec {
         version,
@@ -116,6 +117,7 @@ fn parse_field(node: Node, warnings: &mut Vec<Warning>) -> Result<Field, Error> 
         name,
         tag,
         data_type,
+        length_tag: None,
         values,
     })
 }
@@ -408,6 +410,78 @@ fn int_attribute_or<T: FromStr<Err = ParseIntError>>(
     }
 }
 
+/// Gives each data field the LENGTH field listed directly before it, as FIX
+/// requires on the wire.
+fn link_length_fields(
+    fields: Vec<Field>,
+    header: &[Member],
+    trailer: &[Member],
+    messages: &[Message],
+    components: &[Component],
+) -> Result<Vec<Field>, Error> {
+    let fields_by_tag: HashMap<Tag, &Field> =
+        fields.iter().map(|field| (field.tag, field)).collect();
+    let member_lists = [header, trailer]
+        .into_iter()
+        .chain(messages.iter().map(|message| message.members.as_slice()))
+        .chain(
+            components
+                .iter()
+                .map(|component| component.members.as_slice()),
+        );
+    let mut length_tags = HashMap::new();
+    for members in member_lists {
+        collect_length_tags(members, &fields_by_tag, &mut length_tags)?;
+    }
+
+    Ok(fields
+        .into_iter()
+        .map(|field| Field {
+            length_tag: length_tags.get(&field.tag).copied(),
+            ..field
+        })
+        .collect())
+}
+
+/// Records the length tag of each data field listed directly after a LENGTH
+/// field, in `members` and the groups within.
+fn collect_length_tags(
+    members: &[Member],
+    fields_by_tag: &HashMap<Tag, &Field>,
+    length_tags: &mut HashMap<Tag, Tag>,
+) -> Result<(), Error> {
+    for member in members {
+        if let Member::Group(group) = member {
+            collect_length_tags(&group.members, fields_by_tag, length_tags)?;
+        }
+    }
+
+    for pair in members.windows(2) {
+        let [Member::Field(length), Member::Field(data)] = pair else {
+            continue;
+        };
+        let length_field = fields_by_tag[&length.tag];
+        let data_field = fields_by_tag[&data.tag];
+        if length_field.data_type != DataType::Length || !data_field.data_type.has_length_field() {
+            continue;
+        }
+        match length_tags.entry(data.tag) {
+            Entry::Vacant(slot) => {
+                slot.insert(length.tag);
+            }
+            Entry::Occupied(first) if *first.get() != length.tag => {
+                return Err(Error::ConflictingLengthFields {
+                    field: data_field.name.clone(),
+                    first: fields_by_tag[first.get()].name.clone(),
+                    second: length_field.name.clone(),
+                });
+            }
+            Entry::Occupied(_) => {}
+        }
+    }
+    Ok(())
+}
+
 /// The result of a successful parse.
 ///
 /// This contains the resolved dictionary as well as any
@@ -482,6 +556,12 @@ pub enum Error {
         attribute: String,
         value: String,
     },
+    /// A data field listed after different LENGTH fields.
+    ConflictingLengthFields {
+        field: String,
+        first: String,
+        second: String,
+    },
     Invalid(dictionary::Error),
 }
 
@@ -525,6 +605,16 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "invalid value '{value}' in attribute '{attribute}' of <{element}>"
+                )
+            }
+            Error::ConflictingLengthFields {
+                field,
+                first,
+                second,
+            } => {
+                write!(
+                    f,
+                    "field '{field}' takes its length from '{first}' in one place and '{second}' in another"
                 )
             }
             Error::Invalid(error) => {
@@ -615,24 +705,28 @@ mod tests {
                         name: "ClOrdID".to_owned(),
                         tag: Tag(11),
                         data_type: DataType::String,
+                        length_tag: None,
                         values: vec![],
                     },
                     Field {
                         name: "PriceType".to_owned(),
                         tag: Tag(423),
                         data_type: DataType::Int,
+                        length_tag: None,
                         values: vec![],
                     },
                     Field {
                         name: "OrderQty".to_owned(),
                         tag: Tag(38),
                         data_type: DataType::Qty,
+                        length_tag: None,
                         values: vec![],
                     },
                     Field {
                         name: "OrdType".to_owned(),
                         tag: Tag(40),
                         data_type: DataType::Char,
+                        length_tag: None,
                         values: vec![
                             EnumValue {
                                 value: "1".to_owned(),
@@ -1208,6 +1302,103 @@ mod tests {
                 Error::InvalidAttribute { ref attribute, ref value, .. }
                     if attribute == "msgcat" && value == "session"
             ));
+        }
+    }
+
+    mod length_tags {
+        use super::*;
+
+        fn parse_with(components: &str, members: &str) -> Result<Parsed, Error> {
+            parse(&format!(
+                "<fix major='4' minor='4'>\
+                 <fields>\
+                 <field number='58' name='Text' type='STRING'/>\
+                 <field number='78' name='NoAllocs' type='NUMINGROUP'/>\
+                 <field number='95' name='RawDataLength' type='LENGTH'/>\
+                 <field number='96' name='RawData' type='DATA'/>\
+                 <field number='212' name='XmlDataLen' type='LENGTH'/>\
+                 <field number='213' name='XmlData' type='XMLDATA'/>\
+                 <field number='354' name='EncodedTextLen' type='LENGTH'/>\
+                 </fields>\
+                 <components>{components}</components>\
+                 <messages>\
+                 <message name='News' msgtype='B' msgcat='app'>{members}</message>\
+                 </messages>\
+                 </fix>"
+            ))
+        }
+
+        fn length_tag(components: &str, members: &str, field: &str) -> Option<Tag> {
+            let parsed = parse_with(components, members).unwrap();
+            let fields = parsed.dictionary.fields();
+            fields.iter().find(|f| f.name == field).unwrap().length_tag
+        }
+
+        #[test]
+        fn a_data_field_takes_the_length_field_before_it() {
+            let members = "<field name='RawDataLength'/><field name='RawData'/>";
+            assert_eq!(length_tag("", members, "RawData"), Some(Tag(95)));
+        }
+
+        #[test]
+        fn an_xml_data_field_takes_the_length_field_before_it() {
+            let members = "<field name='XmlDataLen'/><field name='XmlData'/>";
+            assert_eq!(length_tag("", members, "XmlData"), Some(Tag(212)));
+        }
+
+        #[test]
+        fn a_data_field_in_a_group_takes_the_length_field_before_it() {
+            let members = "<group name='NoAllocs'>\
+                           <field name='RawDataLength'/><field name='RawData'/>\
+                           </group>";
+            assert_eq!(length_tag("", members, "RawData"), Some(Tag(95)));
+        }
+
+        #[test]
+        fn a_data_field_after_another_field_is_an_error() {
+            let members =
+                "<field name='RawDataLength'/><field name='Text'/><field name='RawData'/>";
+            let error = parse_with("", members).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                "invalid dictionary: data field 'RawData' in message 'News' has no length field"
+            );
+        }
+
+        #[test]
+        fn a_data_field_after_a_component_is_an_error() {
+            let components = "<component name='Lengths'><field name='RawDataLength'/></component>";
+            let members = "<component name='Lengths'/><field name='RawData'/>";
+            let error = parse_with(components, members).unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::Invalid(dictionary::Error::MissingLengthTag { ref field, .. })
+                    if field == "RawData"
+            ));
+        }
+
+        #[test]
+        fn a_data_field_after_different_length_fields_is_an_error() {
+            let error = parse_with(
+                "<component name='Raw'>\
+                 <field name='RawDataLength'/><field name='RawData'/>\
+                 </component>",
+                "<field name='EncodedTextLen'/><field name='RawData'/>",
+            )
+            .unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::ConflictingLengthFields { ref field, ref first, ref second }
+                    if field == "RawData" && first == "EncodedTextLen" && second == "RawDataLength"
+            ));
+            assert_eq!(
+                error.to_string(),
+                "field 'RawData' takes its length from 'EncodedTextLen' in one place and \
+                 'RawDataLength' in another"
+            );
         }
     }
 

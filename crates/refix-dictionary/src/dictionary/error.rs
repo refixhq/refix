@@ -29,6 +29,31 @@ pub enum Error {
         first: String,
         second: String,
     },
+    /// A length tag on a field that is not a data field.
+    UnexpectedLengthTag {
+        field: String,
+        tag: Tag,
+    },
+    UnknownLengthTag {
+        field: String,
+        tag: Tag,
+    },
+    /// A data field taking its length from a field not typed LENGTH.
+    NonLengthField {
+        field: String,
+        length_field: String,
+    },
+    /// Two data fields taking their length from one field.
+    SharedLengthField {
+        length_field: String,
+        first: String,
+        second: String,
+    },
+    /// A data field used without a length tag.
+    MissingLengthTag {
+        field: String,
+        context: MemberContext,
+    },
     DuplicateField {
         tag: Tag,
         first: MemberContext,
@@ -89,6 +114,37 @@ impl fmt::Display for Error {
                     "messages '{first}' and '{second}' share MsgType '{msg_type}'"
                 )
             }
+            Error::UnexpectedLengthTag { field, tag } => {
+                write!(
+                    f,
+                    "field '{field}' takes its length from tag {tag} but is not a data field"
+                )
+            }
+            Error::UnknownLengthTag { field, tag } => {
+                write!(f, "field '{field}' takes its length from unknown tag {tag}")
+            }
+            Error::NonLengthField {
+                field,
+                length_field,
+            } => {
+                write!(
+                    f,
+                    "field '{field}' takes its length from '{length_field}', which is not a LENGTH field"
+                )
+            }
+            Error::SharedLengthField {
+                length_field,
+                first,
+                second,
+            } => {
+                write!(
+                    f,
+                    "fields '{first}' and '{second}' both take their length from '{length_field}'"
+                )
+            }
+            Error::MissingLengthTag { field, context } => {
+                write!(f, "data field '{field}' in {context} has no length field")
+            }
             Error::DuplicateField { tag, first, second } if first == second => {
                 write!(f, "{first} contains tag {tag} more than once")
             }
@@ -143,6 +199,20 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "messages 'NewOrderSingle' and 'NewOrderCross' share MsgType 'D'"
+        );
+    }
+
+    #[test]
+    fn a_shared_length_field_names_both_data_fields() {
+        let error = Error::SharedLengthField {
+            length_field: "RawDataLength".to_owned(),
+            first: "RawData".to_owned(),
+            second: "SecureData".to_owned(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "fields 'RawData' and 'SecureData' both take their length from 'RawDataLength'"
         );
     }
 

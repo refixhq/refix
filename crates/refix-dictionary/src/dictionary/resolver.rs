@@ -1,7 +1,7 @@
 use super::{
     ComponentIndex, Dictionary, Error, FieldIndex, ResolvedGroup, ResolvedMember, ResolvedMessage,
 };
-use crate::{Field, MemberContext, Spec, Tag, spec};
+use crate::{DataType, Field, MemberContext, Spec, Tag, spec};
 use std::collections::{HashMap, hash_map::Entry};
 
 impl Spec {
@@ -43,9 +43,11 @@ impl<'a> Resolver<'a> {
         check_int_values(&spec.fields)?;
         check_unique_codes(&spec.fields)?;
         check_unique_msg_types(&spec.messages)?;
+        let fields_by_tag = index_fields(&spec.fields)?;
+        check_length_tags(&spec.fields, &fields_by_tag)?;
         Ok(Self {
             spec,
-            fields_by_tag: index_fields(&spec.fields)?,
+            fields_by_tag,
             components_by_name: index_components(&spec.components)?,
             expansions: vec![None; spec.components.len()],
             stack: Vec::new(),
@@ -187,8 +189,16 @@ impl<'a> Resolver<'a> {
         field_ref: &spec::FieldRef,
         context: &MemberContext,
     ) -> Result<ResolvedMember, Error> {
+        let field_index = self.field_index(field_ref.tag, context)?;
+        let field = &self.spec.fields.as_slice()[field_index];
+        if field.data_type.has_length_field() && field.length_tag.is_none() {
+            return Err(Error::MissingLengthTag {
+                field: field.name.clone(),
+                context: context.clone(),
+            });
+        }
         Ok(ResolvedMember::Field {
-            field_index: self.field_index(field_ref.tag, context)?,
+            field_index,
             is_required: field_ref.is_required,
         })
     }
@@ -284,6 +294,47 @@ fn check_unique_msg_types(messages: &[spec::Message]) -> Result<(), Error> {
                 msg_type: message.msg_type.clone(),
                 first: first.clone(),
                 second: message.name.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Checks that only data fields take a length, each from a LENGTH field of
+/// its own.
+fn check_length_tags(
+    fields: &[Field],
+    fields_by_tag: &HashMap<Tag, FieldIndex>,
+) -> Result<(), Error> {
+    let mut by_length_tag = HashMap::new();
+    for field in fields {
+        let Some(tag) = field.length_tag else {
+            continue;
+        };
+        if !field.data_type.has_length_field() {
+            return Err(Error::UnexpectedLengthTag {
+                field: field.name.clone(),
+                tag,
+            });
+        }
+        let Some(&index) = fields_by_tag.get(&tag) else {
+            return Err(Error::UnknownLengthTag {
+                field: field.name.clone(),
+                tag,
+            });
+        };
+        let length_field = &fields[index];
+        if length_field.data_type != DataType::Length {
+            return Err(Error::NonLengthField {
+                field: field.name.clone(),
+                length_field: length_field.name.clone(),
+            });
+        }
+        if let Some(first) = by_length_tag.insert(tag, &field.name) {
+            return Err(Error::SharedLengthField {
+                length_field: length_field.name.clone(),
+                first: first.clone(),
+                second: field.name.clone(),
             });
         }
     }

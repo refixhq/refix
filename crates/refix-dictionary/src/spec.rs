@@ -38,6 +38,8 @@ pub struct Field {
     pub name: String,
     pub tag: Tag,
     pub data_type: DataType,
+    /// For a data field, the tag of the field that gives its length.
+    pub length_tag: Option<Tag>,
     pub values: Vec<EnumValue>,
 }
 
@@ -253,6 +255,12 @@ impl DataType {
     /// Whether the type holds space-delimited values, as `ExecInst(18)` does.
     pub fn is_multiple_value(&self) -> bool {
         matches!(self, Self::MultipleCharValue | Self::MultipleStringValue)
+    }
+
+    /// Whether a field of this type takes its length from another field, as
+    /// `RawData(96)` does.
+    pub(crate) fn has_length_field(&self) -> bool {
+        matches!(self, Self::Data | Self::XmlData)
     }
 
     /// A code in the form every code for its value shares.

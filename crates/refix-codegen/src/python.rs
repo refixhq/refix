@@ -163,6 +163,7 @@ mod tests {
             name: name.to_owned(),
             tag: Tag(tag),
             data_type,
+            length_tag: None,
             values: values
                 .iter()
                 .map(|(value, description)| EnumValue {
@@ -511,7 +512,13 @@ def from_raw(raw: RawMessage) -> Message | RawMessage:
     fn a_data_field_reads_as_bytes() {
         let generated = generated(
             vec![message("Logon", "A", vec![field_ref(96)])],
-            vec![field("RawData", 96, DataType::Data, &[])],
+            vec![
+                field("RawDataLength", 95, DataType::Length, &[]),
+                Field {
+                    length_tag: Some(Tag(95)),
+                    ..field("RawData", 96, DataType::Data, &[])
+                },
+            ],
             vec![],
         );
 

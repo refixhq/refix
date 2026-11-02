@@ -34,6 +34,7 @@ fn parses_the_full_fix44_dictionary() {
             name: "Account".to_owned(),
             tag: Tag(1),
             data_type: DataType::String,
+            length_tag: None,
             values: vec![],
         }
     );
@@ -191,4 +192,39 @@ fn parses_the_full_fix44_dictionary() {
 
     // Nothing is left unmodelled.
     assert!(parsed.warnings.is_empty());
+}
+
+#[test]
+fn links_each_fix44_data_field_to_its_length_field() {
+    let parsed = quickfix::parse(FIX44).unwrap();
+
+    let mut links: Vec<(u32, u32)> = parsed
+        .dictionary
+        .fields()
+        .iter()
+        .filter_map(|field| field.length_tag.map(|length| (field.tag.0, length.0)))
+        .collect();
+    links.sort_unstable();
+
+    assert_eq!(
+        links,
+        [
+            (89, 93),
+            (91, 90),
+            (96, 95),
+            (213, 212),
+            (349, 348),
+            (351, 350),
+            (353, 352),
+            (355, 354),
+            (357, 356),
+            (359, 358),
+            (361, 360),
+            (363, 362),
+            (365, 364),
+            (446, 445),
+            (619, 618),
+            (622, 621),
+        ]
+    );
 }
