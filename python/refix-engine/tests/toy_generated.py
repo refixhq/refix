@@ -10,7 +10,7 @@ from functools import cached_property
 from typing import ClassVar
 
 import refix
-from refix import Dialect, GroupTable, KnownTags, MonthYear, RawMessage
+from refix import Codec, Dialect, GroupTable, KnownTags, MonthYear, RawMessage
 from refix.enums import Unrecognized, from_value
 
 DIALECT = Dialect(extra_length_tags=(93,))
@@ -297,3 +297,6 @@ def from_raw(raw: RawMessage) -> Message | RawMessage:
     msg_type = raw.get(35)
     message = None if msg_type is None else _MESSAGES.get(msg_type)
     return raw if message is None else message(raw)
+
+
+CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)

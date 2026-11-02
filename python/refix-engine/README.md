@@ -19,7 +19,8 @@ Anything between frames that isn't FIX comes back as `refix.Garble`.
 `refix.Tokenizer` reads a single frame, and `refix.MessageStream` reads frames as bytes arrive.
 
 Typed messages come from generated code: `refix-fix44` for FIX 4.4, or
-`refix-cli` for your own dictionary.
+`refix-cli` for your own dictionary. `refix.decode_log` reads a log as typed
+messages through the generated module's `CODEC`.
 
 Up to 0.2, this package was published as `refix-engine`. Uninstall that before installing `refix`, as both
 provide the same module.

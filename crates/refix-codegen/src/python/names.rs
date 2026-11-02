@@ -16,7 +16,9 @@ use crate::naming::group_source_name;
 
 /// Names the generated module defines or relies on.
 const MODULE: &[&str] = &[
+    "CODEC",
     "ClassVar",
+    "Codec",
     "DIALECT",
     "Decimal",
     "Dialect",

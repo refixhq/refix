@@ -10,13 +10,15 @@ from refix._core import (
     Tokenizer,
     version,
 )
-from refix.log import read_log
+from refix.codec import Codec
+from refix.log import decode_log, read_log
 from refix.values import MonthYear
 
 __version__ = version()
 
 __all__ = [
     "MALFORMED_TAG",
+    "Codec",
     "Dialect",
     "Garble",
     "GroupTable",
@@ -27,5 +29,6 @@ __all__ = [
     "Scope",
     "Tokenizer",
     "__version__",
+    "decode_log",
     "read_log",
 ]

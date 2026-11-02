@@ -19,3 +19,13 @@ pub(super) fn emit_dialect(dictionary: &Dictionary) -> String {
         MAX_WIDTH,
     )
 }
+
+/// The `CODEC` constant, pairing `DIALECT` with `from_raw`.
+pub(super) fn emit_codec(dictionary: &Dictionary) -> Option<String> {
+    let codec = "CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)\n";
+    dictionary
+        .messages()
+        .next()
+        .is_some()
+        .then(|| codec.to_owned())
+}
