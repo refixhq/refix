@@ -2,7 +2,9 @@
 #![cfg_attr(rustfmt, rustfmt::skip)]
 #![allow(clippy::module_inception)]
 
-use refix_message::{Date, Decimal, GroupTable, Instances, InvalidValue, KnownTags, MonthYear, MultipleValues, RawMessage, Tag, Time, UtcTimestamp};
+use refix_message::{Date, Decimal, Dialect, GroupTable, Instances, InvalidValue, KnownTags, MonthYear, MultipleValues, RawMessage, Tag, Time, UtcTimestamp};
+
+pub const DIALECT: Dialect<'static> = Dialect::new().with_extra_length_tags(&[Tag(93)]);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrdType<'a> {
