@@ -1,13 +1,15 @@
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
+from io import BytesIO
 from typing import assert_never
 
 import pytest
-from refix import MonthYear, RawMessage
+from refix import Garble, MonthYear, RawMessage, decode_log
 from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
-from test_tokenizer import tokenize_body
+from test_tokenizer import construct_valid_frame, tokenize_body
 from toy_generated import (
+    CODEC,
     ExecInst,
     Header,
     Logon,
@@ -95,6 +97,17 @@ class TestDispatch:
         assert describe(from_raw(tokenize_body("35=D|"))) == "order"
         assert describe(from_raw(tokenize_body("35=A|"))) == "logon"
         assert describe(from_raw(tokenize_body("35=ZZ|"))) == "unrecognized"
+
+    def test_decodes_a_log_through_the_codec(self):
+        order = construct_valid_frame("FIX.4.4", "35=D|11=ORDER-1|")
+        unknown = construct_valid_frame("FIX.4.4", "35=ZZ|")
+
+        decoded = list(decode_log(BytesIO(b"junk\n" + order + unknown), CODEC))
+
+        assert isinstance(decoded[0], Garble)
+        assert isinstance(decoded[1], NewOrderSingle)
+        assert decoded[1].cl_ord_id == "ORDER-1"
+        assert isinstance(decoded[2], RawMessage)
 
 
 class TestEnums:
