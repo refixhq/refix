@@ -7,11 +7,11 @@ fields and reads them on demand, without copying.
 
 ```rust
 use refix_message::stream::Outcome;
-use refix_message::{MessageStream, Tag, Tokenizer};
+use refix_message::{MessageStream, Tag};
 
 fn main() {
     let log = b"2026-10-10 09:30:00 IN 8=FIX.4.4\x019=5\x0135=0\x0110=163\x01\n";
-    let mut stream = MessageStream::new(Tokenizer::default());
+    let mut stream = MessageStream::default();
     stream.feed(log);
     loop {
         match stream.next_message() {

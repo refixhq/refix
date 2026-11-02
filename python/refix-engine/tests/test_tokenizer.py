@@ -205,8 +205,9 @@ class TestLengthTags:
 
     def test_dialect_extra_delimits_data(self):
         frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|58=ok|")
+        dialect = refix.Dialect(extra_length_tags=[5001])
 
-        message = refix.Tokenizer(extra_length_tags=[5001]).tokenize(frame)
+        message = refix.Tokenizer(dialect).tokenize(frame)
 
         assert body_entries(message) == [
             (35, b"0"),
@@ -217,7 +218,8 @@ class TestLengthTags:
 
     def test_standard_set_survives_extras(self):
         frame = construct_valid_frame("FIX.4.4", "35=0|95=3|96=a|b|")
+        dialect = refix.Dialect(extra_length_tags=[5001])
 
-        message = refix.Tokenizer(extra_length_tags=[5001]).tokenize(frame)
+        message = refix.Tokenizer(dialect).tokenize(frame)
 
         assert body_entries(message) == [(35, b"0"), (95, b"3"), (96, b"a\x01b")]

@@ -1,3 +1,4 @@
+mod dialect;
 mod group;
 mod message;
 mod stream;
@@ -13,6 +14,7 @@ fn version() -> &'static str {
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add_class::<dialect::Dialect>()?;
     m.add_class::<group::GroupTable>()?;
     m.add_class::<group::KnownTags>()?;
     m.add_class::<stream::Garble>()?;

@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 
+mod dialect;
 pub mod framing;
 pub mod group;
 mod interop;
@@ -13,6 +14,7 @@ mod test_utils;
 mod tokenizer;
 mod value;
 
+pub use dialect::Dialect;
 pub use group::{
     Group, GroupLayout, GroupTable, GroupTableError, Instances, KnownTags, OwnedGroupTable,
 };

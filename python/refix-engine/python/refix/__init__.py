@@ -1,5 +1,6 @@
 from refix._core import (
     MALFORMED_TAG,
+    Dialect,
     Garble,
     GroupTable,
     KnownTags,
@@ -16,6 +17,7 @@ __version__ = version()
 
 __all__ = [
     "MALFORMED_TAG",
+    "Dialect",
     "Garble",
     "GroupTable",
     "KnownTags",
