@@ -54,10 +54,11 @@ class TestReadLog:
         assert len(outcomes) == 1
         assert messages_of(outcomes)[0].bytes == frame
 
-    def test_extra_length_tags_flow_through(self):
+    def test_dialect_extras_flow_through(self):
         frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|")
+        dialect = refix.Dialect(extra_length_tags=[5001])
 
-        outcomes = list(refix.read_log(BytesIO(frame), extra_length_tags=[5001]))
+        outcomes = list(refix.read_log(BytesIO(frame), dialect))
 
         assert messages_of(outcomes)[0].get(5002) == b"a\x01b"
 
