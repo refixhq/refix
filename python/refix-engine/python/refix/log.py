@@ -9,7 +9,7 @@ _CHUNK_SIZE = 65536
 
 def read_log(
     source: str | os.PathLike[str] | BinaryIO,
-    dialect: Dialect = Dialect(),
+    dialect: Dialect | None = None,
 ) -> Iterator[RawMessage | Garble]:
     """Yields each message in a FIX message log, in order.
 
@@ -23,7 +23,7 @@ def read_log(
         yield from _drive(source, dialect)
 
 
-def _drive(file: BinaryIO, dialect: Dialect) -> Iterator[RawMessage | Garble]:
+def _drive(file: BinaryIO, dialect: Dialect | None) -> Iterator[RawMessage | Garble]:
     stream = MessageStream(dialect)
     while chunk := file.read(_CHUNK_SIZE):
         stream.feed(chunk)
