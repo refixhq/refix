@@ -58,6 +58,7 @@ mod tests {
             name: name.to_owned(),
             tag: Tag(1),
             data_type,
+            length_tag: None,
             values: values
                 .iter()
                 .map(|(value, description)| EnumValue {

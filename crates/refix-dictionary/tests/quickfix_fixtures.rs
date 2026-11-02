@@ -34,6 +34,7 @@ fn parses_the_full_fix44_dictionary() {
             name: "Account".to_owned(),
             tag: Tag(1),
             data_type: DataType::String,
+            length_tag: None,
             values: vec![],
         }
     );

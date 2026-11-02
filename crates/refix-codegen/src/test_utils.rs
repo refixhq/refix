@@ -68,6 +68,7 @@ pub fn with_group<R>(
         name: name.to_owned(),
         tag: Tag(tag),
         data_type,
+        length_tag: None,
         values: vec![],
     };
     let dictionary = Spec {

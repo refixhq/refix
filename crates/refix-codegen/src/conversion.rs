@@ -130,6 +130,7 @@ mod tests {
             name: "Field".to_owned(),
             tag: Tag(1),
             data_type,
+            length_tag: None,
             values: vec![],
         }
     }

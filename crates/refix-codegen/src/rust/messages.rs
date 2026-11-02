@@ -182,6 +182,7 @@ mod tests {
             name: name.to_owned(),
             tag: Tag(tag),
             data_type,
+            length_tag: None,
             values: vec![],
         }
     }

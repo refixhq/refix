@@ -116,6 +116,7 @@ fn parse_field(node: Node, warnings: &mut Vec<Warning>) -> Result<Field, Error> 
         name,
         tag,
         data_type,
+        length_tag: None,
         values,
     })
 }
@@ -615,24 +616,28 @@ mod tests {
                         name: "ClOrdID".to_owned(),
                         tag: Tag(11),
                         data_type: DataType::String,
+                        length_tag: None,
                         values: vec![],
                     },
                     Field {
                         name: "PriceType".to_owned(),
                         tag: Tag(423),
                         data_type: DataType::Int,
+                        length_tag: None,
                         values: vec![],
                     },
                     Field {
                         name: "OrderQty".to_owned(),
                         tag: Tag(38),
                         data_type: DataType::Qty,
+                        length_tag: None,
                         values: vec![],
                     },
                     Field {
                         name: "OrdType".to_owned(),
                         tag: Tag(40),
                         data_type: DataType::Char,
+                        length_tag: None,
                         values: vec![
                             EnumValue {
                                 value: "1".to_owned(),
