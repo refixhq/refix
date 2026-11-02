@@ -41,9 +41,27 @@ pub(super) fn str_literal(value: &str) -> String {
     literal
 }
 
+/// A Python bytes literal of `value`'s UTF-8 bytes, escaping quotes,
+/// backslashes and anything outside printable ASCII.
+pub(super) fn bytes_literal(value: &str) -> String {
+    let mut literal = String::from("b\"");
+    for byte in value.bytes() {
+        match byte {
+            b'"' | b'\\' => {
+                literal.push('\\');
+                literal.push(char::from(byte));
+            }
+            b' '..=b'~' => literal.push(char::from(byte)),
+            byte => literal.push_str(&format!("\\x{byte:02x}")),
+        }
+    }
+    literal.push('"');
+    literal
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{emit_enum, str_literal};
+    use super::{bytes_literal, emit_enum, str_literal};
     use crate::python::names::Names;
     use crate::test_utils::message_with;
     use refix_dictionary::{DataType, EnumValue, Field, Tag};
@@ -115,5 +133,11 @@ mod tests {
     fn string_literals_are_escaped() {
         assert_eq!(str_literal("a\"b\\c"), r#""a\"b\\c""#);
         assert_eq!(str_literal("\u{1}\u{e9}"), r#""\u0001\u00e9""#);
+    }
+
+    #[test]
+    fn bytes_literals_escape_each_utf8_byte() {
+        assert_eq!(bytes_literal("a\"b\\c"), r#"b"a\"b\\c""#);
+        assert_eq!(bytes_literal("\u{1}\u{e9}"), r#"b"\x01\xc3\xa9""#);
     }
 }

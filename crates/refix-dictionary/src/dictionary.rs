@@ -136,7 +136,7 @@ impl<'a> Message<'a> {
     }
 
     /// The members in source order, components expanded in place.
-    pub fn members(&self) -> impl Iterator<Item = Member<'a>> {
+    pub fn members(&self) -> impl Iterator<Item = Member<'a>> + use<'a> {
         members_of(self.members, self.fields)
     }
 }
@@ -194,7 +194,7 @@ impl<'a> Group<'a> {
 
     /// The members of each instance in source order, with requiredness
     /// relative to the instance.
-    pub fn members(&self) -> impl Iterator<Item = Member<'a>> {
+    pub fn members(&self) -> impl Iterator<Item = Member<'a>> + use<'a> {
         members_of(&self.resolved.members, self.fields)
     }
 }
@@ -1036,6 +1036,37 @@ mod tests {
             // The delimiter is required in every instance, whatever its flag.
             assert_eq!(
                 field_members(group.members()),
+                vec![(Tag(448), true), (Tag(452), true)]
+            );
+        }
+
+        #[test]
+        fn members_outlive_the_views_they_come_from() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(
+                        453,
+                        false,
+                        vec![field_ref(448, false), field_ref(452, true)],
+                    )],
+                )],
+            );
+            let dictionary = spec.resolve().unwrap();
+
+            let instance_members = dictionary
+                .messages()
+                .flat_map(|message| message.members())
+                .filter_map(|member| match member {
+                    Member::Group(group) => Some(group),
+                    Member::Field { .. } => None,
+                })
+                .flat_map(|group| group.members());
+
+            assert_eq!(
+                field_members(instance_members),
                 vec![(Tag(448), true), (Tag(452), true)]
             );
         }

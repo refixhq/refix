@@ -36,8 +36,8 @@ fn emit_message_impl(
 ) -> String {
     let mut members = vec![
         format!(
-            "    pub const MSG_TYPE: &[u8] = b\"{}\";\n",
-            message.msg_type()
+            "    pub const MSG_TYPE: &[u8] = {};\n",
+            byte_str_literal(message.msg_type())
         ),
         indent(
             &emit_known_tags(&message_known_tags(message, &envelope.tags), MAX_WIDTH - 4),
@@ -170,9 +170,20 @@ fn emit_enum_accessor(
     )
 }
 
+/// A byte string literal of `value`'s UTF-8 bytes, escaping quotes,
+/// backslashes and anything outside printable ASCII.
+fn byte_str_literal(value: &str) -> String {
+    let escaped: String = value
+        .bytes()
+        .flat_map(std::ascii::escape_default)
+        .map(char::from)
+        .collect();
+    format!("b\"{escaped}\"")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Lifetime, emit_accessor};
+    use super::{Lifetime, byte_str_literal, emit_accessor};
     use crate::rust::names::Names;
     use crate::test_utils::message_with;
     use refix_dictionary::{DataType, EnumValue, Field, Tag};
@@ -371,5 +382,11 @@ mod tests {
             body(&ord_type),
             "Ok(self.0.get_str(Tag(40))?.map(OrdType::from_value))"
         );
+    }
+
+    #[test]
+    fn byte_strings_escape_each_utf8_byte() {
+        assert_eq!(byte_str_literal("a\"b\\c"), r#"b"a\"b\\c""#);
+        assert_eq!(byte_str_literal("\u{1}\u{e9}"), r#"b"\x01\xc3\xa9""#);
     }
 }
