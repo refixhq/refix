@@ -2,7 +2,7 @@ import os
 from collections.abc import Iterator, Sequence
 from typing import BinaryIO
 
-from refix._core import Garble, MessageStream, RawMessage
+from refix._core import Dialect, Garble, MessageStream, RawMessage
 
 _CHUNK_SIZE = 65536
 
@@ -27,7 +27,7 @@ def read_log(
 def _drive(
     file: BinaryIO, extra_length_tags: Sequence[int]
 ) -> Iterator[RawMessage | Garble]:
-    stream = MessageStream(extra_length_tags=extra_length_tags)
+    stream = MessageStream(Dialect(extra_length_tags=extra_length_tags))
     while chunk := file.read(_CHUNK_SIZE):
         stream.feed(chunk)
         while (outcome := stream.next_message()) is not None:

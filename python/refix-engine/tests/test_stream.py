@@ -64,7 +64,7 @@ class TestDelivery:
 
     def test_dialect_extras_flow_through(self):
         frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|")
-        stream = refix.MessageStream(extra_length_tags=[5001])
+        stream = refix.MessageStream(refix.Dialect(extra_length_tags=[5001]))
         stream.feed(frame)
 
         outcomes = drain(stream)

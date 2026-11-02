@@ -1,10 +1,11 @@
+use crate::dialect::Dialect;
 use crate::tokenizer::reason_str;
 use bytes::Bytes;
 use pyo3::types::{PyAnyMethods, PyBytes, PyModule};
 use pyo3::{Bound, Py, PyAny, PyResult, Python, pyclass, pymethods};
 use refix_message::framing::GarbledReason;
 use refix_message::stream::Outcome;
-use refix_message::{Dialect, MessageStream as CoreMessageStream, Tag};
+use refix_message::{Dialect as CoreDialect, MessageStream as CoreMessageStream};
 
 #[pyclass(module = "refix._core")]
 pub(crate) struct MessageStream(CoreMessageStream);
@@ -12,10 +13,11 @@ pub(crate) struct MessageStream(CoreMessageStream);
 #[pymethods]
 impl MessageStream {
     #[new]
-    #[pyo3(signature = (*, extra_length_tags = Vec::new()))]
-    fn new(extra_length_tags: Vec<u32>) -> Self {
-        let extra_length_tags: Vec<Tag> = extra_length_tags.into_iter().map(Tag).collect();
-        let dialect = Dialect::new().with_extra_length_tags(&extra_length_tags);
+    #[pyo3(signature = (dialect = None))]
+    fn new(dialect: Option<Bound<'_, Dialect>>) -> Self {
+        let dialect = dialect
+            .as_ref()
+            .map_or_else(CoreDialect::new, |dialect| dialect.get().dialect());
         Self(CoreMessageStream::new(dialect))
     }
 

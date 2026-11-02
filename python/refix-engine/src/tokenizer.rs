@@ -1,7 +1,8 @@
+use crate::dialect::Dialect;
 use bytes::Bytes;
-use pyo3::{PyErr, PyResult, import_exception, pyclass, pymethods};
+use pyo3::{Bound, PyErr, PyResult, import_exception, pyclass, pymethods};
 use refix_message::framing::GarbledReason;
-use refix_message::{Dialect, Tag, TokenizeError, Tokenizer as CoreTokenizer};
+use refix_message::{Dialect as CoreDialect, TokenizeError, Tokenizer as CoreTokenizer};
 
 import_exception!(refix.errors, GarbledError);
 import_exception!(refix.errors, IncompleteError);
@@ -14,10 +15,11 @@ pub(crate) struct Tokenizer(CoreTokenizer);
 #[pymethods]
 impl Tokenizer {
     #[new]
-    #[pyo3(signature = (*, extra_length_tags = Vec::new()))]
-    fn new(extra_length_tags: Vec<u32>) -> Self {
-        let extra_length_tags: Vec<Tag> = extra_length_tags.into_iter().map(Tag).collect();
-        let dialect = Dialect::new().with_extra_length_tags(&extra_length_tags);
+    #[pyo3(signature = (dialect = None))]
+    fn new(dialect: Option<Bound<'_, Dialect>>) -> Self {
+        let dialect = dialect
+            .as_ref()
+            .map_or_else(CoreDialect::new, |dialect| dialect.get().dialect());
         Self(CoreTokenizer::new(dialect))
     }
 
