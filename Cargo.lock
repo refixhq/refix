@@ -395,14 +395,14 @@ dependencies = [
 
 [[package]]
 name = "refix"
-version = "0.1.5"
+version = "0.2.0"
 dependencies = [
  "refix-message",
 ]
 
 [[package]]
 name = "refix-cli"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "clap",
  "refix-codegen",
@@ -411,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "refix-codegen"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "refix-dictionary",
