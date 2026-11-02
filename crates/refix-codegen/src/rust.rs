@@ -1,3 +1,4 @@
+mod dialect;
 mod dispatch;
 mod enums;
 mod error;
@@ -13,6 +14,7 @@ use refix_dictionary::{Dictionary, dictionary};
 use crate::Generated;
 use crate::conversion::{Conversion, unclaimed_types, uses};
 use crate::envelope::Envelope;
+use dialect::emit_dialect;
 use dispatch::emit_dispatch;
 use enums::emit_enum;
 pub use error::Error;
@@ -52,8 +54,8 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .messages()
         .map(|message| emit_message(message, &envelope, &names))
         .collect();
-    let sections = enums
-        .into_iter()
+    let sections = std::iter::once(emit_dialect(dictionary))
+        .chain(enums)
         .chain(groups)
         .chain(views)
         .chain(messages)
@@ -66,7 +68,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
                 .members()
                 .any(|member| matches!(member, dictionary::Member::Group(_)))
         });
-    let mut imports = vec!["InvalidValue", "KnownTags", "RawMessage", "Tag"];
+    let mut imports = vec!["Dialect", "InvalidValue", "KnownTags", "RawMessage", "Tag"];
     if has_groups {
         imports.extend(["GroupTable", "Instances"]);
     }
@@ -187,7 +189,9 @@ mod tests {
 #![cfg_attr(rustfmt, rustfmt::skip)]
 #![allow(clippy::module_inception)]
 
-use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};
+use refix_message::{Dialect, InvalidValue, KnownTags, RawMessage, Tag};
+
+pub const DIALECT: Dialect<'static> = Dialect::new();
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrdType<'a> {
@@ -290,6 +294,31 @@ impl Message {
     }
 
     #[test]
+    fn the_dialect_lists_every_linked_length_tag_in_order() {
+        let spec = spec_of(
+            vec![],
+            vec![
+                field("VenueDataLen", 5001, DataType::Length),
+                Field {
+                    length_tag: Some(Tag(5001)),
+                    ..field("VenueData", 5002, DataType::Data)
+                },
+                field("RawDataLength", 95, DataType::Length),
+                Field {
+                    length_tag: Some(Tag(95)),
+                    ..field("RawData", 96, DataType::Data)
+                },
+            ],
+        );
+
+        let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+
+        assert!(code.contains(
+            "pub const DIALECT: Dialect<'static> = Dialect::new().with_extra_length_tags(&[Tag(95), Tag(5001)]);\n"
+        ));
+    }
+
+    #[test]
     fn imports_multiple_values_only_when_read() {
         let mut exec_inst = field("ExecInst", 18, DataType::MultipleStringValue);
         exec_inst.values = vec![EnumValue {
@@ -321,11 +350,11 @@ impl Message {
 
         assert_eq!(
             imports(reads),
-            "use refix_message::{InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};"
+            "use refix_message::{Dialect, InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};"
         );
         assert_eq!(
             imports(unused),
-            "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
+            "use refix_message::{Dialect, InvalidValue, KnownTags, RawMessage, Tag};"
         );
     }
 
@@ -348,27 +377,27 @@ impl Message {
         for (value, expected) in [
             (
                 field("Price", 44, DataType::Price),
-                "use refix_message::{Decimal, InvalidValue, KnownTags, RawMessage, Tag};",
+                "use refix_message::{Decimal, Dialect, InvalidValue, KnownTags, RawMessage, Tag};",
             ),
             (
                 field("SettlDate", 64, DataType::LocalMktDate),
-                "use refix_message::{Date, InvalidValue, KnownTags, RawMessage, Tag};",
+                "use refix_message::{Date, Dialect, InvalidValue, KnownTags, RawMessage, Tag};",
             ),
             (
                 field("MaturityMonthYear", 200, DataType::MonthYear),
-                "use refix_message::{InvalidValue, KnownTags, MonthYear, RawMessage, Tag};",
+                "use refix_message::{Dialect, InvalidValue, KnownTags, MonthYear, RawMessage, Tag};",
             ),
             (
                 field("MDEntryTime", 273, DataType::UtcTimeOnly),
-                "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag, Time};",
+                "use refix_message::{Dialect, InvalidValue, KnownTags, RawMessage, Tag, Time};",
             ),
             (
                 field("TransactTime", 60, DataType::UtcTimestamp),
-                "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag, UtcTimestamp};",
+                "use refix_message::{Dialect, InvalidValue, KnownTags, RawMessage, Tag, UtcTimestamp};",
             ),
             (
                 field("DeskOrderHandlingInst", 1035, DataType::MultipleStringValue),
-                "use refix_message::{InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};",
+                "use refix_message::{Dialect, InvalidValue, KnownTags, MultipleValues, RawMessage, Tag};",
             ),
         ] {
             let reads = spec_of(
@@ -383,7 +412,7 @@ impl Message {
             assert_eq!(imports(reads), expected);
             assert_eq!(
                 imports(unused),
-                "use refix_message::{InvalidValue, KnownTags, RawMessage, Tag};"
+                "use refix_message::{Dialect, InvalidValue, KnownTags, RawMessage, Tag};"
             );
         }
     }
@@ -561,7 +590,9 @@ impl Message {
 #![cfg_attr(rustfmt, rustfmt::skip)]
 #![allow(clippy::module_inception)]
 
-use refix_message::{GroupTable, Instances, InvalidValue, KnownTags, RawMessage, Tag};
+use refix_message::{Dialect, GroupTable, Instances, InvalidValue, KnownTags, RawMessage, Tag};
+
+pub const DIALECT: Dialect<'static> = Dialect::new();
 
 pub mod parties {
     use super::*;

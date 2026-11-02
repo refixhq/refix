@@ -15,8 +15,10 @@ use crate::namespace::{Namespace, Owner};
 /// `Instance` is here because each group module imports the root and
 /// defines its own.
 const ROOT: &[&str] = &[
+    "DIALECT",
     "Date",
     "Decimal",
+    "Dialect",
     "From",
     "GroupTable",
     "Header",

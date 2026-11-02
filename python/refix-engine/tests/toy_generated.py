@@ -10,8 +10,10 @@ from functools import cached_property
 from typing import ClassVar
 
 import refix
-from refix import GroupTable, KnownTags, MonthYear, RawMessage
+from refix import Dialect, GroupTable, KnownTags, MonthYear, RawMessage
 from refix.enums import Unrecognized, from_value
+
+DIALECT = Dialect(extra_length_tags=(93,))
 
 
 class OrdType(enum.StrEnum):

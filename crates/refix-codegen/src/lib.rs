@@ -2,6 +2,7 @@
 
 mod case_converter;
 mod conversion;
+mod dialect;
 mod envelope;
 mod generated;
 mod groups;
