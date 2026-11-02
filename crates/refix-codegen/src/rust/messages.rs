@@ -275,8 +275,17 @@ mod tests {
 
     #[test]
     fn a_data_field_reads_as_bytes_borrowed_for_the_scope() {
+        let signature = Field {
+            length_tag: Some(Tag(93)),
+            ..field("Signature", 89, DataType::Data)
+        };
+        let length = field("SignatureLength", 93, DataType::Length);
+        let dictionary = message_with(vec![length, signature.clone()]);
+        let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
+        let accessor = emit_accessor(&signature, &names, Lifetime::Scope);
+
         assert_eq!(
-            scope_signature(&field("Signature", 89, DataType::Data)),
+            accessor.lines().next().unwrap().trim(),
             "pub fn signature(&self) -> Option<&'a [u8]> {"
         );
     }

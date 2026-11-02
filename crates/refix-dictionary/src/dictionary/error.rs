@@ -49,6 +49,11 @@ pub enum Error {
         first: String,
         second: String,
     },
+    /// A data field used without a length tag.
+    MissingLengthTag {
+        field: String,
+        context: MemberContext,
+    },
     DuplicateField {
         tag: Tag,
         first: MemberContext,
@@ -136,6 +141,9 @@ impl fmt::Display for Error {
                     f,
                     "fields '{first}' and '{second}' both take their length from '{length_field}'"
                 )
+            }
+            Error::MissingLengthTag { field, context } => {
+                write!(f, "data field '{field}' in {context} has no length field")
             }
             Error::DuplicateField { tag, first, second } if first == second => {
                 write!(f, "{first} contains tag {tag} more than once")

@@ -1355,17 +1355,28 @@ mod tests {
         }
 
         #[test]
-        fn a_data_field_after_another_field_takes_none() {
+        fn a_data_field_after_another_field_is_an_error() {
             let members =
                 "<field name='RawDataLength'/><field name='Text'/><field name='RawData'/>";
-            assert_eq!(length_tag("", members, "RawData"), None);
+            let error = parse_with("", members).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                "invalid dictionary: data field 'RawData' in message 'News' has no length field"
+            );
         }
 
         #[test]
-        fn a_data_field_after_a_component_takes_none() {
+        fn a_data_field_after_a_component_is_an_error() {
             let components = "<component name='Lengths'><field name='RawDataLength'/></component>";
             let members = "<component name='Lengths'/><field name='RawData'/>";
-            assert_eq!(length_tag(components, members, "RawData"), None);
+            let error = parse_with(components, members).unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::Invalid(dictionary::Error::MissingLengthTag { ref field, .. })
+                    if field == "RawData"
+            ));
         }
 
         #[test]

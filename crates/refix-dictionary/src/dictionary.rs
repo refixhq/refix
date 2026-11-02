@@ -956,6 +956,28 @@ mod tests {
                 }
             );
         }
+
+        #[test]
+        fn a_used_data_field_without_a_length_tag_is_an_error() {
+            let spec = spec_of(
+                vec![typed("RawData", 96, DataType::Data)],
+                vec![],
+                vec![message("News", vec![field_ref(96, false)])],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::MissingLengthTag {
+                    field: "RawData".to_owned(),
+                    context: MemberContext::Message("News".to_owned()),
+                }
+            );
+        }
+
+        #[test]
+        fn an_unused_data_field_needs_no_length_tag() {
+            assert!(resolve(vec![typed("RawData", 96, DataType::Data)]).is_ok());
+        }
     }
 
     mod groups {

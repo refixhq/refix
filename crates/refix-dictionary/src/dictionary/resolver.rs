@@ -189,8 +189,16 @@ impl<'a> Resolver<'a> {
         field_ref: &spec::FieldRef,
         context: &MemberContext,
     ) -> Result<ResolvedMember, Error> {
+        let field_index = self.field_index(field_ref.tag, context)?;
+        let field = &self.spec.fields.as_slice()[field_index];
+        if field.data_type.has_length_field() && field.length_tag.is_none() {
+            return Err(Error::MissingLengthTag {
+                field: field.name.clone(),
+                context: context.clone(),
+            });
+        }
         Ok(ResolvedMember::Field {
-            field_index: self.field_index(field_ref.tag, context)?,
+            field_index,
             is_required: field_ref.is_required,
         })
     }
