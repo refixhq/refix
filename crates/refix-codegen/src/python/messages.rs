@@ -1,6 +1,6 @@
 use refix_dictionary::{Field, MemberContext, Tag, dictionary};
 
-use super::enums::str_literal;
+use super::enums::bytes_literal;
 use super::groups::{emit_group_class, emit_group_property, tags};
 use super::layout::{MAX_WIDTH, indent, tuple_lines};
 use super::names::Names;
@@ -20,8 +20,8 @@ pub(super) fn emit_message(
     let name = message.name();
     let mut members = vec![
         format!(
-            "    MSG_TYPE: ClassVar[bytes] = b{}\n",
-            str_literal(message.msg_type())
+            "    MSG_TYPE: ClassVar[bytes] = {}\n",
+            bytes_literal(message.msg_type())
         ),
         indent(
             &tuple_lines(
