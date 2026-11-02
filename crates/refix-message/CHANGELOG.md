@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/refixhq/refix/compare/refix-message-v0.3.4...refix-message-v0.4.0) - 2026-11-02
+
+### Added
+
+- [**breaking**] take a dialect in place of extra length tags ([#120](https://github.com/refixhq/refix/pull/120))
+
 ## [0.3.4](https://github.com/refixhq/refix/compare/refix-message-v0.3.3...refix-message-v0.3.4) - 2026-11-01
 
 ### Added

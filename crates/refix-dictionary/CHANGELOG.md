@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/refixhq/refix/compare/refix-dictionary-v0.2.0...refix-dictionary-v0.3.0) - 2026-11-02
+
+### Added
+
+- link each data field to its length field in the dictionary ([#119](https://github.com/refixhq/refix/pull/119))
+- reject dictionaries where two messages share a MsgType ([#116](https://github.com/refixhq/refix/pull/116))
+
 ## [0.2.0](https://github.com/refixhq/refix/compare/refix-dictionary-v0.1.1...refix-dictionary-v0.2.0) - 2026-11-01
 
 ### Added

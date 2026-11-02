@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/refixhq/refix/compare/refix-v0.1.4...refix-v0.2.0) - 2026-11-02
+
+### Added
+
+- decode logs through a generated codec ([#122](https://github.com/refixhq/refix/pull/122))
+- read each message as its type in generated code ([#118](https://github.com/refixhq/refix/pull/118))
+
 ## [0.1.4](https://github.com/refixhq/refix/compare/refix-v0.1.3...refix-v0.1.4) - 2026-11-01
 
 ### Added
