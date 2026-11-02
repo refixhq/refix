@@ -73,3 +73,34 @@ class TestReadLog:
         assert len(outcomes) == count
         assert all(message.bytes == frame for message in messages_of(outcomes))
         assert len(messages_of(outcomes)) == count
+
+
+class TestDecodeLog:
+    def test_decodes_each_message(self):
+        frames = [
+            construct_valid_frame("FIX.4.4", "35=0|58=first|"),
+            construct_valid_frame("FIX.4.4", "35=0|58=second|"),
+        ]
+        codec = refix.Codec(refix.Dialect(), lambda raw: raw.get(58))
+
+        decoded = list(refix.decode_log(BytesIO(b"".join(frames)), codec))
+
+        assert decoded == [b"first", b"second"]
+
+    def test_passes_garbles_through(self):
+        frame = construct_valid_frame("FIX.4.4", "35=0|58=hello|")
+        codec = refix.Codec(refix.Dialect(), lambda raw: raw.get(58))
+
+        decoded = list(refix.decode_log(BytesIO(b"junk\n" + frame), codec))
+
+        assert isinstance(decoded[0], refix.Garble)
+        assert decoded[1:] == [b"hello"]
+
+    def test_reads_in_the_codec_dialect(self):
+        frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|")
+        dialect = refix.Dialect(extra_length_tags=[5001])
+        codec = refix.Codec(dialect, lambda raw: raw.get(5002))
+
+        decoded = list(refix.decode_log(BytesIO(frame), codec))
+
+        assert decoded == [b"a\x01b"]

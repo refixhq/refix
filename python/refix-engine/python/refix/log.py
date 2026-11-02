@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from typing import BinaryIO
 
 from refix._core import Dialect, Garble, MessageStream, RawMessage
+from refix.codec import Codec
 
 _CHUNK_SIZE = 65536
 
@@ -21,6 +22,18 @@ def read_log(
             yield from _drive(f, dialect)
     else:
         yield from _drive(source, dialect)
+
+
+def decode_log[T](
+    source: str | os.PathLike[str] | BinaryIO,
+    codec: Codec[T],
+) -> Iterator[T | Garble]:
+    """Yields each message in a FIX message log, decoded by `codec`, in order.
+
+    Garbles and a truncated tail are handled as in `read_log`.
+    """
+    for outcome in read_log(source, codec.dialect):
+        yield outcome if isinstance(outcome, Garble) else codec.decode(outcome)
 
 
 def _drive(file: BinaryIO, dialect: Dialect | None) -> Iterator[RawMessage | Garble]:
