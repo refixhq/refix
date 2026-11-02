@@ -4,7 +4,7 @@ use pyo3::types::{PyAnyMethods, PyBytes, PyModule};
 use pyo3::{Bound, Py, PyAny, PyResult, Python, pyclass, pymethods};
 use refix_message::framing::GarbledReason;
 use refix_message::stream::Outcome;
-use refix_message::{Dialect, MessageStream as CoreMessageStream, Tag, Tokenizer as CoreTokenizer};
+use refix_message::{Dialect, MessageStream as CoreMessageStream, Tag};
 
 #[pyclass(module = "refix._core")]
 pub(crate) struct MessageStream(CoreMessageStream);
@@ -16,7 +16,7 @@ impl MessageStream {
     fn new(extra_length_tags: Vec<u32>) -> Self {
         let extra_length_tags: Vec<Tag> = extra_length_tags.into_iter().map(Tag).collect();
         let dialect = Dialect::new().with_extra_length_tags(&extra_length_tags);
-        Self(CoreMessageStream::new(CoreTokenizer::new(dialect)))
+        Self(CoreMessageStream::new(dialect))
     }
 
     fn feed(&mut self, data: &[u8]) {

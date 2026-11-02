@@ -1,5 +1,5 @@
 use crate::framing::{GarbledReason, Outcome as FramingOutcome, Scanner};
-use crate::{RawMessage, Tokenizer};
+use crate::{Dialect, RawMessage, Tokenizer};
 use bytes::{Bytes, BytesMut};
 
 /// Reads a stream of FIX messages from incrementally fed bytes.
@@ -11,10 +11,10 @@ pub struct MessageStream {
 }
 
 impl MessageStream {
-    /// Creates a stream that tokenises with `tokenizer`.
-    pub fn new(tokenizer: Tokenizer) -> Self {
+    /// A stream for `dialect`.
+    pub fn new(dialect: Dialect<'_>) -> Self {
         Self {
-            tokenizer,
+            tokenizer: Tokenizer::new(dialect),
             scanner: Scanner::default(),
             buf: BytesMut::new(),
         }
@@ -57,7 +57,7 @@ pub enum Outcome {
 mod tests {
     use super::*;
     use crate::test_utils::construct_valid_frame;
-    use crate::{Dialect, Tag, Tokenizer};
+    use crate::{Dialect, Tag};
 
     /// Collects outcomes until the stream reports `Incomplete`.
     fn drain(stream: &mut MessageStream) -> Vec<Outcome> {
@@ -148,7 +148,7 @@ mod tests {
     fn dialect_extras_flow_through() {
         let frame = construct_valid_frame("FIX.4.4", "35=0|5001=3|5002=a|b|");
         let dialect = Dialect::new().with_extra_length_tags(&[Tag(5001)]);
-        let mut stream = MessageStream::new(Tokenizer::new(dialect));
+        let mut stream = MessageStream::new(dialect);
         stream.feed(&frame);
 
         let outcomes = drain(&mut stream);
