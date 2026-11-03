@@ -31,6 +31,9 @@ const MSG_TYPE: Tag = Tag(35);
 /// Longest message read before it's cut.
 const MAX_MESSAGE_LEN: usize = 1 << 20;
 
+/// Longest prefix kept, nearest its message.
+const MAX_PREFIX_LEN: usize = 1 << 20;
+
 /// Reads the messages in a FIX log from incrementally fed bytes.
 #[derive(Default)]
 pub struct LogReader {
@@ -39,6 +42,8 @@ pub struct LogReader {
     buf: BytesMut,
     /// Where the search for the next message start resumes.
     searched: usize,
+    /// Whether the next record's prefix lost bytes to the cap.
+    prefix_truncated: bool,
 }
 
 /// A message read from a log, with the bytes before it.
@@ -48,11 +53,11 @@ pub struct LogRecord {
     pub prefix: Bytes,
     /// The message, split at the separator it was logged with.
     pub message: RawMessage,
-    /// What could not be verified about the message, in the order found.
+    /// The problems with the record, in the order found.
     pub diagnostics: Vec<LogDiagnostic>,
 }
 
-/// Something a [`LogReader`] could not verify about a message.
+/// A problem a [`LogReader`] found with a record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogDiagnostic {
     /// The second field is not `9=`.
@@ -70,6 +75,8 @@ pub enum LogDiagnostic {
     ChecksumMismatch,
     /// The message ends before its CheckSum field.
     Truncated,
+    /// The prefix is cut to the 1 MiB nearest the message.
+    PrefixTruncated,
 }
 
 impl LogReader {
@@ -83,6 +90,7 @@ impl LogReader {
             separator,
             buf: BytesMut::new(),
             searched: 0,
+            prefix_truncated: false,
         }
     }
 
@@ -106,21 +114,20 @@ impl LogReader {
 
     fn read(&mut self, at_end: bool) -> Option<LogRecord> {
         let range = self.searched..self.buf.len();
-        let start = match find_start(&self.buf, range, self.separator, at_end) {
-            NextStart::Found(start) => start,
-            NextStart::Pending(at) => {
-                self.searched = at;
-                return None;
-            }
-            NextStart::NotFound => {
-                self.searched = self.buf.len();
-                return None;
-            }
+        let next = find_start(&self.buf, range, self.separator, at_end);
+        let prefix_len = match next {
+            NextStart::Found(start) => start.at,
+            NextStart::Pending(at) => at,
+            NextStart::NotFound => self.buf.len(),
         };
-        self.searched = start.at;
+        let prefix_len = self.cap_prefix(prefix_len);
+        self.searched = prefix_len;
+        let NextStart::Found(start) = next else {
+            return None;
+        };
 
         // A message ends at the cap as at the end of the log.
-        let rest = &self.buf[start.at..];
+        let rest = &self.buf[prefix_len..];
         let at_cap = rest.len() >= MAX_MESSAGE_LEN;
         let rest = &rest[..rest.len().min(MAX_MESSAGE_LEN)];
         let end = find_end(
@@ -130,18 +137,33 @@ impl LogReader {
             self.separator,
             at_end || at_cap,
         )?;
-        let prefix = self.buf.split_to(start.at).freeze();
+        let prefix = self.buf.split_to(prefix_len).freeze();
         let bytes = self.buf.split_to(end.len).freeze();
         self.buf.advance(end.consumed - end.len);
         self.searched = 0;
 
+        let mut diagnostics = Vec::new();
+        if std::mem::take(&mut self.prefix_truncated) {
+            diagnostics.push(LogDiagnostic::PrefixTruncated);
+        }
         let fields = self.tokenizer.tokenize_fields(&bytes, start.separator);
-        let diagnostics = diagnose(&bytes, &fields, start.separator, end.truncated);
+        diagnostics.extend(diagnose(&bytes, &fields, start.separator, end.truncated));
         Some(LogRecord {
             prefix,
             message: RawMessage::new(bytes, fields),
             diagnostics,
         })
+    }
+
+    /// Drops the oldest bytes of a prefix of `len` bytes past the cap, and
+    /// returns its length after.
+    fn cap_prefix(&mut self, len: usize) -> usize {
+        if len <= MAX_PREFIX_LEN {
+            return len;
+        }
+        self.buf.advance(len - MAX_PREFIX_LEN);
+        self.prefix_truncated = true;
+        MAX_PREFIX_LEN
     }
 }
 
@@ -616,6 +638,57 @@ mod tests {
                 &[LogDiagnostic::BodyLengthMismatch],
             );
             assert_record(&records[1], b"", &second, &[]);
+        }
+    }
+
+    mod prefix_cap {
+        use super::*;
+
+        #[test]
+        fn a_prefix_past_the_cap_keeps_the_bytes_nearest_its_message() {
+            let kept = "x".repeat(MAX_PREFIX_LEN);
+            let first = message("35=0|", b'|');
+            let second = message("35=0|", b'|');
+            let log = [
+                b"dropped".as_slice(),
+                kept.as_bytes(),
+                &first,
+                b"\nIN ",
+                &second,
+            ]
+            .concat();
+
+            let records = read(&log);
+
+            assert_eq!(records.len(), 2);
+            assert_record(
+                &records[0],
+                kept.as_bytes(),
+                &first,
+                &[LogDiagnostic::PrefixTruncated],
+            );
+            assert_record(&records[1], b"IN ", &second, &[]);
+        }
+
+        #[test]
+        fn a_prefix_is_capped_before_its_message_arrives() {
+            let lines = "no message here\n".repeat(MAX_PREFIX_LEN / 8);
+            let message = message("35=0|", b'|');
+            let mut reader = LogReader::default();
+
+            reader.feed(lines.as_bytes());
+            assert!(reader.next_record().is_none());
+            assert_eq!(reader.buf.len(), MAX_PREFIX_LEN);
+            reader.feed(&message);
+            let records: Vec<LogRecord> = reader.finish().collect();
+
+            let kept = &lines.as_bytes()[lines.len() - MAX_PREFIX_LEN..];
+            assert_record(
+                &records[0],
+                kept,
+                &message,
+                &[LogDiagnostic::PrefixTruncated],
+            );
         }
     }
 
