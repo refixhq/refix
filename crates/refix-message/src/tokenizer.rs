@@ -37,17 +37,18 @@ impl Tokenizer {
     /// fields inside a valid frame are indexed under [`Tag::MALFORMED`].
     pub fn tokenize(&self, bytes: Bytes) -> Result<RawMessage, TokenizeError> {
         check_frame(&bytes)?;
-        let fields = self.tokenize_fields(&bytes);
+        let fields = self.tokenize_fields(&bytes, SOH);
 
         Ok(RawMessage::new(bytes, fields))
     }
 
-    pub(crate) fn tokenize_fields(&self, bytes: &[u8]) -> Vec<RawField> {
+    /// Splits `bytes` into fields ended by `separator`.
+    pub(crate) fn tokenize_fields(&self, bytes: &[u8], separator: u8) -> Vec<RawField> {
         let mut fields = Vec::with_capacity(bytes.len() / 8);
         let mut pos = 0;
         let mut data_len: Option<usize> = None;
 
-        while let Some((field, next)) = next_field(bytes, pos, data_len.take()) {
+        while let Some((field, next)) = next_field(bytes, pos, data_len.take(), separator) {
             data_len = self.pending_data_len(bytes, field);
             fields.push(field);
             pos = next;
@@ -85,8 +86,13 @@ pub enum TokenizeError {
     TooLargeToIndex,
 }
 
-fn next_field(bytes: &[u8], pos: usize, data_len: Option<usize>) -> Option<(RawField, usize)> {
-    match find_tag_end(bytes, pos) {
+fn next_field(
+    bytes: &[u8],
+    pos: usize,
+    data_len: Option<usize>,
+    separator: u8,
+) -> Option<(RawField, usize)> {
+    match find_tag_end(bytes, pos, separator) {
         None => None,
         Some(TagEnd::Equals(delimiter_pos)) => {
             let tag = parse_u32(&bytes[pos..delimiter_pos])
@@ -94,8 +100,8 @@ fn next_field(bytes: &[u8], pos: usize, data_len: Option<usize>) -> Option<(RawF
                 .unwrap_or(Tag::MALFORMED);
             let value_start = delimiter_pos + 1;
             let value_end = data_len
-                .and_then(|len| data_value_end(bytes, value_start, len))
-                .or_else(|| find_soh(bytes, value_start))
+                .and_then(|len| data_value_end(bytes, value_start, len, separator))
+                .or_else(|| find_separator(bytes, value_start, separator))
                 .unwrap_or(bytes.len());
             let field = RawField {
                 tag,
@@ -105,7 +111,7 @@ fn next_field(bytes: &[u8], pos: usize, data_len: Option<usize>) -> Option<(RawF
 
             Some((field, value_end + 1))
         }
-        Some(TagEnd::Soh(delimiter_pos)) => {
+        Some(TagEnd::Separator(delimiter_pos)) => {
             let field = RawField {
                 tag: Tag::MALFORMED,
                 value_start: pos as u32,
@@ -131,43 +137,43 @@ fn parse_u32(digits: &[u8]) -> Option<u32> {
 
 enum TagEnd {
     Equals(usize),
-    Soh(usize),
+    Separator(usize),
 }
 
-/// Offset of the first `=` or SOH at or after `from`.
+/// Offset of the first `=` or `separator` at or after `from`.
 ///
 /// This is specifically used to find the ending byte of a tag,
-/// which would normally be `=`, but potentially a SOH in malformed
+/// which would normally be `=`, but potentially the separator in malformed
 /// fields.
-fn find_tag_end(bytes: &[u8], from: usize) -> Option<TagEnd> {
+fn find_tag_end(bytes: &[u8], from: usize, separator: u8) -> Option<TagEnd> {
     bytes
         .get(from..)?
         .iter()
         .enumerate()
         .find_map(|(rel, &byte)| match byte {
             b'=' => Some(TagEnd::Equals(from + rel)),
-            SOH => Some(TagEnd::Soh(from + rel)),
+            byte if byte == separator => Some(TagEnd::Separator(from + rel)),
             _ => None,
         })
 }
 
-/// Offset for the first SOH at or after `from`.
-fn find_soh(bytes: &[u8], from: usize) -> Option<usize> {
+/// Offset for the first `separator` at or after `from`.
+fn find_separator(bytes: &[u8], from: usize, separator: u8) -> Option<usize> {
     bytes
         .get(from..)?
         .iter()
-        .position(|&b| b == SOH)
+        .position(|&b| b == separator)
         .map(|rel| from + rel)
 }
 
 /// End of a length-delimited value.
 ///
-/// Returns `None` unless the byte immediately after the claimed extent is SOH.
-/// A length that overruns the frame or lands mid-value is distrusted and the
-/// caller falls back to SOH scanning.
-fn data_value_end(bytes: &[u8], value_start: usize, len: usize) -> Option<usize> {
+/// Returns `None` unless the byte immediately after the claimed extent is the
+/// separator. A length that overruns the frame or lands mid-value is
+/// distrusted and the caller falls back to scanning for the separator.
+fn data_value_end(bytes: &[u8], value_start: usize, len: usize, separator: u8) -> Option<usize> {
     let end = value_start.checked_add(len)?;
-    (bytes.get(end) == Some(&SOH)).then_some(end)
+    (bytes.get(end) == Some(&separator)).then_some(end)
 }
 
 fn check_frame(bytes: &Bytes) -> Result<(), TokenizeError> {
@@ -572,6 +578,31 @@ mod tests {
         fn tag_zero_extra_is_ignored() {
             let tokenizer = Tokenizer::new(Dialect::new().with_extra_length_tags(&[Tag(0)]));
             assert!(!tokenizer.is_length_tag(Tag::MALFORMED));
+        }
+    }
+
+    mod separators {
+        use super::*;
+
+        #[test]
+        fn fields_end_at_the_given_separator() {
+            let bytes = Bytes::from_static(b"8=FIX.4.4|9=24|35=0|95=3|96=a|b|58=x\x01y|10=000|");
+            let fields = Tokenizer::default().tokenize_fields(&bytes, b'|');
+            let message = RawMessage::new(bytes, fields);
+
+            assert_tiles(&message);
+            assert_entries(
+                &message,
+                &[
+                    (Tag(8), "FIX.4.4"),
+                    (Tag(9), "24"),
+                    (Tag(35), "0"),
+                    (Tag(95), "3"),
+                    (Tag(96), "a|b"),
+                    (Tag(58), "x\x01y"),
+                    (Tag(10), "000"),
+                ],
+            );
         }
     }
 }
