@@ -408,6 +408,18 @@ mod tests {
         assert_record(&records[1], b"", &second, &[]);
     }
 
+    #[test]
+    fn a_carriage_return_ending_the_log_is_not_part_of_the_message() {
+        let message = message("35=0|", b'|');
+        let without = &message[..message.len() - 1];
+        let log = [without, b"\r"].concat();
+
+        let records = read(&log);
+
+        assert_eq!(records.len(), 1);
+        assert_record(&records[0], b"", without, &[]);
+    }
+
     mod diagnostics {
         use super::*;
 
@@ -554,6 +566,16 @@ mod tests {
 
             assert!(reader.next_record().is_none());
             let records: Vec<LogRecord> = reader.finish().collect();
+
+            assert_eq!(records.len(), 1);
+            assert_record(&records[0], b"", cut, &[LogDiagnostic::Truncated]);
+        }
+
+        #[test]
+        fn a_message_cut_by_the_end_of_the_log_before_its_line_break() {
+            let cut = b"8=FIX.4.4|9=20|35=0|58=hel";
+
+            let records = read(&[cut.as_slice(), b"\r"].concat());
 
             assert_eq!(records.len(), 1);
             assert_record(&records[0], b"", cut, &[LogDiagnostic::Truncated]);

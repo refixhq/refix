@@ -182,6 +182,11 @@ fn walk(
 ///
 /// A start or line break after the message may still run past the cap.
 fn cap(bytes: &[u8], at_end: bool) -> (&[u8], bool) {
+    // A `\r` ending the log is a line break cut short.
+    let bytes = match bytes {
+        [rest @ .., b'\r'] if at_end => rest,
+        _ => bytes,
+    };
     let capped = &bytes[..bytes.len().min(MAX_MESSAGE_LEN)];
     (capped, at_end || capped.len() == MAX_MESSAGE_LEN)
 }
