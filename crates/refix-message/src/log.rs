@@ -28,6 +28,9 @@ const BODY_LENGTH: Tag = Tag(9);
 const CHECKSUM: Tag = Tag(10);
 const MSG_TYPE: Tag = Tag(35);
 
+/// Longest message read before it's cut.
+const MAX_MESSAGE_LEN: usize = 1 << 20;
+
 /// Reads the messages in a FIX log from incrementally fed bytes.
 #[derive(Default)]
 pub struct LogReader {
@@ -116,13 +119,16 @@ impl LogReader {
         };
         self.searched = start.at;
 
+        // A message ends at the cap as at the end of the log.
         let rest = &self.buf[start.at..];
+        let at_cap = rest.len() >= MAX_MESSAGE_LEN;
+        let rest = &rest[..rest.len().min(MAX_MESSAGE_LEN)];
         let end = find_end(
             &self.tokenizer,
             rest,
             start.separator,
             self.separator,
-            at_end,
+            at_end || at_cap,
         )?;
         let prefix = self.buf.split_to(start.at).freeze();
         let bytes = self.buf.split_to(end.len).freeze();
@@ -546,6 +552,70 @@ mod tests {
                 cut,
                 &[LogDiagnostic::MissingMsgType, LogDiagnostic::Truncated],
             );
+        }
+    }
+
+    mod message_cap {
+        use super::*;
+
+        #[test]
+        fn a_message_reaching_the_cap_is_cut_there() {
+            let long = message(&format!("35=0|58={}|", "x".repeat(MAX_MESSAGE_LEN)), b'|');
+            let second = message("35=0|", b'|');
+            let log = [long.as_slice(), b"\n", &second].concat();
+
+            let records = read(&log);
+
+            assert_eq!(records.len(), 2);
+            assert_record(
+                &records[0],
+                b"",
+                &long[..MAX_MESSAGE_LEN],
+                &[LogDiagnostic::Truncated],
+            );
+            let rest = [&long[MAX_MESSAGE_LEN..], b"\n"].concat();
+            assert_record(&records[1], &rest, &second, &[]);
+        }
+
+        #[test]
+        fn a_body_length_past_the_cap_does_not_hold_records() {
+            let first = with_trailer(&format!("8=FIX.4.4|9={MAX_MESSAGE_LEN}|35=0|"), b'|');
+            let second = message("35=0|", b'|');
+            let filler = "x".repeat(MAX_MESSAGE_LEN);
+            let mut reader = LogReader::default();
+            reader.feed(&[first.as_slice(), b"\n", &second, b"\n", filler.as_bytes()].concat());
+
+            let records: Vec<LogRecord> = std::iter::from_fn(|| reader.next_record()).collect();
+
+            assert_eq!(records.len(), 2);
+            assert_record(
+                &records[0],
+                b"",
+                &first,
+                &[LogDiagnostic::BodyLengthMismatch],
+            );
+            assert_record(&records[1], b"", &second, &[]);
+        }
+
+        #[test]
+        fn a_data_length_past_the_cap_does_not_hold_records() {
+            let head = format!("8=FIX.4.4|9=5|35=0|95={MAX_MESSAGE_LEN}|96=a|");
+            let first = with_trailer(&head, b'|');
+            let second = message("35=0|", b'|');
+            let filler = "x".repeat(MAX_MESSAGE_LEN);
+            let mut reader = LogReader::default();
+            reader.feed(&[first.as_slice(), b"\n", &second, b"\n", filler.as_bytes()].concat());
+
+            let records: Vec<LogRecord> = std::iter::from_fn(|| reader.next_record()).collect();
+
+            assert_eq!(records.len(), 2);
+            assert_record(
+                &records[0],
+                b"",
+                &first,
+                &[LogDiagnostic::BodyLengthMismatch],
+            );
+            assert_record(&records[1], b"", &second, &[]);
         }
     }
 
