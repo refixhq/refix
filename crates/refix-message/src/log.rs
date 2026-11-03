@@ -126,16 +126,13 @@ impl LogReader {
             return None;
         };
 
-        // A message ends at the cap as at the end of the log.
         let rest = &self.buf[prefix_len..];
-        let at_cap = rest.len() >= MAX_MESSAGE_LEN;
-        let rest = &rest[..rest.len().min(MAX_MESSAGE_LEN)];
         let end = find_end(
             &self.tokenizer,
             rest,
             start.separator,
             self.separator,
-            at_end || at_cap,
+            at_end,
         )?;
         let prefix = self.buf.split_to(prefix_len).freeze();
         let bytes = self.buf.split_to(end.len).freeze();
@@ -597,6 +594,42 @@ mod tests {
             );
             let rest = [&long[MAX_MESSAGE_LEN..], b"\n"].concat();
             assert_record(&records[1], &rest, &second, &[]);
+        }
+
+        #[test]
+        fn a_message_starting_across_the_cap_is_read() {
+            let head = "8=FIX.4.4|9=20|35=0|58=";
+            let cut = [head, &"z".repeat(MAX_MESSAGE_LEN - head.len() - 3)].concat();
+            let second = message("35=0|", b'|');
+            let log = [cut.as_bytes(), &second].concat();
+
+            let records = read(&log);
+
+            assert_eq!(records.len(), 2);
+            assert_record(
+                &records[0],
+                b"",
+                cut.as_bytes(),
+                &[LogDiagnostic::Truncated],
+            );
+            assert_record(&records[1], b"", &second, &[]);
+        }
+
+        #[test]
+        fn a_message_ending_at_the_cap_takes_its_line_break() {
+            let long = message(
+                &format!("35=0|58={}|", "x".repeat(MAX_MESSAGE_LEN - 36)),
+                b'|',
+            );
+            assert_eq!(long.len(), MAX_MESSAGE_LEN);
+            let second = message("35=0|", b'|');
+            let log = [long.as_slice(), b"\nIN ", &second].concat();
+
+            let records = read(&log);
+
+            assert_eq!(records.len(), 2);
+            assert_record(&records[0], b"", &long, &[]);
+            assert_record(&records[1], b"IN ", &second, &[]);
         }
 
         #[test]

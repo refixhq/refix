@@ -1,5 +1,5 @@
-use super::CHECKSUM;
 use super::start::{NextStart, find_start};
+use super::{CHECKSUM, MAX_MESSAGE_LEN};
 use crate::Tokenizer;
 use crate::framing::MAX_BODY_LENGTH_DIGITS;
 use crate::tokenizer::{next_field, parse_u32};
@@ -38,8 +38,9 @@ enum BodyLengthEnd {
 
 /// The end BodyLength gives, if it points at a CheckSum field.
 fn by_body_length(bytes: &[u8], separator: u8, at_end: bool) -> BodyLengthEnd {
+    let (capped, capped_final) = cap(bytes, at_end);
     let pending = || {
-        if at_end {
+        if capped_final {
             BodyLengthEnd::NotFound
         } else {
             BodyLengthEnd::Pending
@@ -47,11 +48,11 @@ fn by_body_length(bytes: &[u8], separator: u8, at_end: bool) -> BodyLengthEnd {
     };
 
     // The start check found BeginString's separator and a whole tag after it.
-    let tag_start = bytes
+    let tag_start = capped
         .iter()
         .position(|&byte| byte == separator)
-        .map_or(bytes.len(), |at| at + 1);
-    let Some(rest) = bytes[tag_start..].strip_prefix(b"9=") else {
+        .map_or(capped.len(), |at| at + 1);
+    let Some(rest) = capped[tag_start..].strip_prefix(b"9=") else {
         return BodyLengthEnd::NotFound;
     };
     let digits = rest
@@ -73,27 +74,27 @@ fn by_body_length(bytes: &[u8], separator: u8, at_end: bool) -> BodyLengthEnd {
 
     let body_start = tag_start + 2 + digits + 1;
     let trailer_start = body_start + body_length as usize;
-    if bytes.len() < trailer_start + 3 {
+    if capped.len() < trailer_start + 3 {
         return pending();
     }
-    if bytes[trailer_start - 1] != separator || &bytes[trailer_start..trailer_start + 3] != b"10=" {
+    if capped[trailer_start - 1..trailer_start + 3] != [separator, b'1', b'0', b'='] {
         return BodyLengthEnd::NotFound;
     }
 
     let value_start = trailer_start + 3;
-    let value_end = bytes[value_start..]
+    let value_end = capped[value_start..]
         .iter()
         .position(|&byte| byte == separator || byte == b'\n')
         .map(|at| value_start + at);
     match value_end {
-        Some(at) if bytes[at] == separator => match after_message(bytes, at + 1, at_end) {
+        Some(at) if capped[at] == separator => match after_message(bytes, at + 1, at_end) {
             Some(end) => BodyLengthEnd::Found(end),
             None => BodyLengthEnd::Pending,
         },
-        Some(at) => BodyLengthEnd::Found(at_line_break(bytes, at, false)),
-        None if at_end => BodyLengthEnd::Found(End {
-            len: bytes.len(),
-            consumed: bytes.len(),
+        Some(at) => BodyLengthEnd::Found(at_line_break(capped, at, false)),
+        None if capped_final => BodyLengthEnd::Found(End {
+            len: capped.len(),
+            consumed: capped.len(),
             truncated: false,
         }),
         None => BodyLengthEnd::Pending,
@@ -108,13 +109,14 @@ fn walk(
     separator_override: Option<u8>,
     at_end: bool,
 ) -> Option<End> {
+    let (capped, capped_final) = cap(bytes, at_end);
     let mut pos = 0;
     let mut data_len = None;
     loop {
-        let next = next_field(bytes, pos, data_len, separator);
+        let next = next_field(capped, pos, data_len, separator);
         if let (Some((field, _)), Some(len)) = (next, data_len)
-            && !at_end
-            && field.value_start as usize + len >= bytes.len()
+            && !capped_final
+            && field.value_start as usize + len >= capped.len()
         {
             // The data value may run past the bytes so far.
             return None;
@@ -128,10 +130,10 @@ fn walk(
                 field.value_start as usize
             }
             Some((field, _)) => field.value_end as usize,
-            None => bytes.len(),
+            None => capped.len(),
         };
         let from = pos.max(1);
-        let line_break = bytes[from..checked_end]
+        let line_break = capped[from..checked_end]
             .iter()
             .position(|&byte| byte == b'\n')
             .map(|at| from + at);
@@ -149,31 +151,39 @@ fn walk(
         }
         if let Some(at) = line_break {
             let is_checksum = matches!(next, Some((field, _)) if field.tag == CHECKSUM);
-            return Some(at_line_break(bytes, at, !is_checksum));
+            return Some(at_line_break(capped, at, !is_checksum));
         }
 
         let Some((field, after)) = next else {
             // The rest holds no `=` or separator yet.
-            return at_end.then_some(End {
-                len: bytes.len(),
-                consumed: bytes.len(),
+            return capped_final.then_some(End {
+                len: capped.len(),
+                consumed: capped.len(),
                 truncated: true,
             });
         };
-        if field.value_end as usize == bytes.len() {
+        if field.value_end as usize == capped.len() {
             // The value runs to the end of the bytes so far.
-            return at_end.then_some(End {
-                len: bytes.len(),
-                consumed: bytes.len(),
+            return capped_final.then_some(End {
+                len: capped.len(),
+                consumed: capped.len(),
                 truncated: field.tag != CHECKSUM,
             });
         }
         if field.tag == CHECKSUM {
             return after_message(bytes, after, at_end);
         }
-        data_len = tokenizer.pending_data_len(bytes, field);
+        data_len = tokenizer.pending_data_len(capped, field);
         pos = after;
     }
+}
+
+/// The bytes of `bytes` the message can hold, and whether no more can join them.
+///
+/// A start or line break after the message may still run past the cap.
+fn cap(bytes: &[u8], at_end: bool) -> (&[u8], bool) {
+    let capped = &bytes[..bytes.len().min(MAX_MESSAGE_LEN)];
+    (capped, at_end || capped.len() == MAX_MESSAGE_LEN)
 }
 
 /// The end of a message whose CheckSum field ends at `len`, taking one line break after it.
