@@ -58,8 +58,8 @@ impl Tokenizer {
     }
 
     /// The value of `field` when it is a well-formed length tag, so the next
-    /// field's value can be read by extent instead of scanned for SOH.
-    fn pending_data_len(&self, bytes: &[u8], field: RawField) -> Option<usize> {
+    /// field's value can be read by extent instead of scanned for the separator.
+    pub(crate) fn pending_data_len(&self, bytes: &[u8], field: RawField) -> Option<usize> {
         if !self.is_length_tag(field.tag) {
             return None;
         }
@@ -86,7 +86,7 @@ pub enum TokenizeError {
     TooLargeToIndex,
 }
 
-fn next_field(
+pub(crate) fn next_field(
     bytes: &[u8],
     pos: usize,
     data_len: Option<usize>,
@@ -126,7 +126,7 @@ fn next_field(
 /// Parses ASCII digits into a `u32`.
 ///
 /// Rejects empty input, any non-digit (including a leading sign) and overflow.
-fn parse_u32(digits: &[u8]) -> Option<u32> {
+pub(crate) fn parse_u32(digits: &[u8]) -> Option<u32> {
     if digits.is_empty() || !digits.iter().all(|b| b.is_ascii_digit()) {
         return None;
     }
