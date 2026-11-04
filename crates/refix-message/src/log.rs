@@ -13,6 +13,7 @@
 //! A [`LogReader`] keeps these bytes as the prefix of each [`LogRecord`]. Here
 //! the last record's prefix holds the WARN line and its own line up to `8=`.
 
+mod caret_a;
 mod end;
 mod start;
 
@@ -22,7 +23,7 @@ use crate::tokenizer::parse_u32;
 use crate::{Dialect, RawMessage, Tag, Tokenizer};
 use bytes::{Buf, Bytes, BytesMut};
 use end::find_end;
-use start::{NextStart, find_start};
+use start::{NextStart, Separator, find_start};
 
 const BODY_LENGTH: Tag = Tag(9);
 const CHECKSUM: Tag = Tag(10);
@@ -51,7 +52,8 @@ pub struct LogReader {
 pub struct LogRecord {
     /// The bytes between the previous record and this message.
     pub prefix: Bytes,
-    /// The message, split at the separator it was logged with.
+    /// The message, split at the separator it was logged with. A message
+    /// logged with `^A` for SOH is a copy with SOH restored.
     pub message: RawMessage,
     /// The problems with the record, in the order found.
     pub diagnostics: Vec<LogDiagnostic>,
@@ -82,8 +84,8 @@ pub enum LogDiagnostic {
 impl LogReader {
     /// A reader for `dialect`.
     ///
-    /// Each message's separator is detected from the byte after its
-    /// BeginString, unless `separator` is given.
+    /// Each message's separator is detected from the bytes after its
+    /// BeginString, unless `separator` is given. Only detection reads `^A`.
     pub fn new(dialect: Dialect<'_>, separator: Option<u8>) -> Self {
         Self {
             tokenizer: Tokenizer::new(dialect),
@@ -127,24 +129,28 @@ impl LogReader {
         };
 
         let rest = &self.buf[prefix_len..];
-        let end = find_end(
-            &self.tokenizer,
-            rest,
-            start.separator,
-            self.separator,
-            at_end,
-        )?;
+        let (end, copy, separator) = match start.separator {
+            Separator::Byte(separator) => {
+                let end = find_end(&self.tokenizer, rest, separator, self.separator, at_end)?;
+                (end, None, separator)
+            }
+            Separator::CaretA => {
+                let (end, copy) = caret_a::copy_message(&self.tokenizer, rest, at_end)?;
+                (end, Some(copy), SOH)
+            }
+        };
         let prefix = self.buf.split_to(prefix_len).freeze();
-        let bytes = self.buf.split_to(end.len).freeze();
+        let logged = self.buf.split_to(end.len).freeze();
         self.buf.advance(end.consumed - end.len);
         self.searched = 0;
+        let bytes = copy.map_or(logged, Bytes::from);
 
         let mut diagnostics = Vec::new();
         if std::mem::take(&mut self.prefix_truncated) {
             diagnostics.push(LogDiagnostic::PrefixTruncated);
         }
-        let fields = self.tokenizer.tokenize_fields(&bytes, start.separator);
-        diagnostics.extend(diagnose(&bytes, &fields, start.separator, end.truncated));
+        let fields = self.tokenizer.tokenize_fields(&bytes, separator);
+        diagnostics.extend(diagnose(&bytes, &fields, separator, end.truncated));
         Some(LogRecord {
             prefix,
             message: RawMessage::new(bytes, fields),
@@ -241,6 +247,20 @@ mod tests {
         let checksum = checksum_of(&bytes);
         bytes.extend_from_slice(&to_wire(&format!("10={checksum}|")));
         with_separator(bytes, separator)
+    }
+
+    /// `bytes` as `cat -v` shows them, with `^A` for SOH.
+    fn caret_a(bytes: &[u8]) -> Vec<u8> {
+        bytes
+            .iter()
+            .flat_map(|&byte| {
+                if byte == SOH {
+                    b"^A".to_vec()
+                } else {
+                    vec![byte]
+                }
+            })
+            .collect()
     }
 
     fn with_separator(bytes: Vec<u8>, separator: u8) -> Vec<u8> {
@@ -696,6 +716,100 @@ mod tests {
         }
     }
 
+    mod caret_a {
+        use super::*;
+
+        #[test]
+        fn reads_a_cat_v_copy() {
+            let first = message("35=A|34=1|", SOH);
+            let second = message("35=0|34=2|", SOH);
+            let log = [
+                b"IN ".as_slice(),
+                &caret_a(&first),
+                b"\nOUT ",
+                &caret_a(&second),
+                b"\n",
+            ]
+            .concat();
+
+            let records = read(&log);
+
+            assert_eq!(records.len(), 2);
+            assert_record(&records[0], b"IN ", &first, &[]);
+            assert_record(&records[1], b"OUT ", &second, &[]);
+        }
+
+        #[test]
+        fn the_copy_is_checked() {
+            let line = caret_a(&with_trailer("8=FIX.4.4|9=2|35=0|", SOH));
+
+            let records = read(&[line.as_slice(), b"\r\n"].concat());
+
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].diagnostics, [LogDiagnostic::BodyLengthMismatch]);
+        }
+
+        #[test]
+        fn a_message_cut_at_its_line_break() {
+            let cut = b"8=FIX.4.4^A9=20^A35=0^A58=hel";
+            let second = message("35=0|", b'|');
+
+            let records = read(&[cut.as_slice(), b"\n", &second].concat());
+
+            assert_eq!(records.len(), 2);
+            assert_record(
+                &records[0],
+                b"",
+                b"8=FIX.4.4\x019=20\x0135=0\x0158=hel",
+                &[LogDiagnostic::Truncated],
+            );
+            assert_record(&records[1], b"", &second, &[]);
+        }
+
+        #[test]
+        fn a_message_waits_for_its_line_break() {
+            let message = message("35=0|", SOH);
+            let mut reader = LogReader::default();
+            reader.feed(&caret_a(&message));
+
+            assert!(reader.next_record().is_none());
+            let records: Vec<LogRecord> = reader.finish().collect();
+
+            assert_eq!(records.len(), 1);
+            assert_record(&records[0], b"", &message, &[]);
+        }
+
+        #[test]
+        fn bytes_after_the_message_on_its_line_start_the_next_prefix() {
+            let first = message("35=0|", SOH);
+            let second = message("35=0|", SOH);
+            let log = [caret_a(&first).as_slice(), b" sent\n", &second].concat();
+
+            let records = read(&log);
+
+            assert_eq!(records.len(), 2);
+            assert_record(&records[0], b"", &first, &[]);
+            assert_record(&records[1], b" sent\n", &second, &[]);
+        }
+
+        #[test]
+        fn a_given_separator_does_not_detect_it() {
+            let line = caret_a(&message("35=0|", SOH));
+            let second = message("35=0|", b'^');
+            let log = [line.as_slice(), b"\n", &second].concat();
+
+            let records = read_with(LogReader::new(Dialect::new(), Some(b'^')), &log);
+
+            assert_eq!(records.len(), 1);
+            assert_record(
+                &records[0],
+                &[line.as_slice(), b"\n"].concat(),
+                &second,
+                &[],
+            );
+        }
+    }
+
     mod prefix_cap {
         use super::*;
 
@@ -760,6 +874,9 @@ mod tests {
             b"8=FIX.4.4|9=20|35=0|58=hel\n",
             &with_trailer("8=FIX.4.4|9=2|35=0|", b'|'),
             &message("35=0|", SOH),
+            b"\n",
+            &caret_a(&message("35=0|58=hi|", SOH)),
+            b"\n",
         ]
         .concat();
         let summary = |records: Vec<LogRecord>| -> Vec<(Bytes, Bytes, Vec<LogDiagnostic>)> {
@@ -775,7 +892,7 @@ mod tests {
                 .collect()
         };
         let whole = summary(read(&log));
-        assert_eq!(whole.len(), 5);
+        assert_eq!(whole.len(), 6);
 
         for split in 1..log.len() {
             let mut reader = LogReader::default();
