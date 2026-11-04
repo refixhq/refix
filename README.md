@@ -31,9 +31,9 @@ pip install refix refix-fix44
 import refix
 from refix_fix44 import CODEC, NewOrderSingle
 
-for message in refix.decode_log("fix.log", CODEC):
-    if isinstance(message, NewOrderSingle):
-        print(message.header.sender_comp_id, message.cl_ord_id, message.symbol)
+for record in refix.decode_log("fix.log", CODEC):
+    if isinstance(record.message, NewOrderSingle):
+        print(record.message.header.sender_comp_id, record.message.cl_ord_id)
 ```
 
 In Rust, `cargo add refix-fix44`; see [refix-fix44].

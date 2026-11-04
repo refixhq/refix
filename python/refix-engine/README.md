@@ -10,13 +10,13 @@ of [ReFIX](https://github.com/refixhq/refix). Requires Python 3.12 or later.
 ```python
 import refix
 
-for message in refix.read_log("fix.log"):
-    if isinstance(message, refix.RawMessage):
-        print(message.get(35), message.get(49))
+for record in refix.read_log("fix.log"):
+    print(record.prefix, record.message.get(35), record.diagnostics)
 ```
 
-Anything between frames that isn't FIX comes back as `refix.Garble`.
-`refix.Tokenizer` reads a single frame, and `refix.MessageStream` reads frames as bytes arrive.
+`read_log` reads logs as they are: any separator, a logger's prefix before each message, and
+messages with a wrong BodyLength or CheckSum or cut short, reported in `record.diagnostics`.
+`refix.MessageStream` reads a session's bytes strictly, and `refix.Tokenizer` reads a single frame.
 
 Typed messages come from generated code: `refix-fix44` for FIX 4.4, or
 `refix-cli` for your own dictionary. `refix.decode_log` reads a log as typed

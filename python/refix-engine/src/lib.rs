@@ -1,5 +1,6 @@
 mod dialect;
 mod group;
+mod log;
 mod message;
 mod stream;
 mod tokenizer;
@@ -17,6 +18,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<dialect::Dialect>()?;
     m.add_class::<group::GroupTable>()?;
     m.add_class::<group::KnownTags>()?;
+    m.add_class::<log::LogReader>()?;
     m.add_class::<stream::Garble>()?;
     m.add_class::<stream::MessageStream>()?;
     m.add_class::<message::RawMessage>()?;
