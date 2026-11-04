@@ -44,17 +44,17 @@
 pub const SOH: u8 = 0x01;
 
 /// Longest BeginString field we'll frame: `8=` through the byte before its SOH.
-const MAX_BEGIN_STRING_LEN: usize = 16;
+pub(crate) const MAX_BEGIN_STRING_LEN: usize = 16;
 
 /// Longest BodyLength value we'll frame, in digits.
-const MAX_BODY_LENGTH_DIGITS: usize = 10;
+pub(crate) const MAX_BODY_LENGTH_DIGITS: usize = 10;
 
 /// `10=` + three checksum digits + SOH.
 const CHECKSUM_FIELD_LEN: usize = 7;
 
 /// The shortest prefix common to every BeginString: the FIX spec fixes every
 /// one to the form `FIX.x.y` or `FIXT.x.y`, so `8=FIX` marks the start of any frame.
-const BEGIN_STRING_PREFIX: &[u8] = b"8=FIX";
+pub(crate) const BEGIN_STRING_PREFIX: &[u8] = b"8=FIX";
 
 /// A stateless framing scanner: each [`scan`](Scanner::scan) call attempts
 /// to delimit one checksum-verified frame from the start of a buffer.

@@ -1,30 +1,26 @@
 # refix-message
 
-Framing, tokenising and raw FIX messages for [ReFIX](https://github.com/refixhq/refix). A `RawMessage` indexes a frame's
-fields and reads them on demand, without copying.
+Framing, log reading, tokenising and raw FIX messages for [ReFIX](https://github.com/refixhq/refix). A `RawMessage`
+indexes a frame's fields and reads them on demand, without copying.
 
 > ReFIX is in early development, and APIs change between 0.x releases.
 
 ```rust
-use refix_message::stream::Outcome;
-use refix_message::{MessageStream, Tag};
+use refix_message::{LogReader, Tag};
 
 fn main() {
-    let log = b"2026-10-10 09:30:00 IN 8=FIX.4.4\x019=5\x0135=0\x0110=163\x01\n";
-    let mut stream = MessageStream::default();
-    stream.feed(log);
-    loop {
-        match stream.next_message() {
-            Outcome::Message(message) => println!("{:?}", message.get_str(Tag(35))),
-            Outcome::Garbled { bytes, .. } => println!("skipped {} bytes", bytes.len()),
-            Outcome::Incomplete => break,
-        }
+    let log = b"2026-10-10 09:30:00 IN 8=FIX.4.4|9=5|35=0|10=163|\n";
+    let mut reader = LogReader::default();
+    reader.feed(log);
+    for record in reader.finish() {
+        let prefix = String::from_utf8_lossy(&record.prefix);
+        println!("{prefix:?} {:?} {:?}", record.message.get_str(Tag(35)), record.diagnostics);
     }
 }
 ```
 
-`Tokenizer::tokenize` reads a single frame. Typed messages are generated on top of it: `refix-fix44` for FIX 4.4, or
-`refix-cli` for your own dictionary.
+`MessageStream` frames a session's bytes strictly, and `Tokenizer::tokenize` reads a single frame. Typed messages are
+generated on top of the tokenizer: `refix-fix44` for FIX 4.4, or `refix-cli` for your own dictionary.
 
 ## Features
 

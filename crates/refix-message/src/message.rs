@@ -39,7 +39,7 @@ impl RawMessage {
         Self { bytes, fields }
     }
 
-    /// The whole frame, from `8=` to the SOH after CheckSum.
+    /// The bytes the message was read from.
     pub fn bytes(&self) -> &Bytes {
         &self.bytes
     }

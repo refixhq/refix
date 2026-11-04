@@ -1,4 +1,4 @@
-use crate::framing::{GarbledReason, Outcome as FramingOutcome, Scanner};
+use crate::framing::{GarbledReason, Outcome as FramingOutcome, SOH, Scanner};
 use crate::{Dialect, RawMessage, Tokenizer};
 use bytes::{Bytes, BytesMut};
 
@@ -31,7 +31,7 @@ impl MessageStream {
             FramingOutcome::Frame(frame) => {
                 let len = frame.bytes.len();
                 let bytes = self.buf.split_to(len).freeze();
-                let fields = self.tokenizer.tokenize_fields(&bytes);
+                let fields = self.tokenizer.tokenize_fields(&bytes, SOH);
                 Outcome::Message(RawMessage::new(bytes, fields))
             }
             FramingOutcome::Incomplete => Outcome::Incomplete,
