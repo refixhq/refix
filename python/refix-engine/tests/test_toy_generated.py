@@ -4,7 +4,7 @@ from io import BytesIO
 from typing import assert_never
 
 import pytest
-from refix import Garble, MonthYear, RawMessage, decode_log
+from refix import MonthYear, RawMessage, decode_log
 from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
 from test_tokenizer import construct_valid_frame, tokenize_body
@@ -102,12 +102,12 @@ class TestDispatch:
         order = construct_valid_frame("FIX.4.4", "35=D|11=ORDER-1|")
         unknown = construct_valid_frame("FIX.4.4", "35=ZZ|")
 
-        decoded = list(decode_log(BytesIO(b"junk\n" + order + unknown), CODEC))
+        records = list(decode_log(BytesIO(b"junk\n" + order + unknown), CODEC))
 
-        assert isinstance(decoded[0], Garble)
-        assert isinstance(decoded[1], NewOrderSingle)
-        assert decoded[1].cl_ord_id == "ORDER-1"
-        assert isinstance(decoded[2], RawMessage)
+        assert [record.prefix for record in records] == [b"junk\n", b""]
+        assert isinstance(records[0].message, NewOrderSingle)
+        assert records[0].message.cl_ord_id == "ORDER-1"
+        assert isinstance(records[1].message, RawMessage)
 
 
 class TestEnums:

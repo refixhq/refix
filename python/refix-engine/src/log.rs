@@ -4,24 +4,24 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::PyBytes;
 use pyo3::{Bound, PyResult, Python, pyclass, pymethods};
 use refix_message::log::{LogDiagnostic, LogRecord};
-use refix_message::{Dialect as CoreDialect, LogReader};
+use refix_message::{Dialect as CoreDialect, LogReader as CoreLogReader};
 
 /// A record as handed to Python, a tuple of the prefix, the message and the diagnostics.
 type Record<'py> = (Bound<'py, PyBytes>, RawMessage, Vec<&'static str>);
 
 /// The reader behind `refix.read_log`.
 #[pyclass(module = "refix._core")]
-pub(crate) struct _LogReader(Option<LogReader>);
+pub(crate) struct LogReader(Option<CoreLogReader>);
 
 #[pymethods]
-impl _LogReader {
+impl LogReader {
     #[new]
     #[pyo3(signature = (dialect = None, separator = None))]
     fn new(dialect: Option<Bound<'_, Dialect>>, separator: Option<u8>) -> Self {
         let dialect = dialect
             .as_ref()
             .map_or_else(CoreDialect::new, |dialect| dialect.get().dialect());
-        Self(Some(LogReader::new(dialect, separator)))
+        Self(Some(CoreLogReader::new(dialect, separator)))
     }
 
     fn feed(&mut self, data: &[u8]) -> PyResult<()> {
@@ -42,8 +42,8 @@ impl _LogReader {
     }
 }
 
-impl _LogReader {
-    fn reader(&mut self) -> PyResult<&mut LogReader> {
+impl LogReader {
+    fn reader(&mut self) -> PyResult<&mut CoreLogReader> {
         self.0.as_mut().ok_or_else(finished)
     }
 }
