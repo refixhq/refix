@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/refixhq/refix/compare/refix-message-v0.4.0...refix-message-v0.4.1) - 2026-11-04
+
+### Added
+
+- read messages logged with ^A for SOH ([#127](https://github.com/refixhq/refix/pull/127))
+- add a lenient log reader ([#125](https://github.com/refixhq/refix/pull/125))
+
 ## [0.4.0](https://github.com/refixhq/refix/compare/refix-message-v0.3.4...refix-message-v0.4.0) - 2026-11-02
 
 ### Added
