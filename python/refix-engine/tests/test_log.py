@@ -1,8 +1,43 @@
 from io import BytesIO
 from pathlib import Path
 
+import pytest
 import refix
+from refix._core import _LogReader
 from test_tokenizer import construct_valid_frame
+
+
+class TestLogReader:
+    def test_hands_over_prefix_message_and_diagnostics(self):
+        frame = construct_valid_frame("FIX.4.4", "35=0|58=hello|")
+        rewritten = b"8=FIX.4.4\x019=5\x0135=0\x0110=000\x01"
+        reader = _LogReader()
+        reader.feed(b"IN " + frame + b"\nOUT " + rewritten + b"\n")
+
+        record = reader.next_record()
+        records = reader.finish()
+
+        assert record is not None
+        prefix, message, diagnostics = record
+        assert (prefix, message.bytes, diagnostics) == (b"IN ", frame, [])
+        assert records[0][0] == b"OUT "
+        assert records[0][2] == ["checksum_mismatch"]
+
+    def test_reads_with_the_given_separator(self):
+        reader = _LogReader(separator=ord("|"))
+        reader.feed(b"8=FIX.4.4|9=5|35=0|10=163|")
+
+        [(_, message, diagnostics)] = reader.finish()
+
+        assert message.get(35) == b"0"
+        assert diagnostics == []
+
+    def test_cannot_feed_after_finish(self):
+        reader = _LogReader()
+        reader.finish()
+
+        with pytest.raises(RuntimeError):
+            reader.feed(b"")
 
 
 def messages_of(
