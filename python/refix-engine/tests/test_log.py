@@ -83,6 +83,15 @@ class TestReadLog:
         assert records[0].message.get(35) == b"0"
         assert records[0].diagnostics == ()
 
+    def test_reads_a_cat_v_copy(self):
+        frame = construct_valid_frame("FIX.4.4", "35=0|58=hello|")
+        shown = frame.replace(b"\x01", b"^A")
+
+        records = list(refix.read_log(BytesIO(b"IN " + shown + b"\n")))
+
+        assert records == [refix.LogRecord(b"IN ", records[0].message, ())]
+        assert records[0].message.bytes == frame
+
     def test_a_given_separator_is_the_only_one_read(self):
         soh = construct_valid_frame("FIX.4.4", "35=0|")
         log = soh + b"\n8=FIX.4.4|9=5|35=0|10=163|\n"
