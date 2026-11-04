@@ -9,8 +9,16 @@ const MAX_TAG_DIGITS: usize = 10;
 pub(super) struct Start {
     /// Offset of its `8=`.
     pub(super) at: usize,
-    /// The byte that ends each of its fields.
-    pub(super) separator: u8,
+    /// What ends each of its fields.
+    pub(super) separator: Separator,
+}
+
+/// How a logged message's fields end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Separator {
+    Byte(u8),
+    /// The two characters `cat -v` and `less` show SOH as.
+    CaretA,
 }
 
 pub(super) enum NextStart {
@@ -24,7 +32,7 @@ pub(super) enum NextStart {
 ///
 /// A start is an `8=FIX` that doesn't follow a digit, then the rest of a
 /// BeginString value, a separator, and a tag with its `=`. The separator is
-/// detected unless `separator` is given.
+/// detected unless `separator` is given, and only detection finds `^A`.
 pub(super) fn find_start(
     bytes: &[u8],
     range: Range<usize>,
@@ -45,7 +53,7 @@ pub(super) fn find_start(
 }
 
 enum Check {
-    Start(u8),
+    Start(Separator),
     NotStart,
     Pending,
 }
@@ -74,12 +82,21 @@ fn check(bytes: &[u8], separator: Option<u8>) -> Check {
     };
     let separator = match separator {
         Some(separator) if found != separator => return Check::NotStart,
-        Some(separator) => separator,
+        Some(separator) => Separator::Byte(separator),
         None if found == b'\n' || found == b'\r' => return Check::NotStart,
-        None => found,
+        None if found == b'^' => match bytes.get(value_end + 1) {
+            None => return Check::Pending,
+            Some(b'A') => Separator::CaretA,
+            Some(_) => Separator::Byte(b'^'),
+        },
+        None => Separator::Byte(found),
+    };
+    let separator_len = match separator {
+        Separator::Byte(_) => 1,
+        Separator::CaretA => 2,
     };
 
-    let tag = &bytes[value_end + 1..];
+    let tag = &bytes[value_end + separator_len..];
     let digits = tag
         .iter()
         .take(MAX_TAG_DIGITS + 1)
