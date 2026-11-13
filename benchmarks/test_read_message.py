@@ -51,9 +51,27 @@ def simplefix_reader() -> Reader:
     return read
 
 
+def quickfix_reader() -> Reader:
+    quickfix = pytest.importorskip("quickfix")
+
+    def read(frame: bytes) -> Fields:
+        message = quickfix.Message(frame.decode())
+        timestamp = message.getField(60)
+        return (
+            message.getField(11),
+            int(message.getField(38)),
+            Decimal(message.getField(44)),
+            datetime.strptime(timestamp, "%Y%m%d-%H:%M:%S.%f").replace(tzinfo=UTC),
+        )
+
+    return read
+
+
 @pytest.mark.benchmark(group="read one message")
 @pytest.mark.parametrize(
-    "reader", [refix_reader, simplefix_reader], ids=["refix", "simplefix"]
+    "reader",
+    [refix_reader, simplefix_reader, quickfix_reader],
+    ids=["refix", "simplefix", "quickfix"]
 )
 def test_read_message(benchmark, reader):
     read = reader()
