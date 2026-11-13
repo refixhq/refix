@@ -6,7 +6,7 @@ default:
     just --list
 
 # Install or refresh the Python dev environment
-sync:
+sync: && develop
     uv sync --project {{ py }}
 
 # Compile and install the extension module into the venv
@@ -20,6 +20,11 @@ pytest *args:
 # Run the Python benchmarks and save the results for comparison
 pybench:
     cd {{ py }} && uv run pytest tests/test_benchmarks.py --benchmark-autosave
+
+# Run the benchmarks against other Python FIX libraries
+pycompare *args:
+    cd {{ py }} && uv run maturin develop --uv --release
+    uv run --project {{ py }} pytest benchmarks --benchmark-columns=min,median,iqr,ops,rounds {{ args }}
 
 # Generate the stock packages' code and its fingerprint
 generate-stock:
