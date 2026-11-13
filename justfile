@@ -21,6 +21,10 @@ pytest *args:
 pybench:
     cd {{ py }} && uv run pytest tests/test_benchmarks.py --benchmark-autosave
 
+# Run the Rust benchmarks
+bench *args:
+    cargo bench -p refix-message {{ args }}
+
 # Run the benchmarks against other Python FIX libraries
 pycompare *args:
     cd {{ py }} && uv run maturin develop --uv --release
