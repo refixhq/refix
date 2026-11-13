@@ -8,9 +8,8 @@ use std::collections::{HashMap, hash_map::Entry};
 impl Spec {
     /// Resolves this spec into a [`Dictionary`], checking its integrity.
     ///
-    /// A tag listed more than once in a message, the header and trailer
-    /// included and groups recursed, keeps its first occurrence. The later
-    /// ones are dropped with a [`Warning`].
+    /// A tag may appear only once in a message, at any depth. Later
+    /// occurrences are dropped with a [`Warning`].
     pub fn resolve(self) -> Result<Resolved, Error> {
         let mut resolver = Resolver::new(&self)?;
         resolver.expand_components()?;
