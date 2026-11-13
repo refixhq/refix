@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "refix-engine"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "bytes",
  "pyo3",
@@ -733,7 +733,7 @@ dependencies = [
 
 [[package]]
 name = "refix-message"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "bigdecimal",
  "bytes",

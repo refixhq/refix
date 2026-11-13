@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1](https://github.com/refixhq/refix/compare/python-v0.7.0...python-v0.7.1) - 2026-11-13
+
+### Other
+
+- add a Python comparison benchmark harness ([#129](https://github.com/refixhq/refix/pull/129))
+
 ## [0.7.0](https://github.com/refixhq/refix/compare/python-v0.6.0...python-v0.7.0) - 2026-11-13
 
 ### Added
