@@ -11,6 +11,13 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[lib]
+bench = false
+
+[[bench]]
+name = "tokenize"
+harness = false
+
 [dependencies]
 bigdecimal-04 = { workspace = true, optional = true }
 bytes = { workspace = true }
@@ -18,6 +25,9 @@ chrono-04 = { workspace = true, optional = true }
 jiff-02 = { workspace = true, optional = true }
 rust_decimal-1 = { workspace = true, optional = true }
 time-03 = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true
