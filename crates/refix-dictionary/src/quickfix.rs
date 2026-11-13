@@ -258,7 +258,7 @@ fn parse_message(
     warnings: &mut Vec<Warning>,
 ) -> Result<Message, Error> {
     let name = string_attribute(node, "name")?;
-    let category = parse_category(node)?;
+    let category = parse_category(node, &name, warnings)?;
     let members = parse_members(
         node,
         MemberContext::Message(name.clone()),
@@ -353,15 +353,23 @@ fn parse_group(
     })
 }
 
-fn parse_category(node: Node) -> Result<Category, Error> {
+/// Reads a message's category. Any value other than the two FIX knows
+/// counts as `app`, as the admin set is fixed.
+fn parse_category(
+    node: Node,
+    message: &str,
+    warnings: &mut Vec<Warning>,
+) -> Result<Category, Error> {
     match node.attribute("msgcat") {
         Some("admin") => Ok(Category::Admin),
         Some("app") => Ok(Category::App),
-        Some(other) => Err(Error::InvalidAttribute {
-            element: node.tag_name().name().to_owned(),
-            attribute: "msgcat".to_owned(),
-            value: other.to_owned(),
-        }),
+        Some(other) => {
+            warnings.push(Warning::UnknownCategory {
+                message: message.to_owned(),
+                value: other.to_owned(),
+            });
+            Ok(Category::App)
+        }
         None => Err(Error::MissingAttribute {
             element: node.tag_name().name().to_owned(),
             attribute: "msgcat".to_owned(),
@@ -510,6 +518,8 @@ pub enum Warning {
         kept: EnumValue,
         dropped: EnumValue,
     },
+    /// A `msgcat` other than `admin` or `app`, read as `app`.
+    UnknownCategory { message: String, value: String },
     /// Something the resolver dropped.
     Invalid(dictionary::Warning),
 }
@@ -529,6 +539,10 @@ impl fmt::Display for Warning {
                 "value '{}' (code {}) of field '{field}' is dropped, as value '{}' (code {}) has \
                  the same code",
                 dropped.description, dropped.value, kept.description, kept.value
+            ),
+            Warning::UnknownCategory { message, value } => write!(
+                f,
+                "message '{message}' has unknown msgcat '{value}', which is read as app"
             ),
             Warning::Invalid(warning) => write!(f, "{warning}"),
         }
@@ -1225,18 +1239,27 @@ mod tests {
         }
 
         #[test]
-        fn invalid_msgcat_is_an_error() {
-            let error = parse(
+        fn an_unknown_msgcat_is_read_as_app_with_a_warning() {
+            let parsed = parse(
                 "<fix major='4' minor='4'><messages>\
-                 <message name='Heartbeat' msgtype='0' msgcat='session'/></messages></fix>",
+                 <message name='AllocationReport' msgtype='AS' msgcat='Allocation'/>\
+                 </messages></fix>",
             )
-            .unwrap_err();
+            .unwrap();
 
-            assert!(matches!(
-                error,
-                Error::InvalidAttribute { ref attribute, ref value, .. }
-                    if attribute == "msgcat" && value == "session"
-            ));
+            let message = parsed.dictionary.messages().next().unwrap();
+            assert_eq!(message.category(), Category::App);
+            assert_eq!(
+                parsed.warnings,
+                [Warning::UnknownCategory {
+                    message: "AllocationReport".to_owned(),
+                    value: "Allocation".to_owned(),
+                }]
+            );
+            assert_eq!(
+                parsed.warnings[0].to_string(),
+                "message 'AllocationReport' has unknown msgcat 'Allocation', which is read as app"
+            );
         }
     }
 
