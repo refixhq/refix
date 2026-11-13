@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/refixhq/refix/compare/refix-v0.2.0...refix-v0.3.0) - 2026-11-13
+
+### Added
+
+- [**breaking**] read logs as records with prefixes and diagnostics ([#126](https://github.com/refixhq/refix/pull/126))
+
 ## [0.2.0](https://github.com/refixhq/refix/compare/refix-v0.1.4...refix-v0.2.0) - 2026-11-02
 
 ### Added

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/refixhq/refix/compare/refix-cli-v0.2.0...refix-cli-v0.2.1) - 2026-11-13
+
+### Other
+
+- updated the following local packages: refix-dictionary, refix-codegen
+
 ## [0.2.0](https://github.com/refixhq/refix/compare/refix-cli-v0.1.3...refix-cli-v0.2.0) - 2026-11-02
 
 ### Other
