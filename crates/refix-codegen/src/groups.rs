@@ -153,6 +153,7 @@ mod tests {
         }
         .resolve()
         .unwrap()
+        .dictionary
     }
 
     fn groups<'a>(

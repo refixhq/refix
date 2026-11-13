@@ -2,7 +2,7 @@ mod error;
 
 use crate::{
     Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Group,
-    Member, MemberContext, Message, Protocol, Spec, Tag, Version,
+    Member, MemberContext, Message, Protocol, Spec, Tag, Version, dictionary,
 };
 use roxmltree::Node;
 use std::collections::hash_map::Entry;
@@ -55,10 +55,11 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
         components,
         fields,
     };
-    let dictionary = spec.resolve().map_err(Error::Invalid)?;
+    let resolved = spec.resolve().map_err(Error::Invalid)?;
+    warnings.extend(resolved.warnings.into_iter().map(Warning::Invalid));
 
     Ok(Parsed {
-        dictionary,
+        dictionary: resolved.dictionary,
         warnings,
     })
 }
@@ -509,6 +510,8 @@ pub enum Warning {
         kept: EnumValue,
         dropped: EnumValue,
     },
+    /// Something the resolver dropped.
+    Invalid(dictionary::Warning),
 }
 
 impl fmt::Display for Warning {
@@ -527,6 +530,7 @@ impl fmt::Display for Warning {
                  the same code",
                 dropped.description, dropped.value, kept.description, kept.value
             ),
+            Warning::Invalid(warning) => write!(f, "{warning}"),
         }
     }
 }
@@ -1072,6 +1076,39 @@ mod tests {
         fn groups_parse_without_warnings() {
             let parsed = parse(DICTIONARY).unwrap();
             assert!(parsed.warnings.is_empty());
+        }
+
+        #[test]
+        fn a_tag_repeated_in_a_group_is_dropped_with_a_warning() {
+            let parsed = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='AllocationInstruction' msgtype='J' msgcat='app'>\
+                 <field name='AccruedInterestAmt' required='N'/>\
+                 <group name='NoAllocs' required='N'>\
+                 <field name='AllocAccount' required='N'/>\
+                 <field name='AccruedInterestAmt' required='N'/>\
+                 </group></message></messages><fields>\
+                 <field number='159' name='AccruedInterestAmt' type='AMT'/>\
+                 <field number='78' name='NoAllocs' type='NUMINGROUP'/>\
+                 <field number='79' name='AllocAccount' type='STRING'/>\
+                 </fields></fix>",
+            )
+            .unwrap();
+
+            let message = MemberContext::Message("AllocationInstruction".to_owned());
+            assert_eq!(
+                parsed.warnings,
+                [Warning::Invalid(dictionary::Warning::DuplicateField {
+                    tag: Tag(159),
+                    kept: message.clone(),
+                    dropped: message.group("NoAllocs"),
+                })]
+            );
+            assert_eq!(
+                parsed.warnings[0].to_string(),
+                "tag 159 in group 'NoAllocs' in message 'AllocationInstruction' is dropped, as it \
+                 already appears in message 'AllocationInstruction'"
+            );
         }
 
         #[test]

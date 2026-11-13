@@ -5,11 +5,21 @@
 
 mod error;
 mod resolver;
+mod warning;
 
 use crate::{Category, Field, MemberContext, Spec, Version, spec};
 pub use error::Error;
 use std::fmt;
 use std::ops::Index;
+pub use warning::Warning;
+
+/// A spec resolved into a dictionary, with what the resolver dropped on
+/// the way.
+#[derive(Clone, Debug)]
+pub struct Resolved {
+    pub dictionary: Dictionary,
+    pub warnings: Vec<Warning>,
+}
 
 /// A resolved data dictionary, produced by [`Spec::resolve`].
 #[derive(Clone, Debug)]
@@ -314,7 +324,7 @@ mod tests {
             )],
         );
 
-        let dictionary = spec.resolve().unwrap();
+        let dictionary = spec.resolve().unwrap().dictionary;
 
         let messages: Vec<Message> = dictionary.messages().collect();
         assert_eq!(messages.len(), 1);
@@ -350,7 +360,7 @@ mod tests {
         spec.header = vec![field_ref(49, true), component_ref("Target", false)];
         spec.trailer = vec![field_ref(10, true)];
 
-        let dictionary = spec.resolve().unwrap();
+        let dictionary = spec.resolve().unwrap().dictionary;
 
         assert_eq!(
             field_members(dictionary.header()),
@@ -372,7 +382,7 @@ mod tests {
             members: vec![field_ref(628, false)],
         })];
 
-        let dictionary = spec.resolve().unwrap();
+        let dictionary = spec.resolve().unwrap().dictionary;
 
         let Some(Member::Group(hops)) = dictionary.header().next() else {
             panic!("expected the hops group");
@@ -381,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn a_header_tag_in_a_message_is_an_error() {
+    fn a_header_tag_in_a_message_is_dropped_from_the_message() {
         let mut spec = spec_of(
             vec![field("ClOrdID", 11), field("SenderCompID", 49)],
             vec![],
@@ -392,24 +402,22 @@ mod tests {
         );
         spec.header = vec![field_ref(49, true)];
 
-        let error = spec.resolve().unwrap_err();
+        let resolved = spec.resolve().unwrap();
 
+        let message = resolved.dictionary.messages().next().unwrap();
+        assert_eq!(field_members(message.members()), [(Tag(11), true)]);
         assert_eq!(
-            error,
-            Error::DuplicateField {
+            resolved.warnings,
+            [Warning::DuplicateField {
                 tag: Tag(49),
-                first: MemberContext::Header,
-                second: MemberContext::Message("NewOrderSingle".to_owned()),
-            }
-        );
-        assert_eq!(
-            error.to_string(),
-            "tag 49 appears in both the header and message 'NewOrderSingle'"
+                kept: MemberContext::Header,
+                dropped: MemberContext::Message("NewOrderSingle".to_owned()),
+            }]
         );
     }
 
     #[test]
-    fn a_trailer_tag_in_a_message_is_an_error() {
+    fn a_trailer_tag_in_a_message_is_dropped_from_the_message() {
         let mut spec = spec_of(
             vec![field("Signature", 89)],
             vec![],
@@ -417,13 +425,47 @@ mod tests {
         );
         spec.trailer = vec![field_ref(89, false)];
 
+        let resolved = spec.resolve().unwrap();
+
+        let message = resolved.dictionary.messages().next().unwrap();
+        assert_eq!(field_members(message.members()), []);
         assert_eq!(
-            spec.resolve().unwrap_err(),
-            Error::DuplicateField {
+            resolved.warnings,
+            [Warning::DuplicateField {
                 tag: Tag(89),
-                first: MemberContext::Message("NewOrderSingle".to_owned()),
-                second: MemberContext::Trailer,
-            }
+                kept: MemberContext::Trailer,
+                dropped: MemberContext::Message("NewOrderSingle".to_owned()),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_header_tag_in_the_trailer_is_dropped_from_the_trailer() {
+        let mut spec = spec_of(
+            vec![field("SenderCompID", 49), field("CheckSum", 10)],
+            vec![],
+            vec![],
+        );
+        spec.header = vec![field_ref(49, true)];
+        spec.trailer = vec![field_ref(49, false), field_ref(10, true)];
+
+        let resolved = spec.resolve().unwrap();
+
+        assert_eq!(
+            field_members(resolved.dictionary.header()),
+            [(Tag(49), true)]
+        );
+        assert_eq!(
+            field_members(resolved.dictionary.trailer()),
+            [(Tag(10), true)]
+        );
+        assert_eq!(
+            resolved.warnings,
+            [Warning::DuplicateField {
+                tag: Tag(49),
+                kept: MemberContext::Header,
+                dropped: MemberContext::Trailer,
+            }]
         );
     }
 
@@ -445,7 +487,7 @@ mod tests {
     fn exposes_the_spec_it_was_resolved_from() {
         let spec = spec_of(vec![field("ClOrdID", 11)], vec![], vec![]);
 
-        let dictionary = spec.clone().resolve().unwrap();
+        let dictionary = spec.clone().resolve().unwrap().dictionary;
 
         assert_eq!(dictionary.spec(), &spec);
         assert_eq!(dictionary.version(), spec.version);
@@ -475,7 +517,7 @@ mod tests {
             )],
         );
 
-        let dictionary = spec.resolve().unwrap();
+        let dictionary = spec.resolve().unwrap().dictionary;
 
         let message = dictionary.messages().next().unwrap();
         assert_eq!(
@@ -503,7 +545,7 @@ mod tests {
             )],
         );
 
-        let dictionary = spec.resolve().unwrap();
+        let dictionary = spec.resolve().unwrap().dictionary;
 
         // An optional component makes everything below it optional.
         let message = dictionary.messages().next().unwrap();
@@ -527,7 +569,7 @@ mod tests {
             )],
         );
 
-        let dictionary = spec.resolve().unwrap();
+        let dictionary = spec.resolve().unwrap().dictionary;
 
         let message = dictionary.messages().next().unwrap();
         assert_eq!(field_members(message.members()), vec![(Tag(12), true)]);
@@ -661,7 +703,7 @@ mod tests {
     }
 
     #[test]
-    fn a_diamond_over_a_field_duplicates_the_tag() {
+    fn a_diamond_over_a_field_keeps_the_tag_once() {
         // Both arms of the diamond contribute tag 58 to Top's expansion.
         let spec = spec_of(
             vec![field("Text", 58)],
@@ -674,21 +716,25 @@ mod tests {
                 component("Right", vec![component_ref("Bottom", false)]),
                 component("Bottom", vec![field_ref(58, false)]),
             ],
-            vec![],
+            vec![message("NewOrderSingle", vec![component_ref("Top", false)])],
         );
 
+        let resolved = spec.resolve().unwrap();
+
+        let message = resolved.dictionary.messages().next().unwrap();
+        assert_eq!(field_members(message.members()), [(Tag(58), false)]);
         assert_eq!(
-            spec.resolve().unwrap_err(),
-            Error::DuplicateField {
+            resolved.warnings,
+            [Warning::DuplicateField {
                 tag: Tag(58),
-                first: MemberContext::Component("Top".to_owned()),
-                second: MemberContext::Component("Top".to_owned()),
-            }
+                kept: MemberContext::Component("Top".to_owned()),
+                dropped: MemberContext::Component("Top".to_owned()),
+            }]
         );
     }
 
     #[test]
-    fn a_duplicate_tag_after_expansion_is_an_error() {
+    fn a_duplicate_tag_after_expansion_is_dropped() {
         let spec = spec_of(
             vec![field("Text", 58)],
             vec![component("Notes", vec![field_ref(58, false)])],
@@ -698,13 +744,17 @@ mod tests {
             )],
         );
 
+        let resolved = spec.resolve().unwrap();
+
+        let message = resolved.dictionary.messages().next().unwrap();
+        assert_eq!(field_members(message.members()), [(Tag(58), true)]);
         assert_eq!(
-            spec.resolve().unwrap_err(),
-            Error::DuplicateField {
+            resolved.warnings,
+            [Warning::DuplicateField {
                 tag: Tag(58),
-                first: MemberContext::Message("NewOrderSingle".to_owned()),
-                second: MemberContext::Message("NewOrderSingle".to_owned()),
-            }
+                kept: MemberContext::Message("NewOrderSingle".to_owned()),
+                dropped: MemberContext::Message("NewOrderSingle".to_owned()),
+            }]
         );
     }
 
@@ -779,7 +829,7 @@ mod tests {
             }
         }
 
-        fn resolve(field: Field) -> Result<Dictionary, Error> {
+        fn resolve(field: Field) -> Result<Resolved, Error> {
             spec_of(vec![field], vec![], vec![]).resolve()
         }
 
@@ -866,7 +916,7 @@ mod tests {
             }
         }
 
-        fn resolve(fields: Vec<Field>) -> Result<Dictionary, Error> {
+        fn resolve(fields: Vec<Field>) -> Result<Resolved, Error> {
             spec_of(fields, vec![], vec![]).resolve()
         }
 
@@ -1027,7 +1077,7 @@ mod tests {
                 )],
             );
 
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             let group = group_at(dictionary.messages().next().unwrap(), 0);
             assert_eq!(group.count_field().tag, Tag(453));
@@ -1054,7 +1104,7 @@ mod tests {
                     )],
                 )],
             );
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             let instance_members = dictionary
                 .messages()
@@ -1093,7 +1143,7 @@ mod tests {
                 )],
             );
 
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             // The optional component makes the group optional, but not the
             // fields its instances require.
@@ -1128,7 +1178,7 @@ mod tests {
                 )],
             );
 
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             let group = group_at(dictionary.messages().next().unwrap(), 0);
             assert_eq!(group.delimiter().tag, Tag(55));
@@ -1157,7 +1207,7 @@ mod tests {
                 )],
             );
 
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             let outer = group_at(dictionary.messages().next().unwrap(), 0);
             assert_eq!(outer.delimiter().tag, Tag(802));
@@ -1179,7 +1229,7 @@ mod tests {
                 )],
             );
 
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             let group = group_at(dictionary.messages().next().unwrap(), 0);
             assert_eq!(group.declared_in(), &nos_context());
@@ -1200,7 +1250,7 @@ mod tests {
                 )],
             );
 
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             let group = group_at(dictionary.messages().next().unwrap(), 0);
             assert_eq!(
@@ -1231,7 +1281,7 @@ mod tests {
                 )],
             );
 
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             let group = group_at(dictionary.messages().next().unwrap(), 1);
             assert_eq!(
@@ -1270,7 +1320,7 @@ mod tests {
                 )],
             );
 
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             let parties = group_at(dictionary.messages().next().unwrap(), 0);
             let Some(Member::Group(sub_ids)) = parties.members().nth(1) else {
@@ -1300,7 +1350,7 @@ mod tests {
                 )],
             );
 
-            let dictionary = spec.resolve().unwrap();
+            let dictionary = spec.resolve().unwrap().dictionary;
 
             let group = group_at(dictionary.messages().next().unwrap(), 0);
             assert_eq!(group.component(), Some("Inner"));
@@ -1381,7 +1431,40 @@ mod tests {
         }
 
         #[test]
-        fn a_tag_in_a_scope_and_in_its_group_is_an_error() {
+        fn a_tag_in_a_scope_and_in_its_group_is_dropped_from_the_group() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![
+                        field_ref(448, false),
+                        group(
+                            453,
+                            false,
+                            vec![field_ref(448, false), field_ref(447, false)],
+                        ),
+                    ],
+                )],
+            );
+
+            let resolved = spec.resolve().unwrap();
+
+            let group = group_at(resolved.dictionary.messages().next().unwrap(), 1);
+            assert_eq!(field_members(group.members()), [(Tag(447), true)]);
+            assert_eq!(group.delimiter().tag, Tag(447));
+            assert_eq!(
+                resolved.warnings,
+                [Warning::DuplicateField {
+                    tag: Tag(448),
+                    kept: nos_context(),
+                    dropped: nos_context().group("NoPartyIDs"),
+                }]
+            );
+        }
+
+        #[test]
+        fn a_group_left_without_members_is_an_error() {
             let spec = spec_of(
                 parties_fields(),
                 vec![],
@@ -1396,16 +1479,14 @@ mod tests {
 
             assert_eq!(
                 spec.resolve().unwrap_err(),
-                Error::DuplicateField {
-                    tag: Tag(448),
-                    first: nos_context(),
-                    second: nos_context().group("NoPartyIDs"),
+                Error::EmptyGroup {
+                    context: nos_context().group("NoPartyIDs"),
                 }
             );
         }
 
         #[test]
-        fn a_count_tag_also_used_as_a_field_is_an_error() {
+        fn a_count_tag_also_used_as_a_field_drops_the_group() {
             let spec = spec_of(
                 parties_fields(),
                 vec![],
@@ -1418,18 +1499,22 @@ mod tests {
                 )],
             );
 
+            let resolved = spec.resolve().unwrap();
+
+            let message = resolved.dictionary.messages().next().unwrap();
+            assert_eq!(field_members(message.members()), [(Tag(453), false)]);
             assert_eq!(
-                spec.resolve().unwrap_err(),
-                Error::DuplicateField {
+                resolved.warnings,
+                [Warning::DuplicateField {
                     tag: Tag(453),
-                    first: nos_context(),
-                    second: nos_context(),
-                }
+                    kept: nos_context(),
+                    dropped: nos_context(),
+                }]
             );
         }
 
         #[test]
-        fn sibling_groups_sharing_a_tag_are_an_error() {
+        fn sibling_groups_sharing_a_tag_keep_it_in_the_first() {
             let mut fields = parties_fields();
             fields.push(field("NoNestedPartyIDs", 539));
             let spec = spec_of(
@@ -1438,19 +1523,38 @@ mod tests {
                 vec![message(
                     "NewOrderSingle",
                     vec![
-                        group(453, false, vec![field_ref(448, false)]),
-                        group(539, false, vec![field_ref(448, false)]),
+                        group(
+                            453,
+                            false,
+                            vec![field_ref(448, false), field_ref(447, false)],
+                        ),
+                        group(
+                            539,
+                            false,
+                            vec![field_ref(448, false), field_ref(452, false)],
+                        ),
                     ],
                 )],
             );
 
+            let resolved = spec.resolve().unwrap();
+
+            let message = resolved.dictionary.messages().next().unwrap();
             assert_eq!(
-                spec.resolve().unwrap_err(),
-                Error::DuplicateField {
+                field_members(group_at(message, 0).members()),
+                [(Tag(448), true), (Tag(447), false)]
+            );
+            assert_eq!(
+                field_members(group_at(message, 1).members()),
+                [(Tag(452), true)]
+            );
+            assert_eq!(
+                resolved.warnings,
+                [Warning::DuplicateField {
                     tag: Tag(448),
-                    first: nos_context().group("NoPartyIDs"),
-                    second: nos_context().group("NoNestedPartyIDs"),
-                }
+                    kept: nos_context().group("NoPartyIDs"),
+                    dropped: nos_context().group("NoNestedPartyIDs"),
+                }]
             );
         }
 
@@ -1469,13 +1573,17 @@ mod tests {
                 )],
             );
 
+            let resolved = spec.resolve().unwrap();
+
+            let group = group_at(resolved.dictionary.messages().next().unwrap(), 0);
+            assert_eq!(field_members(group.members()), [(Tag(448), true)]);
             assert_eq!(
-                spec.resolve().unwrap_err(),
-                Error::DuplicateField {
+                resolved.warnings,
+                [Warning::DuplicateField {
                     tag: Tag(448),
-                    first: nos_context().group("NoPartyIDs"),
-                    second: nos_context().group("NoPartyIDs"),
-                }
+                    kept: nos_context().group("NoPartyIDs"),
+                    dropped: nos_context().group("NoPartyIDs"),
+                }]
             );
         }
     }

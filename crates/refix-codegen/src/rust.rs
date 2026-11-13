@@ -273,7 +273,7 @@ impl Message {
 }
 "#;
 
-        let generated = generate(&spec.resolve().unwrap(), "toy.xml").unwrap();
+        let generated = generate(&spec.resolve().unwrap().dictionary, "toy.xml").unwrap();
         assert_eq!(generated.code, expected);
         assert_eq!(
             generated.warnings,
@@ -288,7 +288,9 @@ impl Message {
     fn a_dictionary_without_messages_has_no_message_enum() {
         let spec = spec_of(vec![], vec![]);
 
-        let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+        let code = generate(&spec.resolve().unwrap().dictionary, "toy.xml")
+            .unwrap()
+            .code;
 
         assert!(!code.contains("pub enum Message"));
     }
@@ -311,7 +313,9 @@ impl Message {
             ],
         );
 
-        let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+        let code = generate(&spec.resolve().unwrap().dictionary, "toy.xml")
+            .unwrap()
+            .code;
 
         assert!(code.contains(
             "pub const DIALECT: Dialect<'static> = Dialect::new().with_extra_length_tags(&[Tag(95), Tag(5001)]);\n"
@@ -341,7 +345,9 @@ impl Message {
         let unused = spec_of(vec![order(vec![])], vec![exec_inst]);
 
         let imports = |spec: Spec| {
-            let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+            let code = generate(&spec.resolve().unwrap().dictionary, "toy.xml")
+                .unwrap()
+                .code;
             code.lines()
                 .find(|line| line.starts_with("use "))
                 .unwrap()
@@ -367,7 +373,9 @@ impl Message {
             category: Category::App,
         };
         let imports = |spec: Spec| {
-            let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+            let code = generate(&spec.resolve().unwrap().dictionary, "toy.xml")
+                .unwrap()
+                .code;
             code.lines()
                 .find(|line| line.starts_with("use "))
                 .unwrap()
@@ -439,7 +447,9 @@ impl Message {
             vec![locate_reqd],
         );
 
-        let code = generate(&spec.resolve().unwrap(), "toy.xml").unwrap().code;
+        let code = generate(&spec.resolve().unwrap().dictionary, "toy.xml")
+            .unwrap()
+            .code;
 
         assert!(code.contains("pub fn locate_reqd(&self) -> Result<Option<bool>, InvalidValue> {"));
         assert!(!code.contains("enum LocateReqd"));
@@ -465,7 +475,7 @@ impl Message {
             vec![security_status],
         );
 
-        let generated = generate(&spec.resolve().unwrap(), "toy.xml").unwrap();
+        let generated = generate(&spec.resolve().unwrap().dictionary, "toy.xml").unwrap();
 
         assert!(generated.code.contains("pub enum SecurityStatusEnum<'a> {"));
         assert!(
@@ -504,7 +514,7 @@ impl Message {
             vec![],
         );
 
-        let generated = generate(&spec.resolve().unwrap(), "toy.xml").unwrap();
+        let generated = generate(&spec.resolve().unwrap().dictionary, "toy.xml").unwrap();
 
         let heartbeat = generated.code.find("pub struct Heartbeat").unwrap();
         let test_request = generated.code.find("pub struct TestRequest").unwrap();
@@ -575,7 +585,7 @@ impl Message {
         }
 
         fn generated(spec: Spec) -> Generated {
-            generate(&spec.resolve().unwrap(), "toy.xml").unwrap()
+            generate(&spec.resolve().unwrap().dictionary, "toy.xml").unwrap()
         }
 
         #[test]

@@ -371,6 +371,7 @@ mod tests {
         }
         .resolve()
         .unwrap()
+        .dictionary
     }
 
     fn clash_in(dictionary: &Dictionary) -> NameClash {

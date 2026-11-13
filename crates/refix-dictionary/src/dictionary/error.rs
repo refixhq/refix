@@ -54,11 +54,6 @@ pub enum Error {
         field: String,
         context: MemberContext,
     },
-    DuplicateField {
-        tag: Tag,
-        first: MemberContext,
-        second: MemberContext,
-    },
     UnknownField {
         tag: Tag,
         context: MemberContext,
@@ -145,12 +140,6 @@ impl fmt::Display for Error {
             Error::MissingLengthTag { field, context } => {
                 write!(f, "data field '{field}' in {context} has no length field")
             }
-            Error::DuplicateField { tag, first, second } if first == second => {
-                write!(f, "{first} contains tag {tag} more than once")
-            }
-            Error::DuplicateField { tag, first, second } => {
-                write!(f, "tag {tag} appears in both {first} and {second}")
-            }
             Error::UnknownField { context, tag } => {
                 write!(f, "{context} references unknown tag {tag}")
             }
@@ -172,21 +161,6 @@ impl std::error::Error for Error {}
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_duplicate_in_one_place_reads_as_contained_twice() {
-        let context = MemberContext::Component("Top".to_owned());
-        let error = Error::DuplicateField {
-            tag: Tag(58),
-            first: context.clone(),
-            second: context,
-        };
-
-        assert_eq!(
-            error.to_string(),
-            "component 'Top' contains tag 58 more than once"
-        );
-    }
 
     #[test]
     fn a_shared_msg_type_names_both_messages() {
@@ -241,21 +215,6 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "field 'PriceType' lists both 1 and 01, which are the same number"
-        );
-    }
-
-    #[test]
-    fn a_duplicate_in_two_places_names_both() {
-        let message = MemberContext::Message("NewOrderSingle".to_owned());
-        let error = Error::DuplicateField {
-            tag: Tag(448),
-            first: message.clone(),
-            second: message.group("NoPartyIDs"),
-        };
-
-        assert_eq!(
-            error.to_string(),
-            "tag 448 appears in both message 'NewOrderSingle' and group 'NoPartyIDs' in message 'NewOrderSingle'"
         );
     }
 }
