@@ -44,12 +44,6 @@ dev = [
 compare = ["simplefix==1.0.17"]
 quickfix = ["quickfix==1.16.0"]
 
-[tool.ruff.lint]
-extend-select = ["I"]
-
-[tool.ruff.lint.isort]
-known-first-party = ["messages"]
-
 [tool.coverage.run]
 source = ["refix"]
 

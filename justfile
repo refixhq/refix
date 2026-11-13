@@ -67,7 +67,7 @@ coverage-python:
 # Format Rust and Python code
 fmt:
     cargo fmt --all
-    cd {{ py }} && uv run ruff format
+    uv run --project {{ py }} ruff format
 
 # Check formatting and lints without modifying anything
 lint:
@@ -75,8 +75,8 @@ lint:
     cargo clippy --all-targets --all-features
     cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check
     cargo clippy --manifest-path fuzz/Cargo.toml --all-targets
-    cd {{ py }} && uv run ruff format --check
-    cd {{ py }} && uv run ruff check
+    uv run --project {{ py }} ruff format --check
+    uv run --project {{ py }} ruff check
 
 # Type-check the Python layer
 typecheck:
