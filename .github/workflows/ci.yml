@@ -75,6 +75,8 @@ jobs:
         run: just typecheck
       - name: Run Python tests with coverage
         run: just coverage-python
+      - name: Run comparison benchmarks untimed
+        run: just pytest benchmarks
       - name: Upload coverage
         uses: codecov/codecov-action@v7
         with:

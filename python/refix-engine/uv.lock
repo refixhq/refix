@@ -212,10 +212,19 @@ wheels = [
 ]
 
 [[package]]
+name = "quickfix"
+version = "1.16.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/3b/06dcfc1112049d9383ab6c51d08a7d2b7d354b5b49b3928c3cea53d6a0d3/quickfix-1.16.0.tar.gz", hash = "sha256:825aceb72cfd69c30fbbf5b380b66f464abe1fe3188374f13d8c9987dd8eb4e9", size = 2779218, upload-time = "2026-05-09T12:07:11.281Z" }
+
+[[package]]
 name = "refix"
 source = { virtual = "." }
 
 [package.dev-dependencies]
+compare = [
+    { name = "simplefix" },
+]
 dev = [
     { name = "maturin" },
     { name = "pyright" },
@@ -224,10 +233,14 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
+quickfix = [
+    { name = "quickfix" },
+]
 
 [package.metadata]
 
 [package.metadata.requires-dev]
+compare = [{ name = "simplefix", specifier = "==1.0.17" }]
 dev = [
     { name = "maturin", specifier = ">=1.9.4,<2" },
     { name = "pyright", specifier = ">=1.1" },
@@ -236,6 +249,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=6" },
     { name = "ruff", specifier = ">=0.16.1" },
 ]
+quickfix = [{ name = "quickfix", specifier = "==1.16.0" }]
 
 [[package]]
 name = "ruff"
@@ -260,6 +274,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/fc/8a/fb22af2fd78a736e241fabf67e30ce1799a64244026377a49e133af90762/ruff-0.16.1-py3-none-win32.whl", hash = "sha256:d31765e131295b8445caf301e3e8a85b34d1b9b211b4109b7ba457888b051806", size = 10838258, upload-time = "2026-07-30T19:36:53.298Z" },
     { url = "https://files.pythonhosted.org/packages/d4/35/e57fd9fb5d423961df087a00b12d42c0a830288dc2f3b45ecca299158b4f/ruff-0.16.1-py3-none-win_amd64.whl", hash = "sha256:09b05e8b90c2cb06ad63464350e7a45e8e44a2dfe52072ebfba6666ca8d3f596", size = 11961111, upload-time = "2026-07-30T19:36:56.107Z" },
     { url = "https://files.pythonhosted.org/packages/cb/46/240ea004bf6dc4feb40e9832f2205a476a47dd5b8a3f8211a5fc5f95e20e/ruff-0.16.1-py3-none-win_arm64.whl", hash = "sha256:dbaadaac38c70239f056d306b7476f246b0bf000fa6b3876402acbf5b227eaf8", size = 11309414, upload-time = "2026-07-30T19:36:58.79Z" },
+]
+
+[[package]]
+name = "simplefix"
+version = "1.0.17"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2b/9a/e17706ff04ca5d0f7d10fbefe957bd85c11bb9d47ffd7a3b0f125c5f4c0f/simplefix-1.0.17.tar.gz", hash = "sha256:d7f86666f508b11a8839d26ad66d63eaa5e53e6d0d4e23f5ef065feead60e658", size = 32985, upload-time = "2023-09-12T08:43:42.124Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/e3/cabeb722e75488b53a5d509d4ee1a0ad30683ade7210e6ea593c654ed410/simplefix-1.0.17-py2.py3-none-any.whl", hash = "sha256:da15798755447b9719f8688ca4cc29ee20c6d94d3227f22f60e04dcf347a2c68", size = 27268, upload-time = "2023-09-12T08:43:39.982Z" },
 ]
 
 [[package]]
