@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/refixhq/refix/compare/refix-message-v0.4.1...refix-message-v0.4.2) - 2026-11-13
+
+### Other
+
+- add Criterion benchmarks for the tokenizer ([#131](https://github.com/refixhq/refix/pull/131))
+
 ## [0.4.1](https://github.com/refixhq/refix/compare/refix-message-v0.4.0...refix-message-v0.4.1) - 2026-11-13
 
 ### Added
