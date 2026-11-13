@@ -388,7 +388,8 @@ mod tests {
             components: vec![],
         }
         .resolve()
-        .unwrap();
+        .unwrap()
+        .dictionary;
 
         let Err(Error::NameClash(clash)) = Names::new(&dictionary, &mut Vec::new()) else {
             panic!("expected a name clash");
@@ -495,7 +496,8 @@ mod tests {
             }],
         }
         .resolve()
-        .unwrap();
+        .unwrap()
+        .dictionary;
 
         let Err(Error::NameClash(clash)) = Names::new(&dictionary, &mut Vec::new()) else {
             panic!("expected a name clash");

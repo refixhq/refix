@@ -2,9 +2,10 @@ mod error;
 
 use crate::{
     Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Group,
-    Member, MemberContext, Message, Protocol, Spec, Tag, Version,
+    Member, MemberContext, Message, Protocol, Spec, Tag, Version, dictionary,
 };
 use roxmltree::Node;
+use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -15,13 +16,14 @@ pub use error::Error;
 
 /// Parses a QuickFIX-format XML data dictionary into a [`Dictionary`].
 pub fn parse(xml: &str) -> Result<Parsed, Error> {
-    let document = roxmltree::Document::parse(xml).map_err(Error::Xml)?;
+    let mut warnings = Vec::new();
+    let xml = cut_misplaced_declaration(xml, &mut warnings);
+    let document = roxmltree::Document::parse(&xml).map_err(Error::Xml)?;
     let root = document.root_element();
     if !root.has_tag_name("fix") {
         return Err(Error::UnexpectedRoot(root.tag_name().name().to_owned()));
     }
 
-    let mut warnings = Vec::new();
     let version = parse_version(root)?;
     let fields = parse_fields(root, &mut warnings)?;
     let tags_by_name: HashMap<&str, Tag> = fields
@@ -55,12 +57,37 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
         components,
         fields,
     };
-    let dictionary = spec.resolve().map_err(Error::Invalid)?;
+    let resolved = spec.resolve().map_err(Error::Invalid)?;
+    warnings.extend(resolved.warnings.into_iter().map(Warning::Invalid));
 
     Ok(Parsed {
-        dictionary,
+        dictionary: resolved.dictionary,
         warnings,
     })
+}
+
+/// Cuts out an XML declaration that comes after a comment instead of
+/// starting the text, which the XML parser would reject. The declaration
+/// carries nothing the parser needs.
+fn cut_misplaced_declaration<'a>(xml: &'a str, warnings: &mut Vec<Warning>) -> Cow<'a, str> {
+    const DECLARATION: &str = "<?xml ";
+    if xml.starts_with(DECLARATION) {
+        return Cow::Borrowed(xml);
+    }
+    let Some(start) = xml.find(DECLARATION) else {
+        return Cow::Borrowed(xml);
+    };
+    let Some(end) = xml[start..].find("?>").map(|at| start + at + 2) else {
+        return Cow::Borrowed(xml);
+    };
+    let before_an_element = xml[..start]
+        .match_indices('<')
+        .all(|(at, _)| matches!(xml.as_bytes().get(at + 1), Some(b'!' | b'?')));
+    if !before_an_element {
+        return Cow::Borrowed(xml);
+    }
+    warnings.push(Warning::MisplacedDeclaration);
+    Cow::Owned(format!("{}{}", &xml[..start], &xml[end..]))
 }
 
 fn parse_version(root: Node) -> Result<Version, Error> {
@@ -257,7 +284,7 @@ fn parse_message(
     warnings: &mut Vec<Warning>,
 ) -> Result<Message, Error> {
     let name = string_attribute(node, "name")?;
-    let category = parse_category(node)?;
+    let category = parse_category(node, &name, warnings)?;
     let members = parse_members(
         node,
         MemberContext::Message(name.clone()),
@@ -352,15 +379,23 @@ fn parse_group(
     })
 }
 
-fn parse_category(node: Node) -> Result<Category, Error> {
+/// Reads a message's category. Any value other than the two FIX knows
+/// counts as `app`, as the admin set is fixed.
+fn parse_category(
+    node: Node,
+    message: &str,
+    warnings: &mut Vec<Warning>,
+) -> Result<Category, Error> {
     match node.attribute("msgcat") {
         Some("admin") => Ok(Category::Admin),
         Some("app") => Ok(Category::App),
-        Some(other) => Err(Error::InvalidAttribute {
-            element: node.tag_name().name().to_owned(),
-            attribute: "msgcat".to_owned(),
-            value: other.to_owned(),
-        }),
+        Some(other) => {
+            warnings.push(Warning::UnknownCategory {
+                message: message.to_owned(),
+                value: other.to_owned(),
+            });
+            Ok(Category::App)
+        }
         None => Err(Error::MissingAttribute {
             element: node.tag_name().name().to_owned(),
             attribute: "msgcat".to_owned(),
@@ -509,6 +544,13 @@ pub enum Warning {
         kept: EnumValue,
         dropped: EnumValue,
     },
+    /// An XML declaration that does not start the text, cut out before
+    /// parsing.
+    MisplacedDeclaration,
+    /// A `msgcat` other than `admin` or `app`, read as `app`.
+    UnknownCategory { message: String, value: String },
+    /// Something the resolver dropped.
+    Invalid(dictionary::Warning),
 }
 
 impl fmt::Display for Warning {
@@ -527,6 +569,17 @@ impl fmt::Display for Warning {
                  the same code",
                 dropped.description, dropped.value, kept.description, kept.value
             ),
+            Warning::MisplacedDeclaration => {
+                write!(
+                    f,
+                    "the xml declaration is ignored, as it does not start the file"
+                )
+            }
+            Warning::UnknownCategory { message, value } => write!(
+                f,
+                "message '{message}' has unknown msgcat '{value}', which is read as app"
+            ),
+            Warning::Invalid(warning) => write!(f, "{warning}"),
         }
     }
 }
@@ -538,6 +591,43 @@ mod tests {
 
     fn version_of(xml: &str) -> Version {
         parse(xml).unwrap().dictionary.version()
+    }
+
+    mod declaration {
+        use super::*;
+
+        #[test]
+        fn a_leading_declaration_parses_without_a_warning() {
+            let parsed =
+                parse("<?xml version='1.0' encoding='UTF-8'?>\n<fix major='4' minor='4'/>")
+                    .unwrap();
+
+            assert!(parsed.warnings.is_empty());
+        }
+
+        #[test]
+        fn a_declaration_after_a_comment_is_cut_out_with_a_warning() {
+            let parsed = parse(
+                "<!-- a modified specification -->\n\
+                 <?xml version='1.0' encoding='ISO-8859-1'?>\n\
+                 <fix major='4' minor='3'/>",
+            )
+            .unwrap();
+
+            assert_eq!(parsed.dictionary.version().major, 4);
+            assert_eq!(parsed.warnings, [Warning::MisplacedDeclaration]);
+            assert_eq!(
+                parsed.warnings[0].to_string(),
+                "the xml declaration is ignored, as it does not start the file"
+            );
+        }
+
+        #[test]
+        fn a_declaration_inside_the_document_is_still_an_error() {
+            let error = parse("<fix major='4' minor='4'><?xml version='1.0'?></fix>").unwrap_err();
+
+            assert!(matches!(error, Error::Xml(_)));
+        }
     }
 
     mod version {
@@ -1075,6 +1165,39 @@ mod tests {
         }
 
         #[test]
+        fn a_tag_repeated_in_a_group_is_dropped_with_a_warning() {
+            let parsed = parse(
+                "<fix major='4' minor='4'><messages>\
+                 <message name='AllocationInstruction' msgtype='J' msgcat='app'>\
+                 <field name='AccruedInterestAmt' required='N'/>\
+                 <group name='NoAllocs' required='N'>\
+                 <field name='AllocAccount' required='N'/>\
+                 <field name='AccruedInterestAmt' required='N'/>\
+                 </group></message></messages><fields>\
+                 <field number='159' name='AccruedInterestAmt' type='AMT'/>\
+                 <field number='78' name='NoAllocs' type='NUMINGROUP'/>\
+                 <field number='79' name='AllocAccount' type='STRING'/>\
+                 </fields></fix>",
+            )
+            .unwrap();
+
+            let message = MemberContext::Message("AllocationInstruction".to_owned());
+            assert_eq!(
+                parsed.warnings,
+                [Warning::Invalid(dictionary::Warning::DuplicateField {
+                    tag: Tag(159),
+                    kept: message.clone(),
+                    dropped: message.group("NoAllocs"),
+                })]
+            );
+            assert_eq!(
+                parsed.warnings[0].to_string(),
+                "tag 159 in group 'NoAllocs' in message 'AllocationInstruction' is dropped, as it \
+                 already appears in message 'AllocationInstruction'"
+            );
+        }
+
+        #[test]
         fn a_group_with_an_undefined_count_field_is_an_error() {
             let error = parse(
                 "<fix major='4' minor='4'><messages>\
@@ -1188,18 +1311,27 @@ mod tests {
         }
 
         #[test]
-        fn invalid_msgcat_is_an_error() {
-            let error = parse(
+        fn an_unknown_msgcat_is_read_as_app_with_a_warning() {
+            let parsed = parse(
                 "<fix major='4' minor='4'><messages>\
-                 <message name='Heartbeat' msgtype='0' msgcat='session'/></messages></fix>",
+                 <message name='AllocationReport' msgtype='AS' msgcat='Allocation'/>\
+                 </messages></fix>",
             )
-            .unwrap_err();
+            .unwrap();
 
-            assert!(matches!(
-                error,
-                Error::InvalidAttribute { ref attribute, ref value, .. }
-                    if attribute == "msgcat" && value == "session"
-            ));
+            let message = parsed.dictionary.messages().next().unwrap();
+            assert_eq!(message.category(), Category::App);
+            assert_eq!(
+                parsed.warnings,
+                [Warning::UnknownCategory {
+                    message: "AllocationReport".to_owned(),
+                    value: "Allocation".to_owned(),
+                }]
+            );
+            assert_eq!(
+                parsed.warnings[0].to_string(),
+                "message 'AllocationReport' has unknown msgcat 'Allocation', which is read as app"
+            );
         }
     }
 

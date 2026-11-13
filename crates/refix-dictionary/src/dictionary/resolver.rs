@@ -1,41 +1,54 @@
 use super::{
-    ComponentIndex, Dictionary, Error, FieldIndex, ResolvedGroup, ResolvedMember, ResolvedMessage,
+    ComponentIndex, Dictionary, Error, FieldIndex, Resolved, ResolvedGroup, ResolvedMember,
+    ResolvedMessage, Warning,
 };
 use crate::{DataType, Field, MemberContext, Spec, Tag, spec};
 use std::collections::{HashMap, hash_map::Entry};
 
 impl Spec {
     /// Resolves this spec into a [`Dictionary`], checking its integrity.
-    pub fn resolve(self) -> Result<Dictionary, Error> {
+    ///
+    /// A tag may appear only once in a message, at any depth. Later
+    /// occurrences are dropped with a [`Warning`].
+    pub fn resolve(self) -> Result<Resolved, Error> {
         let mut resolver = Resolver::new(&self)?;
         resolver.expand_components()?;
-        let header = resolver.resolve_members(&self.header, &MemberContext::Header, false)?;
-        let trailer = resolver.resolve_members(&self.trailer, &MemberContext::Trailer, false)?;
+        let mut header = resolver.resolve_members(&self.header, &MemberContext::Header, false)?;
+        let mut trailer =
+            resolver.resolve_members(&self.trailer, &MemberContext::Trailer, false)?;
+        let mut fixed = HashMap::new();
+        resolver.drop_repeated_tags(&mut header, &MemberContext::Header, &mut fixed)?;
+        resolver.drop_repeated_tags(&mut trailer, &MemberContext::Trailer, &mut fixed)?;
         let messages = self
             .messages
             .iter()
-            .map(|message| resolver.resolve_message(message, &header, &trailer))
+            .map(|message| resolver.resolve_message(message, &fixed))
             .collect::<Result<_, _>>()?;
+        let warnings = resolver.warnings;
 
-        Ok(Dictionary {
-            spec: self,
-            header,
-            messages,
-            trailer,
+        Ok(Resolved {
+            dictionary: Dictionary {
+                spec: self,
+                header,
+                messages,
+                trailer,
+            },
+            warnings,
         })
     }
 }
 
 /// State shared while resolving one spec.
 ///
-/// It holds the lookup tables, the memoised component expansions and the
-/// components currently being expanded.
+/// It holds the lookup tables, the memoised component expansions, the
+/// components currently being expanded and the warnings so far.
 struct Resolver<'a> {
     spec: &'a Spec,
     fields_by_tag: HashMap<Tag, FieldIndex>,
     components_by_name: HashMap<&'a str, ComponentIndex>,
     expansions: Vec<Option<Vec<ResolvedMember>>>,
     stack: Vec<ComponentIndex>,
+    warnings: Vec<Warning>,
 }
 
 impl<'a> Resolver<'a> {
@@ -51,6 +64,7 @@ impl<'a> Resolver<'a> {
             components_by_name: index_components(&spec.components)?,
             expansions: vec![None; spec.components.len()],
             stack: Vec::new(),
+            warnings: Vec::new(),
         })
     }
 
@@ -91,33 +105,24 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    /// Resolves a message's members, and checks that the header and trailer
-    /// share none of their tags.
+    /// Resolves a message's members, dropping the tags of the header and
+    /// trailer, recorded in `fixed`.
     fn resolve_message(
         &mut self,
         message: &spec::Message,
-        header: &[ResolvedMember],
-        trailer: &[ResolvedMember],
+        fixed: &HashMap<Tag, MemberContext>,
     ) -> Result<ResolvedMessage, Error> {
         let context = MemberContext::Message(message.name.clone());
-        let members = self.resolve_members(&message.members, &context, false)?;
-        let mut seen = HashMap::new();
-        for (section, context) in [
-            (header, &MemberContext::Header),
-            (members.as_slice(), &context),
-            (trailer, &MemberContext::Trailer),
-        ] {
-            insert_unique_tags(section, context, &self.spec.fields, &mut seen)?;
-        }
+        let mut members = self.resolve_members(&message.members, &context, false)?;
+        self.drop_repeated_tags(&mut members, &context, &mut fixed.clone())?;
         Ok(ResolvedMessage { members })
     }
 
     /// Resolves one member list, expanding component references in
-    /// place, and checks that no tag appears in it twice.
+    /// place, and drops every tag it lists twice.
     ///
-    /// In a group instance the first member is required whatever its declared
-    /// flag. A component in first position becomes required, and the field
-    /// every instance starts with must be present.
+    /// In a group instance a component in first position becomes required,
+    /// so that the field every instance starts with is present.
     fn resolve_members(
         &mut self,
         members: &[spec::Member],
@@ -151,11 +156,42 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        if is_instance && let Some(first) = resolved.first_mut() {
-            first.require();
-        }
-        check_unique_tags(&resolved, context, &self.spec.fields)?;
+        self.drop_repeated_tags(&mut resolved, context, &mut HashMap::new())?;
         Ok(resolved)
+    }
+
+    /// Drops every member whose tag is in `seen` or listed earlier, in
+    /// document order and at any depth, with a warning for each.
+    fn drop_repeated_tags(
+        &mut self,
+        members: &mut Vec<ResolvedMember>,
+        context: &MemberContext,
+        seen: &mut HashMap<Tag, MemberContext>,
+    ) -> Result<(), Error> {
+        let spec = self.spec;
+        let mut kept = Vec::with_capacity(members.len());
+        for mut member in members.drain(..) {
+            let tag = spec.fields.as_slice()[member.first_field()].tag;
+            match seen.entry(tag) {
+                Entry::Occupied(first) => self.warnings.push(Warning::DuplicateField {
+                    tag,
+                    kept: first.get().clone(),
+                    dropped: context.clone(),
+                }),
+                Entry::Vacant(slot) => {
+                    slot.insert(context.clone());
+                    if let ResolvedMember::Group(group) = &mut member {
+                        let count_field = &spec.fields.as_slice()[group.count_field_index];
+                        let instance = context.group(&count_field.name);
+                        self.drop_repeated_tags(&mut group.members, &instance, seen)?;
+                        group.delimiter_index = delimit(&mut group.members, &instance)?;
+                    }
+                    kept.push(member);
+                }
+            }
+        }
+        *members = kept;
+        Ok(())
     }
 
     /// Resolves a group's count field in the enclosing scope, and its
@@ -168,11 +204,8 @@ impl<'a> Resolver<'a> {
         let count_field_index = self.field_index(group.count_tag, context)?;
         let spec = self.spec;
         let instance = context.group(&spec.fields.as_slice()[count_field_index].name);
-        let members = self.resolve_members(&group.members, &instance, true)?;
-        let Some(first) = members.first() else {
-            return Err(Error::EmptyGroup { context: instance });
-        };
-        let delimiter_index = first.first_field();
+        let mut members = self.resolve_members(&group.members, &instance, true)?;
+        let delimiter_index = delimit(&mut members, &instance)?;
 
         Ok(ResolvedGroup {
             count_field_index,
@@ -378,40 +411,14 @@ fn extend_with_expansion(
     }));
 }
 
-fn check_unique_tags(
-    members: &[ResolvedMember],
-    context: &MemberContext,
-    fields: &[Field],
-) -> Result<(), Error> {
-    insert_unique_tags(members, context, fields, &mut HashMap::new())
-}
-
-/// Records where each tag in `members` appears, descending into group
-/// instances. A tag may appear only once in a message, at any depth.
-fn insert_unique_tags(
-    members: &[ResolvedMember],
-    context: &MemberContext,
-    fields: &[Field],
-    seen: &mut HashMap<Tag, MemberContext>,
-) -> Result<(), Error> {
-    for member in members {
-        let tag = fields[member.first_field()].tag;
-        match seen.entry(tag) {
-            Entry::Occupied(first) => {
-                return Err(Error::DuplicateField {
-                    tag,
-                    first: first.get().clone(),
-                    second: context.clone(),
-                });
-            }
-            Entry::Vacant(slot) => {
-                slot.insert(context.clone());
-            }
-        }
-        if let ResolvedMember::Group(group) = member {
-            let instance = context.group(&fields[group.count_field_index].name);
-            insert_unique_tags(&group.members, &instance, fields, seen)?;
-        }
-    }
-    Ok(())
+/// Makes the first member of an instance its delimiter, required whatever
+/// its declared flag.
+fn delimit(members: &mut [ResolvedMember], instance: &MemberContext) -> Result<FieldIndex, Error> {
+    let Some(first) = members.first_mut() else {
+        return Err(Error::EmptyGroup {
+            context: instance.clone(),
+        });
+    };
+    first.require();
+    Ok(first.first_field())
 }

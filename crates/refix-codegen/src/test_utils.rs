@@ -34,6 +34,7 @@ pub fn message_with(fields: Vec<Field>) -> Dictionary {
     }
     .resolve()
     .unwrap()
+    .dictionary
 }
 
 /// Runs `read` on a group counted by `count_field`, declared inline in a
@@ -93,7 +94,8 @@ pub fn with_group<R>(
         components,
     }
     .resolve()
-    .unwrap();
+    .unwrap()
+    .dictionary;
     let message = dictionary.messages().next().unwrap();
     match message.members().next() {
         Some(dictionary::Member::Group(group)) => read(group),

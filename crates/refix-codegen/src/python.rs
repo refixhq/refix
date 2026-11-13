@@ -215,7 +215,7 @@ mod tests {
             fields,
             components,
         };
-        generate(&spec.resolve().unwrap(), "toy.xml").unwrap()
+        generate(&spec.resolve().unwrap().dictionary, "toy.xml").unwrap()
     }
 
     #[test]
