@@ -31,8 +31,8 @@ clap = { version = "4.6.5", features = ["derive"] }
 jiff-02 = { package = "jiff", version = "0.2.0", default-features = false }
 pyo3 = "0.29.0"
 # Major and minor only, so a patch release doesn't re-release dependents.
-refix-codegen = { version = "0.3", path = "crates/refix-codegen" }
-refix-dictionary = { version = "0.3", path = "crates/refix-dictionary" }
+refix-codegen = { version = "0.4", path = "crates/refix-codegen" }
+refix-dictionary = { version = "0.4", path = "crates/refix-dictionary" }
 refix-message = { version = "0.4", path = "crates/refix-message" }
 roxmltree = "0.21.0"
 rust_decimal-1 = { package = "rust_decimal", version = "1.13.0", default-features = false }
