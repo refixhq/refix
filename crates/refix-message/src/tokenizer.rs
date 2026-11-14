@@ -1,4 +1,5 @@
 use crate::framing::{GarbledReason, Outcome, SOH, Scanner};
+use crate::length_tags::LengthTags;
 use crate::message::RawField;
 use crate::{Dialect, RawMessage, Tag, length_tags};
 use bytes::Bytes;
@@ -8,7 +9,7 @@ const TAG_DELIMITER: u8 = b'=';
 /// Splits a framed FIX message into its fields.
 #[derive(Clone, Debug)]
 pub struct Tokenizer {
-    length_tags: Vec<Tag>,
+    length_tags: LengthTags,
 }
 
 impl Default for Tokenizer {
@@ -21,15 +22,14 @@ impl Tokenizer {
     /// A tokenizer for `dialect`.
     pub fn new(dialect: Dialect<'_>) -> Self {
         let extras = dialect.extra_length_tags.iter().copied();
-        let mut length_tags: Vec<Tag> = length_tags::STANDARD
+        let tags = length_tags::STANDARD
             .iter()
             .copied()
             .map(Tag)
-            .chain(extras.filter(|&tag| tag != Tag::MALFORMED))
-            .collect();
-        length_tags.sort_unstable();
-        length_tags.dedup();
-        Self { length_tags }
+            .chain(extras.filter(|&tag| tag != Tag::MALFORMED));
+        Self {
+            length_tags: LengthTags::new(tags),
+        }
     }
 
     /// Tokenises exactly one complete FIX message into a [`RawMessage`].
@@ -62,16 +62,11 @@ impl Tokenizer {
     /// The value of `field` when it is a well-formed length tag, so the next
     /// field's value can be read by extent instead of scanned for the separator.
     pub(crate) fn pending_data_len(&self, bytes: &[u8], field: RawField) -> Option<usize> {
-        if !self.is_length_tag(field.tag) {
+        if !self.length_tags.contains(field.tag) {
             return None;
         }
         let value = &bytes[field.value_start as usize..field.value_end as usize];
         parse_u32(value).map(|len| len as usize)
-    }
-
-    fn is_length_tag(&self, tag: Tag) -> bool {
-        self.length_tags.first().is_some_and(|&min| tag >= min)
-            && self.length_tags.binary_search(&tag).is_ok()
     }
 }
 
@@ -622,7 +617,7 @@ mod tests {
         #[test]
         fn tag_zero_extra_is_ignored() {
             let tokenizer = Tokenizer::new(Dialect::new().with_extra_length_tags(&[Tag(0)]));
-            assert!(!tokenizer.is_length_tag(Tag::MALFORMED));
+            assert!(!tokenizer.length_tags.contains(Tag::MALFORMED));
         }
     }
 
