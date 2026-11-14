@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/refixhq/refix/compare/refix-message-v0.4.1...refix-message-v0.4.2) - 2026-11-14
+
+### Other
+
+- look up length tags in a bitmap ([#135](https://github.com/refixhq/refix/pull/135))
+- check for an empty tag with a flag ([#134](https://github.com/refixhq/refix/pull/134))
+- parse the tag in the same pass that finds its end ([#132](https://github.com/refixhq/refix/pull/132))
+- add Criterion benchmarks for the tokenizer ([#131](https://github.com/refixhq/refix/pull/131))
+
 ## [0.4.1](https://github.com/refixhq/refix/compare/refix-message-v0.4.0...refix-message-v0.4.1) - 2026-11-13
 
 ### Added
