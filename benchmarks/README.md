@@ -19,11 +19,14 @@ just pycompare
 
 ## Results
 
-Measured on a MacBook Pro with an Apple M3 Max, running macOS 26.3 and Python 3.12.13.
+Measured on two machines:
+
+- A MacBook Pro with an Apple M3 Max, running macOS 26.3 and Python 3.12.13.
+- An AWS c7a.xlarge with an AMD EPYC 9R14, running Ubuntu 26.04 and Python 3.12.16.
 
 | Library   | Version |
 |-----------|---------|
-| refix     | 0.7.0   |
+| refix     | 0.7.1   |
 | simplefix | 1.0.17  |
 | quickfix  | 1.16.0  |
 
@@ -35,8 +38,18 @@ values are returned as the library stores them. Typed values are a `str`, an `in
 
 Median in microseconds, with the ratio to ReFIX.
 
+Apple M3 Max:
+
 |           | Raw values  | Typed values |
 |-----------|-------------|--------------|
-| ReFIX     | 0.53        | 0.92         |
-| QuickFIX  | 3.33 (6.2x) | 6.50 (7.1x)  |
-| simplefix | 40.46 (76x) | 44.17 (48x)  |
+| ReFIX     | 0.50        | 0.88         |
+| QuickFIX  | 3.37 (6.8x) | 6.54 (7.5x)  |
+| simplefix | 40.50 (81x) | 44.04 (50x)  |
+
+AMD EPYC 9R14:
+
+|           | Raw values  | Typed values |
+|-----------|-------------|--------------|
+| ReFIX     | 0.73        | 1.35         |
+| QuickFIX  | 5.86 (8.0x) | 10.98 (8.1x) |
+| simplefix | 64.94 (89x) | 70.56 (52x)  |
