@@ -3,6 +3,8 @@ use crate::message::RawField;
 use crate::{Dialect, RawMessage, Tag, length_tags};
 use bytes::Bytes;
 
+const TAG_DELIMITER: u8 = b'=';
+
 /// Splits a framed FIX message into its fields.
 #[derive(Clone, Debug)]
 pub struct Tokenizer {
@@ -92,12 +94,12 @@ pub(crate) fn next_field(
     data_len: Option<usize>,
     separator: u8,
 ) -> Option<(RawField, usize)> {
-    match find_tag_end(bytes, pos, separator) {
+    match scan_tag(bytes, pos, separator) {
         None => None,
-        Some(TagEnd::Equals(delimiter_pos)) => {
-            let tag = parse_u32(&bytes[pos..delimiter_pos])
-                .map(Tag)
-                .unwrap_or(Tag::MALFORMED);
+        Some(TagEnd::Equals {
+            pos: delimiter_pos,
+            tag,
+        }) => {
             let value_start = delimiter_pos + 1;
             let value_end = data_len
                 .and_then(|len| data_value_end(bytes, value_start, len, separator))
@@ -136,25 +138,37 @@ pub(crate) fn parse_u32(digits: &[u8]) -> Option<u32> {
 }
 
 enum TagEnd {
-    Equals(usize),
+    Equals { pos: usize, tag: Tag },
     Separator(usize),
 }
 
-/// Offset of the first `=` or `separator` at or after `from`.
-///
-/// This is specifically used to find the ending byte of a tag,
-/// which would normally be `=`, but potentially the separator in malformed
-/// fields.
-fn find_tag_end(bytes: &[u8], from: usize, separator: u8) -> Option<TagEnd> {
-    bytes
-        .get(from..)?
-        .iter()
-        .enumerate()
-        .find_map(|(rel, &byte)| match byte {
-            b'=' => Some(TagEnd::Equals(from + rel)),
-            byte if byte == separator => Some(TagEnd::Separator(from + rel)),
-            _ => None,
-        })
+/// Finds the end of the tag at `from`, parsing the tag on the way.
+fn scan_tag(bytes: &[u8], from: usize, separator: u8) -> Option<TagEnd> {
+    let mut tag = Some(0u32);
+    for (relative_position, &byte) in bytes.get(from..)?.iter().enumerate() {
+        match byte {
+            TAG_DELIMITER => {
+                let tag = match tag {
+                    Some(tag) if relative_position > 0 => Tag(tag),
+                    _ => Tag::MALFORMED,
+                };
+                return Some(TagEnd::Equals {
+                    pos: from + relative_position,
+                    tag,
+                });
+            }
+            byte if byte == separator => return Some(TagEnd::Separator(from + relative_position)),
+            _ => {
+                let digit = byte.wrapping_sub(b'0');
+                tag = if digit < 10 {
+                    tag.and_then(|tag| tag.checked_mul(10)?.checked_add(u32::from(digit)))
+                } else {
+                    None
+                };
+            }
+        }
+    }
+    None
 }
 
 /// Offset for the first `separator` at or after `from`.
