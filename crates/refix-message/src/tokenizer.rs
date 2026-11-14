@@ -145,11 +145,14 @@ enum TagEnd {
 /// Finds the end of the tag at `from`, parsing the tag on the way.
 fn scan_tag(bytes: &[u8], from: usize, separator: u8) -> Option<TagEnd> {
     let mut tag = Some(0u32);
+    // faster than checking relative_position, as the compiler handles the first byte separately
+    let mut seen = false;
+
     for (relative_position, &byte) in bytes.get(from..)?.iter().enumerate() {
         match byte {
             TAG_DELIMITER => {
                 let tag = match tag {
-                    Some(tag) if relative_position > 0 => Tag(tag),
+                    Some(tag) if seen => Tag(tag),
                     _ => Tag::MALFORMED,
                 };
                 return Some(TagEnd::Equals {
@@ -159,6 +162,7 @@ fn scan_tag(bytes: &[u8], from: usize, separator: u8) -> Option<TagEnd> {
             }
             byte if byte == separator => return Some(TagEnd::Separator(from + relative_position)),
             _ => {
+                seen = true;
                 let digit = byte.wrapping_sub(b'0');
                 tag = if digit < 10 {
                     tag.and_then(|tag| tag.checked_mul(10)?.checked_add(u32::from(digit)))
