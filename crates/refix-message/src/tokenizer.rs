@@ -426,6 +426,33 @@ mod tests {
         }
 
         #[test]
+        fn digits_after_a_non_digit() {
+            let message = tokenize_body("35=0|1a2=x|");
+            assert_body_entries(&message, &[(Tag(35), "0"), (Tag::MALFORMED, "x")]);
+        }
+
+        #[test]
+        fn digits_after_an_overflow() {
+            let message = tokenize_body("35=0|99999999999=x|");
+            assert_body_entries(&message, &[(Tag(35), "0"), (Tag::MALFORMED, "x")]);
+        }
+
+        #[test]
+        fn signed_tag() {
+            let message = tokenize_body("35=0|+58=x|");
+            assert_body_entries(&message, &[(Tag(35), "0"), (Tag::MALFORMED, "x")]);
+        }
+
+        #[test]
+        fn bytes_either_side_of_the_digits() {
+            let message = tokenize_body("35=0|5/=x|5:=y|");
+            assert_body_entries(
+                &message,
+                &[(Tag(35), "0"), (Tag::MALFORMED, "x"), (Tag::MALFORMED, "y")],
+            );
+        }
+
+        #[test]
         fn consecutive_runs() {
             let message = tokenize_body("35=0|junk|more|58=ok|");
             assert_body_entries(
