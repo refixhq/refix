@@ -4,6 +4,7 @@ description = "Framing, tokenisation and raw message representation for the ReFI
 version = "0.4.2"
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 readme = "README.md"
 homepage.workspace = true

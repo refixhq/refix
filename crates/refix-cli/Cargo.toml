@@ -4,6 +4,7 @@ description = "Command-line tools for the ReFIX engine"
 version = "0.2.1"
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 readme = "README.md"
 homepage.workspace = true

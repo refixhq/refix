@@ -40,6 +40,9 @@ Work happens on feature branches off `main`, merged via pull request.
 
 ## Building
 
+ReFIX builds on Rust 1.88 or later. The minimum is declared as `rust-version`
+in the root `Cargo.toml`, and CI builds on it.
+
 Rust:
 
 ```bash
