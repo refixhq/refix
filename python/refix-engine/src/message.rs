@@ -108,6 +108,14 @@ impl RawMessage {
             .map(|(tag, value)| (tag.0, PyBytes::new(py, value)))
             .collect()
     }
+
+    fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
 }
 
 /// One group instance, or any other bounded part of a message.
@@ -199,6 +207,14 @@ impl Scope {
         known: &Bound<'py, KnownTags>,
     ) -> PyResult<Option<Bound<'py, PyTuple>>> {
         get_group(py, &self.message, &self.scope(), table, known)
+    }
+
+    fn __str__(&self) -> String {
+        self.scope().to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.scope())
     }
 }
 
