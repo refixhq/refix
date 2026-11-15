@@ -45,6 +45,9 @@ the [longer blog post](https://davidsteiner.dev/writing/refix-a-new-fix-engine) 
 complete FIX 4.4 engine today, see [HotFIX](https://github.com/Validus-Risk-Management/hotfix), which I built before
 ReFIX.
 
+Reading a message from Python is 7 to 8 times faster than the QuickFIX bindings and 50 to 90 times faster than
+simplefix. See the [benchmarks].
+
 ## Near-term goals
 
 Reading and typing messages works in both languages. Planned next:
@@ -79,5 +82,7 @@ defined in the Apache-2.0 license, shall be dual licensed as above, without any 
 [license-mit]: https://github.com/refixhq/refix/blob/main/LICENSE-MIT
 
 [license-apache]: https://github.com/refixhq/refix/blob/main/LICENSE-APACHE
+
+[benchmarks]: https://github.com/refixhq/refix/blob/main/benchmarks/README.md
 
 [refix-fix44]: https://crates.io/crates/refix-fix44
