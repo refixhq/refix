@@ -1,0 +1,8 @@
+.site-title {
+	gap: 0.5rem;
+	font-size: var(--sl-text-lg);
+}
+
+.site-title img {
+	height: 1.5rem;
+}
