@@ -1,3 +1,5 @@
+//! The authored form of a data dictionary.
+
 use refix_message::Tag;
 use std::borrow::Cow;
 use std::fmt;

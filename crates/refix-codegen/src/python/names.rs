@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
+use refix_dictionary::spec::Field;
+use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
 use super::Error;
 use super::naming::{
@@ -309,10 +310,11 @@ mod tests {
     use crate::python::Error;
     use crate::test_utils::message_with;
     use crate::{NameClash, Owner, Warning};
-    use refix_dictionary::{
-        Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Group,
-        Member, MemberContext, Message, Protocol, Spec, Tag, Version,
+    use refix_dictionary::spec::{
+        Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Group, Member,
+        Message, Protocol, Spec, Version,
     };
+    use refix_dictionary::{Dictionary, MemberContext, Tag};
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
         Field {

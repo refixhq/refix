@@ -1,4 +1,5 @@
-use refix_dictionary::{EnumValue, Field, dictionary};
+use refix_dictionary::dictionary;
+use refix_dictionary::spec::{EnumValue, Field};
 
 use crate::naming::{field_base_name, group_accessor_base_name, group_module_base_name};
 use crate::rust::Error;
@@ -86,7 +87,8 @@ mod tests {
     };
     use crate::rust::Error;
     use crate::test_utils::with_group;
-    use refix_dictionary::{DataType, EnumValue, Field, MemberContext, Tag};
+    use refix_dictionary::spec::{DataType, EnumValue, Field};
+    use refix_dictionary::{MemberContext, Tag};
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
         Field {

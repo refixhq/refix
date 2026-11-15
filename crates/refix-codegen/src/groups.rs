@@ -90,10 +90,10 @@ mod tests {
         declared_groups, instance_context, is_generated, known_tags, member_tags,
         message_known_tags,
     };
-    use refix_dictionary::{
-        Category, DataType, Field, FieldRef, Group, Member, Message, Protocol, Spec, Tag, Version,
-        dictionary,
+    use refix_dictionary::spec::{
+        Category, DataType, Field, FieldRef, Group, Member, Message, Protocol, Spec, Version,
     };
+    use refix_dictionary::{Tag, dictionary};
 
     fn field_ref(tag: u32) -> Member {
         Member::Field(FieldRef {

@@ -1,4 +1,5 @@
-use refix_dictionary::{DataType, Dictionary, Field, dictionary};
+use refix_dictionary::spec::{DataType, Field};
+use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Warning;
 use crate::groups::is_generated;
@@ -123,7 +124,8 @@ fn reads_in<'a>(
 #[cfg(test)]
 mod tests {
     use super::Conversion;
-    use refix_dictionary::{DataType, EnumValue, Field, Tag};
+    use refix_dictionary::Tag;
+    use refix_dictionary::spec::{DataType, EnumValue, Field};
 
     fn field(data_type: DataType) -> Field {
         Field {

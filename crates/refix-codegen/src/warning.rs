@@ -1,4 +1,5 @@
-use refix_dictionary::{DataType, MemberContext};
+use refix_dictionary::MemberContext;
+use refix_dictionary::spec::DataType;
 
 use crate::NameClash;
 
@@ -37,7 +38,7 @@ impl std::fmt::Display for Warning {
 mod tests {
     use super::Warning;
     use crate::{NameClash, Owner};
-    use refix_dictionary::DataType;
+    use refix_dictionary::spec::DataType;
 
     #[test]
     fn a_rename_names_both_owners_and_the_new_name() {

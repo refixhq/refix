@@ -3,7 +3,7 @@
 mod context;
 pub mod dictionary;
 pub mod quickfix;
-mod spec;
+pub mod spec;
 
 pub use context::MemberContext;
 pub use dictionary::Dictionary;

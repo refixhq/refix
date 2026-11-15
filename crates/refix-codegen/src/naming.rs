@@ -1,4 +1,5 @@
-use refix_dictionary::{Field, dictionary};
+use refix_dictionary::dictionary;
+use refix_dictionary::spec::Field;
 
 use crate::conversion::Conversion;
 use crate::snake_case;
@@ -51,7 +52,8 @@ mod tests {
         field_base_name, group_accessor_base_name, group_module_base_name, group_source_name,
     };
     use crate::test_utils::with_group;
-    use refix_dictionary::{DataType, EnumValue, Field, Tag};
+    use refix_dictionary::Tag;
+    use refix_dictionary::spec::{DataType, EnumValue, Field};
 
     fn field(name: &str, data_type: DataType) -> Field {
         Field {

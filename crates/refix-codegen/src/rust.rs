@@ -109,10 +109,11 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
 mod tests {
     use super::*;
     use crate::Warning;
-    use refix_dictionary::{
-        Category, DataType, EnumValue, Field, FieldRef, Group, Member, MemberContext, Message,
-        Protocol, Spec, Tag, Version,
+    use refix_dictionary::spec::{
+        Category, DataType, EnumValue, Field, FieldRef, Group, Member, Message, Protocol, Spec,
+        Version,
     };
+    use refix_dictionary::{MemberContext, Tag};
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
         Field {
@@ -523,7 +524,7 @@ impl Message {
 
     mod groups {
         use super::*;
-        use refix_dictionary::{Component, ComponentRef};
+        use refix_dictionary::spec::{Component, ComponentRef};
 
         fn field_ref(tag: u32) -> Member {
             Member::Field(FieldRef {

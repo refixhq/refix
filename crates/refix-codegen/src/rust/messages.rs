@@ -1,4 +1,5 @@
-use refix_dictionary::{Field, MemberContext, Tag, dictionary};
+use refix_dictionary::spec::Field;
+use refix_dictionary::{MemberContext, Tag, dictionary};
 
 use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
@@ -186,7 +187,8 @@ mod tests {
     use super::{Lifetime, byte_str_literal, emit_accessor};
     use crate::rust::names::Names;
     use crate::test_utils::message_with;
-    use refix_dictionary::{DataType, EnumValue, Field, Tag};
+    use refix_dictionary::Tag;
+    use refix_dictionary::spec::{DataType, EnumValue, Field};
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
         Field {
