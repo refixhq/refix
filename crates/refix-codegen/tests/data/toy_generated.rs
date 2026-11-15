@@ -129,7 +129,7 @@ pub mod parties {
             Ok(self.0.get_int(Tag(452))?.map(PartyRole::from_value))
         }
 
-        pub fn ptys_sub_grp(&self) -> Result<Instances<'a, ptys_sub_grp::Instance<'a>>, InvalidValue> {
+        pub fn party_sub_ids(&self) -> Result<Instances<'a, ptys_sub_grp::Instance<'a>>, InvalidValue> {
             self.0.get_group(&ptys_sub_grp::TABLE, &KNOWN_TAGS).map(Instances::from)
         }
     }
@@ -306,7 +306,7 @@ impl NewOrderSingle {
         self.0.get_str(Tag(11))
     }
 
-    pub fn parties(&self) -> Result<Instances<'_, parties::Instance<'_>>, InvalidValue> {
+    pub fn party_ids(&self) -> Result<Instances<'_, parties::Instance<'_>>, InvalidValue> {
         self.0.get_group(&parties::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
     }
 

@@ -72,7 +72,7 @@ class Parties:
             return None if value is None else from_value(PartyRole, value)
 
         @cached_property
-        def ptys_sub_grp(self) -> tuple[PtysSubGrp.Instance, ...]:
+        def party_sub_ids(self) -> tuple[PtysSubGrp.Instance, ...]:
             scopes = self._scope.get_group(PtysSubGrp.TABLE, Parties.KNOWN_TAGS)
             return () if scopes is None else tuple(PtysSubGrp.Instance(scope) for scope in scopes)
 
@@ -192,7 +192,7 @@ class NewOrderSingle:
         return self._raw.get_str(11)
 
     @cached_property
-    def parties(self) -> tuple[Parties.Instance, ...]:
+    def party_ids(self) -> tuple[Parties.Instance, ...]:
         scopes = self._raw.get_group(Parties.TABLE, NewOrderSingle.KNOWN_TAGS)
         return () if scopes is None else tuple(Parties.Instance(scope) for scope in scopes)
 

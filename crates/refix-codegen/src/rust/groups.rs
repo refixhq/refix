@@ -62,7 +62,7 @@ pub(super) fn emit_group_module(group: dictionary::Group<'_>, names: &Names) -> 
     ];
     format!(
         "pub mod {} {{\n{}}}\n",
-        names.group(group),
+        names.group_module(group),
         indent(&items.join("\n"), 1)
     )
 }
@@ -92,7 +92,7 @@ pub(super) fn emit_group_accessor(
     lifetime: Lifetime,
     known_tags: &str,
 ) -> String {
-    let name = names.group(group);
+    let name = names.group_accessor(group);
     let path = names.group_path(group);
     let lifetime = match lifetime {
         Lifetime::Receiver => "'_",

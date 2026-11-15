@@ -1,6 +1,6 @@
 use refix_dictionary::{EnumValue, Field, dictionary};
 
-use crate::naming::{field_base_name, group_base_name};
+use crate::naming::{field_base_name, group_accessor_base_name, group_module_base_name};
 use crate::rust::Error;
 use crate::{pascal_case, snake_case};
 
@@ -10,9 +10,18 @@ pub(super) fn method_name(field: &Field) -> Result<String, Error> {
     })
 }
 
-/// The accessor and module name of a group, escaped for Rust.
-pub(super) fn group_name(group: dictionary::Group<'_>) -> Result<String, Error> {
-    identifier(group_base_name(group)).ok_or_else(|| Error::UnrepresentableGroupName {
+/// The module name of a group, escaped for Rust.
+pub(super) fn group_module_name(group: dictionary::Group<'_>) -> Result<String, Error> {
+    group_identifier(group_module_base_name(group), group)
+}
+
+/// The accessor of a group, escaped for Rust.
+pub(super) fn group_accessor_name(group: dictionary::Group<'_>) -> Result<String, Error> {
+    group_identifier(group_accessor_base_name(group), group)
+}
+
+fn group_identifier(name: String, group: dictionary::Group<'_>) -> Result<String, Error> {
+    identifier(name).ok_or_else(|| Error::UnrepresentableGroupName {
         context: group.declared_in().group(&group.count_field().name),
     })
 }
@@ -72,7 +81,9 @@ const RESERVED_WORDS: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::{group_name, message_module_name, method_name, variant_name};
+    use super::{
+        group_accessor_name, group_module_name, message_module_name, method_name, variant_name,
+    };
     use crate::rust::Error;
     use crate::test_utils::with_group;
     use refix_dictionary::{DataType, EnumValue, Field, MemberContext, Tag};
@@ -95,8 +106,12 @@ mod tests {
         variant_name(&field("OrdType", 40, DataType::Char), &value)
     }
 
-    fn group_named(component: Option<&str>, count_field: &str) -> Result<String, Error> {
-        with_group(component, count_field, group_name)
+    fn module_named(component: Option<&str>, count_field: &str) -> Result<String, Error> {
+        with_group(component, count_field, group_module_name)
+    }
+
+    fn accessor_named(component: Option<&str>, count_field: &str) -> Result<String, Error> {
+        with_group(component, count_field, group_accessor_name)
     }
 
     #[test]
@@ -128,19 +143,24 @@ mod tests {
     }
 
     #[test]
-    fn keyword_group_names_are_escaped() {
-        let name = group_named(Some("Type"), "NoTypes");
+    fn keyword_group_module_names_are_escaped() {
+        let name = module_named(Some("Type"), "NoTypes");
+        assert_eq!(name.unwrap(), "r#type");
+    }
+
+    #[test]
+    fn keyword_group_accessor_names_are_escaped() {
+        let name = accessor_named(Some("Types"), "NoType");
         assert_eq!(name.unwrap(), "r#type");
     }
 
     #[test]
     fn an_unescapable_group_name_is_an_error() {
-        assert_eq!(
-            group_named(None, "NoSelf").unwrap_err(),
-            Error::UnrepresentableGroupName {
-                context: MemberContext::Message("NewOrderSingle".to_owned()).group("NoSelf"),
-            }
-        );
+        let error = Error::UnrepresentableGroupName {
+            context: MemberContext::Message("NewOrderSingle".to_owned()).group("NoSelf"),
+        };
+        assert_eq!(module_named(None, "NoSelf").unwrap_err(), error);
+        assert_eq!(accessor_named(None, "NoSelf").unwrap_err(), error);
     }
 
     #[test]
