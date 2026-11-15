@@ -1,4 +1,5 @@
-use refix_dictionary::{Field, MemberContext, Tag, dictionary};
+use refix_dictionary::spec::Field;
+use refix_dictionary::{MemberContext, Tag, dictionary};
 
 use super::enums::{bytes_literal, docstring};
 use super::groups::{emit_group_class, emit_group_property, tags};

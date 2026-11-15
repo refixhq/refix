@@ -1,9 +1,10 @@
 mod error;
 
-use crate::{
-    Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Group,
-    Member, MemberContext, Message, Protocol, Spec, Tag, Version, dictionary,
+use crate::spec::{
+    Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Group, Member,
+    Message, Protocol, Spec, Version,
 };
+use crate::{Dictionary, MemberContext, Tag, dictionary};
 use roxmltree::Node;
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;

@@ -2,10 +2,11 @@
 //! must succeed, and anything not yet modelled surfaces as warnings.
 
 use refix_dictionary::quickfix;
-use refix_dictionary::{
-    Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Member, MemberContext,
-    Message, Protocol, Tag, Version, dictionary,
+use refix_dictionary::spec::{
+    Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Member, Message,
+    Protocol, Version,
 };
+use refix_dictionary::{MemberContext, Tag, dictionary};
 
 const FIX44: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),

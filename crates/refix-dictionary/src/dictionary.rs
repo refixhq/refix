@@ -7,7 +7,8 @@ mod error;
 mod resolver;
 mod warning;
 
-use crate::{Category, Field, MemberContext, Spec, Version, spec};
+use crate::MemberContext;
+use crate::spec::{self, Category, Field, Spec, Version};
 pub use error::Error;
 use std::fmt;
 use std::ops::Index;
@@ -241,7 +242,8 @@ fn members_of<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Component, ComponentRef, DataType, FieldRef, MemberContext, Protocol, Tag};
+    use crate::spec::{Component, ComponentRef, DataType, FieldRef, Protocol};
+    use crate::{MemberContext, Tag};
 
     fn field(name: &str, tag: u32) -> Field {
         Field {
@@ -811,7 +813,7 @@ mod tests {
 
     mod values {
         use super::*;
-        use crate::EnumValue;
+        use crate::spec::EnumValue;
 
         fn enum_field(data_type: DataType, values: &[&str]) -> Field {
             Field {

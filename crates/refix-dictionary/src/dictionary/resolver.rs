@@ -2,7 +2,8 @@ use super::{
     ComponentIndex, Dictionary, Error, FieldIndex, Resolved, ResolvedGroup, ResolvedMember,
     ResolvedMessage, Warning,
 };
-use crate::{DataType, Field, MemberContext, Spec, Tag, spec};
+use crate::spec::{self, DataType, Field, Spec};
+use crate::{MemberContext, Tag};
 use std::collections::{HashMap, hash_map::Entry};
 
 impl Spec {

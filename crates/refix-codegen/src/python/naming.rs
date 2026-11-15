@@ -1,4 +1,5 @@
-use refix_dictionary::{EnumValue, Field, dictionary};
+use refix_dictionary::dictionary;
+use refix_dictionary::spec::{EnumValue, Field};
 
 use crate::conversion::Conversion;
 use crate::naming::{field_base_name, group_accessor_base_name};
@@ -74,7 +75,8 @@ const KEYWORDS: &[&str] = &[
 mod tests {
     use super::{member_name, property_name};
     use crate::python::Error;
-    use refix_dictionary::{DataType, EnumValue, Field, Tag};
+    use refix_dictionary::Tag;
+    use refix_dictionary::spec::{DataType, EnumValue, Field};
 
     fn field(name: &str, data_type: DataType) -> Field {
         Field {

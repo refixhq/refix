@@ -160,10 +160,11 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
 mod tests {
     use super::*;
     use crate::Warning;
-    use refix_dictionary::{
+    use refix_dictionary::spec::{
         Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Group, Member,
-        MemberContext, Message, Protocol, Spec, Tag, Version,
+        Message, Protocol, Spec, Version,
     };
+    use refix_dictionary::{MemberContext, Tag};
 
     fn field(name: &str, tag: u32, data_type: DataType, values: &[(&str, &str)]) -> Field {
         Field {

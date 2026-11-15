@@ -1,4 +1,4 @@
-use refix_dictionary::Field;
+use refix_dictionary::spec::Field;
 
 use super::names::Names;
 use crate::literal::int_literal;
@@ -69,7 +69,8 @@ mod tests {
     use super::{bytes_literal, docstring, emit_enum, str_literal};
     use crate::python::names::Names;
     use crate::test_utils::message_with;
-    use refix_dictionary::{DataType, EnumValue, Field, Tag};
+    use refix_dictionary::Tag;
+    use refix_dictionary::spec::{DataType, EnumValue, Field};
 
     fn emitted(field: Field) -> String {
         let dictionary = message_with(vec![field.clone()]);

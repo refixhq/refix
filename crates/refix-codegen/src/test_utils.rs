@@ -1,7 +1,8 @@
-use refix_dictionary::{
-    Category, Component, ComponentRef, DataType, Dictionary, Field, FieldRef, Group, Member,
-    Message, Protocol, Spec, Tag, Version, dictionary,
+use refix_dictionary::spec::{
+    Category, Component, ComponentRef, DataType, Field, FieldRef, Group, Member, Message, Protocol,
+    Spec, Version,
 };
+use refix_dictionary::{Dictionary, Tag, dictionary};
 
 /// A dictionary whose one message, `NewOrderSingle`, holds each of `fields`.
 pub fn message_with(fields: Vec<Field>) -> Dictionary {
