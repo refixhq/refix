@@ -14,7 +14,7 @@ categories = ["command-line-utilities", "finance"]
 [[bin]]
 name = "refix"
 path = "src/main.rs"
-# The refix crate owns the refix docs path.
+# cargo doc skips this binary. Its docs would overwrite the refix crate's.
 doc = false
 
 [dependencies]
