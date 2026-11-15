@@ -709,6 +709,7 @@ class Parties:
 
         @cached_property
         def party_sub_ids(self) -> tuple[PtysSubGrp.Instance, ...]:
+            """The instances of the NoPartySubIDs (802) group."""
             scopes = self._scope.get_group(PtysSubGrp.TABLE, Parties.KNOWN_TAGS)
             return () if scopes is None else tuple(PtysSubGrp.Instance(scope) for scope in scopes)
 
@@ -727,6 +728,7 @@ class NewOrderSingle:
 
     @cached_property
     def party_ids(self) -> tuple[Parties.Instance, ...]:
+        """The instances of the NoPartyIDs (453) group."""
         scopes = self._raw.get_group(Parties.TABLE, NewOrderSingle.KNOWN_TAGS)
         return () if scopes is None else tuple(Parties.Instance(scope) for scope in scopes)
 

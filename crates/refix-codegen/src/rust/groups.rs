@@ -94,12 +94,14 @@ pub(super) fn emit_group_accessor(
 ) -> String {
     let name = names.group_accessor(group);
     let path = names.group_path(group);
+    let count_field = group.count_field();
+    let (count_name, count_tag) = (&count_field.name, count_field.tag);
     let lifetime = match lifetime {
         Lifetime::Receiver => "'_",
         Lifetime::Scope => "'a",
     };
     format!(
-        "    pub fn {name}(&self) -> Result<Instances<{lifetime}, {path}::Instance<{lifetime}>>, InvalidValue> {{\n        self.0.get_group(&{path}::TABLE, &{known_tags}).map(Instances::from)\n    }}\n"
+        "    /// The instances of the `{count_name}` ({count_tag}) group.\n    #[doc(alias = \"{count_name}\")]\n    pub fn {name}(&self) -> Result<Instances<{lifetime}, {path}::Instance<{lifetime}>>, InvalidValue> {{\n        self.0.get_group(&{path}::TABLE, &{known_tags}).map(Instances::from)\n    }}\n"
     )
 }
 

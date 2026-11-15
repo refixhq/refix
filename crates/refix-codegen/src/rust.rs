@@ -634,6 +634,8 @@ pub mod parties {
             self.0.get_str(Tag(448))
         }
 
+        /// The instances of the `NoPartySubIDs` (802) group.
+        #[doc(alias = "NoPartySubIDs")]
         pub fn party_sub_ids(&self) -> Result<Instances<'a, ptys_sub_grp::Instance<'a>>, InvalidValue> {
             self.0.get_group(&ptys_sub_grp::TABLE, &KNOWN_TAGS).map(Instances::from)
         }
@@ -684,6 +686,8 @@ impl NewOrderSingle {
         &self.0
     }
 
+    /// The instances of the `NoPartyIDs` (453) group.
+    #[doc(alias = "NoPartyIDs")]
     pub fn party_ids(&self) -> Result<Instances<'_, parties::Instance<'_>>, InvalidValue> {
         self.0.get_group(&parties::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
     }

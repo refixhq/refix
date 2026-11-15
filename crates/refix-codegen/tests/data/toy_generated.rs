@@ -129,6 +129,8 @@ pub mod parties {
             Ok(self.0.get_int(Tag(452))?.map(PartyRole::from_value))
         }
 
+        /// The instances of the `NoPartySubIDs` (802) group.
+        #[doc(alias = "NoPartySubIDs")]
         pub fn party_sub_ids(&self) -> Result<Instances<'a, ptys_sub_grp::Instance<'a>>, InvalidValue> {
             self.0.get_group(&ptys_sub_grp::TABLE, &KNOWN_TAGS).map(Instances::from)
         }
@@ -209,6 +211,8 @@ impl<'a> Header<'a> {
         self.0.get_utc_timestamp(Tag(52))
     }
 
+    /// The instances of the `NoHops` (627) group.
+    #[doc(alias = "NoHops")]
     pub fn hops(&self) -> Result<Instances<'a, header::hops::Instance<'a>>, InvalidValue> {
         self.0.get_group(&header::hops::TABLE, &self.1).map(Instances::from)
     }
@@ -306,6 +310,8 @@ impl NewOrderSingle {
         self.0.get_str(Tag(11))
     }
 
+    /// The instances of the `NoPartyIDs` (453) group.
+    #[doc(alias = "NoPartyIDs")]
     pub fn party_ids(&self) -> Result<Instances<'_, parties::Instance<'_>>, InvalidValue> {
         self.0.get_group(&parties::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
     }
@@ -373,6 +379,8 @@ impl Logon {
         Trailer(self.0.scope())
     }
 
+    /// The instances of the `NoMsgTypes` (384) group.
+    #[doc(alias = "NoMsgTypes")]
     pub fn msg_types(&self) -> Result<Instances<'_, logon::msg_types::Instance<'_>>, InvalidValue> {
         self.0.get_group(&logon::msg_types::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
     }
