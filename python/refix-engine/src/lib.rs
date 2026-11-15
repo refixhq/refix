@@ -7,6 +7,7 @@ mod tokenizer;
 
 use pyo3::prelude::*;
 
+/// Return the package version.
 #[pyfunction]
 fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

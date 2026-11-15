@@ -38,7 +38,7 @@ def read_log(
     *,
     separator: bytes | None = None,
 ) -> Iterator[LogRecord[RawMessage]]:
-    """Yields each message in a FIX log as a record, in order.
+    """Yield each message in a FIX log as a record, in order.
 
     Each message's separator is detected unless `separator` gives one. Bytes after the last
     message are dropped.
@@ -59,7 +59,7 @@ def decode_log[T](
     *,
     separator: bytes | None = None,
 ) -> Iterator[LogRecord[T]]:
-    """Yields each message in a FIX log as a record decoded by `codec`, in order."""
+    """Yield each message in a FIX log as a record decoded by `codec`, in order."""
     for record in read_log(source, codec.dialect, separator=separator):
         yield LogRecord(record.prefix, codec.decode(record.message), record.diagnostics)
 

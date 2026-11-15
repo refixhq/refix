@@ -17,6 +17,9 @@ static DECIMAL_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 /// `refix.values.MonthYear`, imported on first use.
 static MONTH_YEAR_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
+/// The bytes of a FIX message and an index of every field in wire order.
+///
+/// A typed getter raises `InvalidValueError` for a value it cannot read.
 #[pyclass(frozen, module = "refix._core")]
 pub(crate) struct RawMessage(CoreRawMessage);
 
@@ -28,31 +31,40 @@ impl RawMessage {
 
 #[pymethods]
 impl RawMessage {
+    /// The bytes the message was read from.
     #[getter]
     fn bytes<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
         PyBytes::new(py, self.0.bytes())
     }
 
+    /// Return the value of the first `tag` field, or `None` when absent.
     fn get<'py>(&self, py: Python<'py>, tag: u32) -> Option<Bound<'py, PyBytes>> {
         get(py, &self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as text, or `None` when absent.
     fn get_str<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyString>>> {
         get_str(py, &self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as an integer, or `None` when absent.
     fn get_int(&self, tag: u32) -> PyResult<Option<i64>> {
         get_int(&self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as a boolean, or `None` when absent.
     fn get_bool(&self, tag: u32) -> PyResult<Option<bool>> {
         get_bool(&self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as a `Decimal`, or `None` when absent.
     fn get_decimal<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyAny>>> {
         get_decimal(py, &self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as a UTC `datetime`, or `None` when absent.
+    ///
+    /// Truncates to the microsecond.
     fn get_utc_timestamp<'py>(
         &self,
         py: Python<'py>,
@@ -61,22 +73,29 @@ impl RawMessage {
         get_utc_timestamp(py, &self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as nanoseconds since the Unix epoch, or `None` when absent.
     fn get_utc_timestamp_ns(&self, tag: u32) -> PyResult<Option<i64>> {
         get_utc_timestamp_ns(&self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as a `date`, or `None` when absent.
     fn get_date<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyDate>>> {
         get_date(py, &self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as a naive `time`, or `None` when absent.
+    ///
+    /// Truncates to the microsecond.
     fn get_time<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyTime>>> {
         get_time(py, &self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as nanoseconds since midnight, or `None` when absent.
     fn get_time_ns(&self, tag: u32) -> PyResult<Option<i64>> {
         get_time_ns(&self.0.scope(), tag)
     }
 
+    /// Return the first `tag` field as a `MonthYear`, or `None` when absent.
     fn get_month_year<'py>(
         &self,
         py: Python<'py>,
@@ -85,6 +104,7 @@ impl RawMessage {
         get_month_year(py, &self.0.scope(), tag)
     }
 
+    /// Return the space-separated values of the first `tag` field, or `None` when absent.
     fn get_multiple_values<'py>(
         &self,
         py: Python<'py>,
@@ -93,6 +113,9 @@ impl RawMessage {
         get_multiple_values(py, &self.0.scope(), tag)
     }
 
+    /// Return the instances of the group `table` describes, or `None` when absent.
+    ///
+    /// `known` holds every tag that can appear where the group is read.
     fn get_group<'py>(
         slf: &Bound<'py, Self>,
         table: &Bound<'py, GroupTable>,
@@ -102,6 +125,9 @@ impl RawMessage {
         get_group(slf.py(), &message, &slf.get().0.scope(), table, known)
     }
 
+    /// Return every field as `(tag, value)` in wire order.
+    ///
+    /// A run of bytes that is not a field has the tag `MALFORMED_TAG`.
     fn entries<'py>(&self, py: Python<'py>) -> Vec<(u32, Bound<'py, PyBytes>)> {
         self.0
             .entries()
@@ -120,7 +146,8 @@ impl RawMessage {
 
 /// One group instance, or any other bounded part of a message.
 ///
-/// Holds its message and its bounds, and rebuilds the Rust scope per call.
+/// A typed getter raises `InvalidValueError` for a value it cannot read.
+// Holds its message and its bounds, and rebuilds the Rust scope per call.
 #[pyclass(frozen, module = "refix._core")]
 pub(crate) struct Scope {
     message: Py<RawMessage>,
@@ -140,26 +167,34 @@ impl Scope {
 
 #[pymethods]
 impl Scope {
+    /// Return the value of the first `tag` field, or `None` when absent.
     fn get<'py>(&self, py: Python<'py>, tag: u32) -> Option<Bound<'py, PyBytes>> {
         get(py, &self.scope(), tag)
     }
 
+    /// Return the first `tag` field as text, or `None` when absent.
     fn get_str<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyString>>> {
         get_str(py, &self.scope(), tag)
     }
 
+    /// Return the first `tag` field as an integer, or `None` when absent.
     fn get_int(&self, tag: u32) -> PyResult<Option<i64>> {
         get_int(&self.scope(), tag)
     }
 
+    /// Return the first `tag` field as a boolean, or `None` when absent.
     fn get_bool(&self, tag: u32) -> PyResult<Option<bool>> {
         get_bool(&self.scope(), tag)
     }
 
+    /// Return the first `tag` field as a `Decimal`, or `None` when absent.
     fn get_decimal<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyAny>>> {
         get_decimal(py, &self.scope(), tag)
     }
 
+    /// Return the first `tag` field as a UTC `datetime`, or `None` when absent.
+    ///
+    /// Truncates to the microsecond.
     fn get_utc_timestamp<'py>(
         &self,
         py: Python<'py>,
@@ -168,22 +203,29 @@ impl Scope {
         get_utc_timestamp(py, &self.scope(), tag)
     }
 
+    /// Return the first `tag` field as nanoseconds since the Unix epoch, or `None` when absent.
     fn get_utc_timestamp_ns(&self, tag: u32) -> PyResult<Option<i64>> {
         get_utc_timestamp_ns(&self.scope(), tag)
     }
 
+    /// Return the first `tag` field as a `date`, or `None` when absent.
     fn get_date<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyDate>>> {
         get_date(py, &self.scope(), tag)
     }
 
+    /// Return the first `tag` field as a naive `time`, or `None` when absent.
+    ///
+    /// Truncates to the microsecond.
     fn get_time<'py>(&self, py: Python<'py>, tag: u32) -> PyResult<Option<Bound<'py, PyTime>>> {
         get_time(py, &self.scope(), tag)
     }
 
+    /// Return the first `tag` field as nanoseconds since midnight, or `None` when absent.
     fn get_time_ns(&self, tag: u32) -> PyResult<Option<i64>> {
         get_time_ns(&self.scope(), tag)
     }
 
+    /// Return the first `tag` field as a `MonthYear`, or `None` when absent.
     fn get_month_year<'py>(
         &self,
         py: Python<'py>,
@@ -192,6 +234,7 @@ impl Scope {
         get_month_year(py, &self.scope(), tag)
     }
 
+    /// Return the space-separated values of the first `tag` field, or `None` when absent.
     fn get_multiple_values<'py>(
         &self,
         py: Python<'py>,
@@ -200,6 +243,9 @@ impl Scope {
         get_multiple_values(py, &self.scope(), tag)
     }
 
+    /// Return the instances of the group `table` describes, or `None` when absent.
+    ///
+    /// `known` holds every tag that can appear where the group is read.
     fn get_group<'py>(
         &self,
         py: Python<'py>,

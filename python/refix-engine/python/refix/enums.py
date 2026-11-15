@@ -13,7 +13,7 @@ class Unrecognized[T]:
 
 
 def from_value[E: enum.Enum, T](enum_type: type[E], value: T) -> E | Unrecognized[T]:
-    """The member of `enum_type` with `value`, or `Unrecognized(value)`."""
+    """Return the member of `enum_type` with `value`, or `Unrecognized(value)`."""
     try:
         return enum_type(value)
     except ValueError:

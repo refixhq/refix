@@ -9,6 +9,7 @@ import_exception!(refix.errors, IncompleteError);
 import_exception!(refix.errors, TrailingBytesError);
 import_exception!(refix.errors, TooLargeToIndexError);
 
+/// Splits the bytes of one FIX message into a `RawMessage`.
 #[pyclass(frozen, module = "refix._core")]
 pub(crate) struct Tokenizer(CoreTokenizer);
 
@@ -23,6 +24,9 @@ impl Tokenizer {
         Self(CoreTokenizer::new(dialect))
     }
 
+    /// Return the message in `data`, which must hold exactly one frame.
+    ///
+    /// Raises a `TokenizeError` otherwise.
     fn tokenize(&self, data: &[u8]) -> PyResult<crate::message::RawMessage> {
         self.0
             .tokenize(Bytes::copy_from_slice(data))
