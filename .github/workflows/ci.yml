@@ -106,6 +106,22 @@ jobs:
       - name: Check the stock packages
         run: just check-stock
 
+  minimum-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+      - name: Install just
+        uses: taiki-e/install-action@just
+      - name: Generate the stock packages
+        run: just generate-stock
+      - name: Build on the minimum Rust version
+        run: cargo check --workspace --exclude refix-engine --all-features --locked
+
   cli-package:
     runs-on: ubuntu-latest
     steps:
