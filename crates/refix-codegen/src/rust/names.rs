@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use refix_dictionary::{Dictionary, Field, MemberContext, Tag, dictionary};
 
 use super::Error;
-use super::naming::{group_name, message_module_name, method_name, numbered_variant, variant_name};
+use super::naming::{
+    group_accessor_name, group_module_name, message_module_name, method_name, numbered_variant,
+    variant_name,
+};
 use crate::Warning;
 use crate::conversion::Conversion;
 use crate::envelope::Section;
@@ -64,7 +67,8 @@ const INSTANCE: &[&str] = &["raw"];
 pub(super) struct Names {
     enums: HashMap<Tag, EnumNames>,
     accessors: HashMap<Tag, String>,
-    groups: HashMap<MemberContext, String>,
+    group_modules: HashMap<MemberContext, String>,
+    group_accessors: HashMap<MemberContext, String>,
     message_modules: HashMap<String, String>,
 }
 
@@ -82,7 +86,8 @@ impl Names {
         let mut names = Names {
             enums: HashMap::new(),
             accessors: HashMap::new(),
-            groups: HashMap::new(),
+            group_modules: HashMap::new(),
+            group_accessors: HashMap::new(),
             message_modules: HashMap::new(),
         };
         let mut root = Namespace::with_generated(ROOT);
@@ -96,9 +101,9 @@ impl Names {
         }
         for group in declared_groups(dictionary) {
             if matches!(group.declared_in(), MemberContext::Component(_)) {
-                let name = group_name(group)?;
+                let name = group_module_name(group)?;
                 root.claim(&name, Owner::Group(instance_context(group)))?;
-                names.groups.insert(instance_context(group), name);
+                names.group_modules.insert(instance_context(group), name);
             }
         }
         for section in [Section::Header, Section::Trailer] {
@@ -146,9 +151,9 @@ impl Names {
         root.claim(&module, Owner::Message(message.name().to_owned()))?;
         let mut modules = Namespace::default();
         for group in groups {
-            let name = group_name(group)?;
+            let name = group_module_name(group)?;
             modules.claim(&name, Owner::Group(instance_context(group)))?;
-            self.groups.insert(instance_context(group), name);
+            self.group_modules.insert(instance_context(group), name);
         }
         self.message_modules
             .insert(message.name().to_owned(), module);
@@ -164,9 +169,9 @@ impl Names {
             if let dictionary::Member::Group(group) = member
                 && *group.declared_in() == section.context()
             {
-                let name = group_name(*group)?;
+                let name = group_module_name(*group)?;
                 modules.claim(&name, Owner::Group(instance_context(*group)))?;
-                self.groups.insert(instance_context(*group), name);
+                self.group_modules.insert(instance_context(*group), name);
             }
         }
         self.name_accessors(members.into_iter(), Namespace::with_generated(INSTANCE))
@@ -216,7 +221,9 @@ impl Names {
                     self.accessors.insert(field.tag, name);
                 }
                 dictionary::Member::Group(group) if is_generated(group) => {
-                    namespace.claim(self.group(group), Owner::Group(instance_context(group)))?;
+                    let name = group_accessor_name(group)?;
+                    namespace.claim(&name, Owner::Group(instance_context(group)))?;
+                    self.group_accessors.insert(instance_context(group), name);
                 }
                 dictionary::Member::Group(_) => {}
             }
@@ -239,9 +246,14 @@ impl Names {
         &self.accessors[&field.tag]
     }
 
-    /// A group's module, which is also the name of its accessor.
-    pub(super) fn group(&self, group: dictionary::Group<'_>) -> &str {
-        &self.groups[&instance_context(group)]
+    /// A group's module.
+    pub(super) fn group_module(&self, group: dictionary::Group<'_>) -> &str {
+        &self.group_modules[&instance_context(group)]
+    }
+
+    /// The method reading a group's instances.
+    pub(super) fn group_accessor(&self, group: dictionary::Group<'_>) -> &str {
+        &self.group_accessors[&instance_context(group)]
     }
 
     /// The module holding the groups a message declares itself.
@@ -251,7 +263,7 @@ impl Names {
 
     /// The path of a group's module from the generated root.
     pub(super) fn group_path(&self, group: dictionary::Group<'_>) -> String {
-        let name = self.group(group);
+        let name = self.group_module(group);
         match group.declared_in() {
             MemberContext::Message(message) => format!("{}::{name}", self.message_module(message)),
             MemberContext::Header => format!("{}::{name}", Section::Header.member_name()),
@@ -268,8 +280,8 @@ mod tests {
     use crate::test_utils::message_with;
     use crate::{NameClash, Owner, Warning};
     use refix_dictionary::{
-        Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Group, Member,
-        MemberContext, Message, Protocol, Spec, Tag, Version,
+        Category, Component, ComponentRef, DataType, Dictionary, EnumValue, Field, FieldRef, Group,
+        Member, MemberContext, Message, Protocol, Spec, Tag, Version,
     };
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
@@ -293,12 +305,74 @@ mod tests {
         field
     }
 
-    fn clash(fields: Vec<Field>) -> NameClash {
-        match Names::new(&message_with(fields), &mut Vec::new()) {
+    fn field_ref(tag: u32) -> Member {
+        Member::Field(FieldRef {
+            tag: Tag(tag),
+            is_required: false,
+        })
+    }
+
+    fn group(count_tag: u32, members: Vec<Member>) -> Member {
+        Member::Group(Group {
+            count_tag: Tag(count_tag),
+            is_required: false,
+            members,
+        })
+    }
+
+    fn message(name: &str, msg_type: &str, members: Vec<Member>) -> Message {
+        Message {
+            name: name.to_owned(),
+            msg_type: msg_type.to_owned(),
+            members,
+            category: Category::App,
+        }
+    }
+
+    /// A dictionary whose `Parties` component wraps the `NoPartyIDs` group.
+    fn with_parties(messages: Vec<Message>, mut fields: Vec<Field>) -> Dictionary {
+        fields.extend([
+            field("NoPartyIDs", 453, DataType::NumInGroup),
+            field("PartyID", 448, DataType::String),
+        ]);
+        Spec {
+            version: Version {
+                protocol: Protocol::Fix,
+                major: 4,
+                minor: 4,
+                service_pack: 0,
+            },
+            header: vec![],
+            trailer: vec![],
+            messages,
+            fields,
+            components: vec![Component {
+                name: "Parties".to_owned(),
+                members: vec![group(453, vec![field_ref(448)])],
+            }],
+        }
+        .resolve()
+        .unwrap()
+        .dictionary
+    }
+
+    fn parties_ref() -> Member {
+        Member::Component(ComponentRef {
+            name: "Parties".to_owned(),
+            is_required: false,
+        })
+    }
+
+    fn clash_in(dictionary: &Dictionary) -> NameClash {
+        match Names::new(dictionary, &mut Vec::new()) {
             Err(Error::NameClash(clash)) => *clash,
             Err(other) => panic!("expected a name clash, found {other:?}"),
             Ok(_) => panic!("expected a name clash"),
         }
+    }
+
+    fn clash(fields: Vec<Field>) -> NameClash {
+        clash_in(&message_with(fields))
     }
 
     #[test]
@@ -444,66 +518,41 @@ mod tests {
     }
 
     #[test]
-    fn a_message_module_and_a_group_module_clash() {
-        let field_ref = |tag| {
-            Member::Field(FieldRef {
-                tag: Tag(tag),
-                is_required: false,
-            })
-        };
-        let group = |count_tag, members| {
-            Member::Group(Group {
-                count_tag: Tag(count_tag),
-                is_required: false,
-                members,
-            })
-        };
-        let message = |name: &str, msg_type: &str, members| Message {
-            name: name.to_owned(),
-            msg_type: msg_type.to_owned(),
-            members,
-            category: Category::App,
-        };
-        let dictionary = Spec {
-            version: Version {
-                protocol: Protocol::Fix,
-                major: 4,
-                minor: 4,
-                service_pack: 0,
-            },
-            header: vec![],
-            trailer: vec![],
-            messages: vec![
-                message("Parties", "X", vec![group(384, vec![field_ref(372)])]),
-                message(
-                    "NewOrderSingle",
-                    "D",
-                    vec![Member::Component(ComponentRef {
-                        name: "Parties".to_owned(),
-                        is_required: false,
-                    })],
+    fn a_group_accessor_named_like_a_field_accessor_clashes() {
+        let dictionary = with_parties(
+            vec![message(
+                "NewOrderSingle",
+                "D",
+                vec![field_ref(9000), parties_ref()],
+            )],
+            vec![field("PartyIDs", 9000, DataType::String)],
+        );
+        assert_eq!(
+            clash_in(&dictionary),
+            NameClash {
+                name: "party_ids".to_owned(),
+                first: Owner::Field("PartyIDs".to_owned()),
+                second: Owner::Group(
+                    MemberContext::Component("Parties".to_owned()).group("NoPartyIDs")
                 ),
+            }
+        );
+    }
+
+    #[test]
+    fn a_message_module_and_a_group_module_clash() {
+        let dictionary = with_parties(
+            vec![
+                message("Parties", "X", vec![group(384, vec![field_ref(372)])]),
+                message("NewOrderSingle", "D", vec![parties_ref()]),
             ],
-            fields: vec![
+            vec![
                 field("NoMsgTypes", 384, DataType::NumInGroup),
                 field("RefMsgType", 372, DataType::String),
-                field("NoPartyIDs", 453, DataType::NumInGroup),
-                field("PartyID", 448, DataType::String),
             ],
-            components: vec![Component {
-                name: "Parties".to_owned(),
-                members: vec![group(453, vec![field_ref(448)])],
-            }],
-        }
-        .resolve()
-        .unwrap()
-        .dictionary;
-
-        let Err(Error::NameClash(clash)) = Names::new(&dictionary, &mut Vec::new()) else {
-            panic!("expected a name clash");
-        };
+        );
         assert_eq!(
-            *clash,
+            clash_in(&dictionary),
             NameClash {
                 name: "parties".to_owned(),
                 first: Owner::Message("Parties".to_owned()),

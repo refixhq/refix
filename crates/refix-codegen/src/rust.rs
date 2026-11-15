@@ -634,7 +634,9 @@ pub mod parties {
             self.0.get_str(Tag(448))
         }
 
-        pub fn ptys_sub_grp(&self) -> Result<Instances<'a, ptys_sub_grp::Instance<'a>>, InvalidValue> {
+        /// The instances of the `NoPartySubIDs` (802) group.
+        #[doc(alias = "NoPartySubIDs")]
+        pub fn party_sub_ids(&self) -> Result<Instances<'a, ptys_sub_grp::Instance<'a>>, InvalidValue> {
             self.0.get_group(&ptys_sub_grp::TABLE, &KNOWN_TAGS).map(Instances::from)
         }
     }
@@ -684,7 +686,9 @@ impl NewOrderSingle {
         &self.0
     }
 
-    pub fn parties(&self) -> Result<Instances<'_, parties::Instance<'_>>, InvalidValue> {
+    /// The instances of the `NoPartyIDs` (453) group.
+    #[doc(alias = "NoPartyIDs")]
+    pub fn party_ids(&self) -> Result<Instances<'_, parties::Instance<'_>>, InvalidValue> {
         self.0.get_group(&parties::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
     }
 }
@@ -719,7 +723,7 @@ impl Message {
             let code = generated(spec).code;
 
             assert_eq!(code.matches("pub mod parties {").count(), 1);
-            assert_eq!(code.matches("pub fn parties(&self)").count(), 2);
+            assert_eq!(code.matches("pub fn party_ids(&self)").count(), 2);
         }
 
         #[test]

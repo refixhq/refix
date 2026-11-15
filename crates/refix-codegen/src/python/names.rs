@@ -512,6 +512,42 @@ mod tests {
     }
 
     #[test]
+    fn a_group_named_like_a_field_property_clashes() {
+        let dictionary = dictionary(
+            vec![message(
+                "NewOrderSingle",
+                "D",
+                vec![
+                    field_ref(9000),
+                    Member::Component(ComponentRef {
+                        name: "Parties".to_owned(),
+                        is_required: false,
+                    }),
+                ],
+            )],
+            vec![
+                field("PartyIDs", 9000, DataType::String),
+                field("NoPartyIDs", 453, DataType::NumInGroup),
+                field("PartyID", 448, DataType::String),
+            ],
+            vec![Component {
+                name: "Parties".to_owned(),
+                members: vec![group(453, vec![field_ref(448)])],
+            }],
+        );
+        assert_eq!(
+            clash_in(&dictionary),
+            NameClash {
+                name: "party_ids".to_owned(),
+                first: Owner::Field("PartyIDs".to_owned()),
+                second: Owner::Group(
+                    MemberContext::Component("Parties".to_owned()).group("NoPartyIDs")
+                ),
+            }
+        );
+    }
+
+    #[test]
     fn a_field_named_like_a_nanosecond_property_clashes() {
         assert_eq!(
             clash(vec![

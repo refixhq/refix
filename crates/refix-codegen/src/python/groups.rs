@@ -111,8 +111,10 @@ pub(super) fn emit_group_property(
 ) -> String {
     let name = names.group_property(group);
     let path = names.group_path(group);
+    let count_field = group.count_field();
+    let (count_name, count_tag) = (&count_field.name, count_field.tag);
     format!(
-        "    @cached_property\n    def {name}(self) -> tuple[{path}.Instance, ...]:\n        scopes = {receiver}.get_group({path}.TABLE, {known_tags})\n        return () if scopes is None else tuple({path}.Instance(scope) for scope in scopes)\n"
+        "    @cached_property\n    def {name}(self) -> tuple[{path}.Instance, ...]:\n        \"\"\"The instances of the {count_name} ({count_tag}) group.\"\"\"\n        scopes = {receiver}.get_group({path}.TABLE, {known_tags})\n        return () if scopes is None else tuple({path}.Instance(scope) for scope in scopes)\n"
     )
 }
 

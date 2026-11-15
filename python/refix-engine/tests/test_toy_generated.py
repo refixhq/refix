@@ -152,35 +152,35 @@ class TestGroups:
             "35=D|11=ORDER-1|453=2|448=AL|452=1|802=2|523=S1|523=S2|448=BOB|452=03|38=200|"
         )
 
-        parties = new_order.parties
+        parties = new_order.party_ids
         assert [party.party_id for party in parties] == ["AL", "BOB"]
         assert [party.party_role for party in parties] == [
             PartyRole.EXECUTING_FIRM,
             PartyRole.CLIENT_ID,
         ]
-        assert [sub_id.party_sub_id for sub_id in parties[0].ptys_sub_grp] == [
+        assert [sub_id.party_sub_id for sub_id in parties[0].party_sub_ids] == [
             "S1",
             "S2",
         ]
-        assert parties[1].ptys_sub_grp == ()
+        assert parties[1].party_sub_ids == ()
         assert new_order.order_qty == 200
 
     def test_an_absent_group_reads_as_empty(self):
-        assert order("35=D|11=ORDER-1|").parties == ()
+        assert order("35=D|11=ORDER-1|").party_ids == ()
 
     def test_a_malformed_group_raises(self):
         with pytest.raises(InvalidValueError) as excinfo:
-            _ = order("35=D|453=2|448=AL|38=200|").parties
+            _ = order("35=D|453=2|448=AL|38=200|").party_ids
 
         assert excinfo.value.tag == 453
 
     def test_an_unrecognized_int_code_is_representable(self):
-        party = order("35=D|453=1|448=AL|452=99|").parties[0]
+        party = order("35=D|453=1|448=AL|452=99|").party_ids[0]
 
         assert party.party_role == Unrecognized(99)
 
     def test_a_non_integer_int_code_raises(self):
-        party = order("35=D|453=1|448=AL|452=X|").parties[0]
+        party = order("35=D|453=1|448=AL|452=X|").party_ids[0]
 
         with pytest.raises(InvalidValueError) as excinfo:
             _ = party.party_role
@@ -200,7 +200,7 @@ class TestGroups:
     def test_a_group_read_is_cached(self):
         new_order = order("35=D|453=1|448=AL|")
 
-        assert new_order.parties is new_order.parties
+        assert new_order.party_ids is new_order.party_ids
 
 
 class TestHeader:

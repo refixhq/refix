@@ -708,7 +708,8 @@ class Parties:
             return self._scope.get_str(448)
 
         @cached_property
-        def ptys_sub_grp(self) -> tuple[PtysSubGrp.Instance, ...]:
+        def party_sub_ids(self) -> tuple[PtysSubGrp.Instance, ...]:
+            """The instances of the NoPartySubIDs (802) group."""
             scopes = self._scope.get_group(PtysSubGrp.TABLE, Parties.KNOWN_TAGS)
             return () if scopes is None else tuple(PtysSubGrp.Instance(scope) for scope in scopes)
 
@@ -726,7 +727,8 @@ class NewOrderSingle:
         return self._raw
 
     @cached_property
-    def parties(self) -> tuple[Parties.Instance, ...]:
+    def party_ids(self) -> tuple[Parties.Instance, ...]:
+        """The instances of the NoPartyIDs (453) group."""
         scopes = self._raw.get_group(Parties.TABLE, NewOrderSingle.KNOWN_TAGS)
         return () if scopes is None else tuple(Parties.Instance(scope) for scope in scopes)
 
@@ -763,7 +765,7 @@ CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
         );
 
         assert_eq!(generated.code.matches("class Parties:").count(), 1);
-        assert_eq!(generated.code.matches("def parties(self)").count(), 2);
+        assert_eq!(generated.code.matches("def party_ids(self)").count(), 2);
     }
 
     #[test]

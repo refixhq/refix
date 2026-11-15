@@ -150,7 +150,7 @@ fn typed_reads_over_groups() {
         .unwrap();
 
     let order = NewOrderSingle::from_raw(raw);
-    let parties = order.parties().unwrap();
+    let parties = order.party_ids().unwrap();
 
     let ids: Vec<Option<&str>> = parties
         .iter()
@@ -158,10 +158,10 @@ fn typed_reads_over_groups() {
         .collect();
     assert_eq!(ids, [Some("AL"), Some("BOB")]);
 
-    let sub_ids = parties.get(0).unwrap().ptys_sub_grp().unwrap();
+    let sub_ids = parties.get(0).unwrap().party_sub_ids().unwrap();
     assert_eq!(sub_ids.len(), 1);
     assert_eq!(sub_ids.get(0).unwrap().party_sub_id(), Ok(Some("DESK-1")));
-    assert!(parties.get(1).unwrap().ptys_sub_grp().unwrap().is_empty());
+    assert!(parties.get(1).unwrap().party_sub_ids().unwrap().is_empty());
 
     assert_eq!(order.order_qty(), Ok(Some(200)));
 }
@@ -174,7 +174,7 @@ fn an_absent_group_reads_as_empty() {
 
     let order = NewOrderSingle::from_raw(raw);
 
-    assert!(order.parties().unwrap().is_empty());
+    assert!(order.party_ids().unwrap().is_empty());
 }
 
 #[test]
@@ -185,7 +185,10 @@ fn a_malformed_group_reads_as_an_error() {
 
     let order = NewOrderSingle::from_raw(raw);
 
-    assert_eq!(order.parties().unwrap_err(), InvalidValue { tag: Tag(453) });
+    assert_eq!(
+        order.party_ids().unwrap_err(),
+        InvalidValue { tag: Tag(453) }
+    );
 }
 
 #[test]
@@ -292,7 +295,7 @@ fn an_int_coded_enum_reads_by_value() {
     let order = NewOrderSingle::from_raw(raw);
 
     let roles: Vec<Option<PartyRole>> = order
-        .parties()
+        .party_ids()
         .unwrap()
         .iter()
         .map(|party| party.party_role().unwrap())
@@ -315,7 +318,7 @@ fn a_non_integer_int_coded_enum_is_an_error() {
         .unwrap();
 
     let order = NewOrderSingle::from_raw(raw);
-    let parties = order.parties().unwrap();
+    let parties = order.party_ids().unwrap();
 
     assert_eq!(
         parties.get(0).unwrap().party_role(),

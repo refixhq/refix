@@ -72,7 +72,8 @@ class Parties:
             return None if value is None else from_value(PartyRole, value)
 
         @cached_property
-        def ptys_sub_grp(self) -> tuple[PtysSubGrp.Instance, ...]:
+        def party_sub_ids(self) -> tuple[PtysSubGrp.Instance, ...]:
+            """The instances of the NoPartySubIDs (802) group."""
             scopes = self._scope.get_group(PtysSubGrp.TABLE, Parties.KNOWN_TAGS)
             return () if scopes is None else tuple(PtysSubGrp.Instance(scope) for scope in scopes)
 
@@ -139,6 +140,7 @@ class Header:
 
     @cached_property
     def hops(self) -> tuple[Header.Hops.Instance, ...]:
+        """The instances of the NoHops (627) group."""
         scopes = self._raw.get_group(Header.Hops.TABLE, self._known_tags)
         return () if scopes is None else tuple(Header.Hops.Instance(scope) for scope in scopes)
 
@@ -192,7 +194,8 @@ class NewOrderSingle:
         return self._raw.get_str(11)
 
     @cached_property
-    def parties(self) -> tuple[Parties.Instance, ...]:
+    def party_ids(self) -> tuple[Parties.Instance, ...]:
+        """The instances of the NoPartyIDs (453) group."""
         scopes = self._raw.get_group(Parties.TABLE, NewOrderSingle.KNOWN_TAGS)
         return () if scopes is None else tuple(Parties.Instance(scope) for scope in scopes)
 
@@ -280,6 +283,7 @@ class Logon:
 
     @cached_property
     def msg_types(self) -> tuple[Logon.MsgTypes.Instance, ...]:
+        """The instances of the NoMsgTypes (384) group."""
         scopes = self._raw.get_group(Logon.MsgTypes.TABLE, Logon.KNOWN_TAGS)
         return () if scopes is None else tuple(Logon.MsgTypes.Instance(scope) for scope in scopes)
 
