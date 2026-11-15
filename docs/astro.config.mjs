@@ -8,6 +8,7 @@ export default defineConfig({
 		starlight({
 			title: 'ReFIX',
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/refixhq/refix' }],
+			sidebar: [{ label: 'Quick start', slug: 'quick-start' }],
 		}),
 	],
 });
