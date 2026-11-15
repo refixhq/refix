@@ -1,0 +1,50 @@
+---
+title: A FIX engine for Rust and Python
+description: A FIX engine written in pure Rust with first-party bindings for Python.
+template: splash
+hero:
+  title: ReFIX
+  tagline: A FIX engine written in pure Rust with first-party bindings for Python.
+  actions:
+    - text: Quick start
+      link: /quick-start/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/refixhq/refix
+      icon: external
+      variant: minimal
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+:::caution
+ReFIX is in early development. Building messages and the session layer are not implemented yet, and APIs change
+between 0.x releases.
+:::
+
+## What works today
+
+- Read FIX logs as they are, with any separator and a logger's prefix before each message.
+- Read fields as typed values through generated FIX 4.4 messages.
+- Generate typed messages from your own dictionary.
+
+## Install
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```sh
+		pip install refix refix-fix44
+		```
+
+		Requires Python 3.12 or later.
+	</TabItem>
+	<TabItem label="Rust">
+		```sh
+		cargo add refix refix-fix44
+		```
+
+		Requires Rust 1.88 or later.
+	</TabItem>
+</Tabs>
+
+`refix` reads messages, and `refix-fix44` adds the typed FIX 4.4 messages.

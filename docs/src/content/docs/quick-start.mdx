@@ -1,0 +1,89 @@
+---
+title: Quick start
+description: Read a FIX log as typed messages in Python or Rust.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Read a FIX log and print each order's fields as typed values.
+
+## Install
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```sh
+		pip install refix refix-fix44
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		```sh
+		cargo add refix refix-fix44
+		```
+	</TabItem>
+</Tabs>
+
+## A log to read
+
+Save this as `fix.log`. It holds a NewOrderSingle and a Heartbeat, each after a logger's prefix.
+
+```text title="fix.log"
+2026-10-08 09:30:00.000 OUT 8=FIX.4.4|9=118|35=D|49=SENDER|56=TARGET|34=1|52=20261008-09:30:00|11=ORDER-1|55=ACME|54=1|60=20261008-09:30:00|40=2|44=101.25|38=100|10=194|
+2026-10-08 09:30:00.250 IN  8=FIX.4.4|9=5|35=0|10=163|
+```
+
+## Read the orders
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		import refix
+		from refix_fix44 import CODEC, NewOrderSingle
+
+		for record in refix.decode_log("fix.log", CODEC):
+		    order = record.message
+		    if isinstance(order, NewOrderSingle):
+		        print(order.cl_ord_id, order.side.name, order.order_qty, order.price)
+		```
+
+		```text
+		ORDER-1 BUY 100 101.25
+		```
+
+		A field that is absent reads as `None`, and a value that cannot be read raises `InvalidValueError`.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::LogReader;
+		use refix_fix44::{DIALECT, Message};
+
+		fn main() -> Result<(), Box<dyn std::error::Error>> {
+		    let mut reader = LogReader::new(DIALECT, None);
+		    reader.feed(&std::fs::read("fix.log")?);
+		    for record in reader.finish() {
+		        let Message::NewOrderSingle(order) = Message::from_raw(record.message) else {
+		            continue;
+		        };
+		        let (Some(id), Some(side), Some(qty), Some(price)) = (
+		            order.cl_ord_id()?,
+		            order.side()?,
+		            order.order_qty()?,
+		            order.price()?,
+		        ) else {
+		            continue;
+		        };
+		        println!("{id} {side:?} {qty} {price}");
+		    }
+		    Ok(())
+		}
+		```
+
+		```text
+		ORDER-1 Buy 100 101.25
+		```
+
+		A field that is absent reads as `Ok(None)`, and a value that cannot be read is an `Err`.
+	</TabItem>
+</Tabs>
+
+The reader finds each message after its prefix and works out the separator the log uses. Each message is then read
+as the type its MsgType names, so the Heartbeat is skipped here.
