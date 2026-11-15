@@ -8,4 +8,4 @@ pub mod spec;
 pub use context::MemberContext;
 pub use dictionary::Dictionary;
 pub use refix_message::Tag;
-pub use spec::*;
+pub use spec::Spec;
