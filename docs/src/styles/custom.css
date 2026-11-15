@@ -37,3 +37,9 @@
 .site-title img {
 	height: 1.5rem;
 }
+
+@media (min-width: 50rem) {
+	.hero > img {
+		width: min(100%, 20rem);
+	}
+}
