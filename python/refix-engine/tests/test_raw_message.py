@@ -310,3 +310,17 @@ class TestGetUtcTimestampNs:
             tokenize_body("35=D|52=20261030|").get_utc_timestamp_ns(52)
 
         assert excinfo.value.tag == 52
+
+
+class TestPrinting:
+    def test_str_is_the_fields_joined_by_pipes(self):
+        message = tokenize_body("35=D|58=hello|")
+        assert str(message) == "8=FIX.4.4|9=14|35=D|58=hello|10=166"
+
+    def test_repr_names_the_class(self):
+        message = tokenize_body("35=D|58=hello|")
+        assert repr(message) == "RawMessage(8=FIX.4.4|9=14|35=D|58=hello|10=166)"
+
+    def test_a_byte_outside_printable_ascii_is_escaped(self):
+        message = tokenize_bytes(b"35=D|58=caf\xe9|")
+        assert r"|58=caf\xe9|" in str(message)

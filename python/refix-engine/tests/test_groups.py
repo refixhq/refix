@@ -85,6 +85,13 @@ class TestGetGroup:
         assert instances is not None
         assert instances[0].get_multiple_values(523) == ("S1", "S2")
 
+    def test_an_instance_prints_its_own_fields(self):
+        instances = parties("35=D|453=2|448=AL|452=3|448=BOB|54=1|")
+
+        assert instances is not None
+        assert str(instances[0]) == "448=AL|452=3"
+        assert repr(instances[1]) == "Scope(448=BOB)"
+
     def test_an_instance_keeps_its_message_alive(self):
         instances = parties("35=D|453=1|448=AL|54=1|")
         gc.collect()

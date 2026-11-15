@@ -283,6 +283,9 @@ class NewOrderSingle:
     def __init__(self, raw: RawMessage) -> None:
         self._raw = raw
 
+    def __repr__(self) -> str:
+        return f"NewOrderSingle({self._raw})"
+
     @property
     def raw(self) -> RawMessage:
         return self._raw
@@ -681,6 +684,9 @@ class PtysSubGrp:
         def __init__(self, scope: refix.Scope) -> None:
             self._scope = scope
 
+        def __repr__(self) -> str:
+            return f"PtysSubGrp.Instance({self._scope})"
+
         @property
         def raw(self) -> refix.Scope:
             return self._scope
@@ -698,6 +704,9 @@ class Parties:
     class Instance:
         def __init__(self, scope: refix.Scope) -> None:
             self._scope = scope
+
+        def __repr__(self) -> str:
+            return f"Parties.Instance({self._scope})"
 
         @property
         def raw(self) -> refix.Scope:
@@ -721,6 +730,9 @@ class NewOrderSingle:
 
     def __init__(self, raw: RawMessage) -> None:
         self._raw = raw
+
+    def __repr__(self) -> str:
+        return f"NewOrderSingle({self._raw})"
 
     @property
     def raw(self) -> RawMessage:
