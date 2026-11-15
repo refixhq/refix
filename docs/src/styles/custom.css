@@ -55,3 +55,20 @@
 	background-image: linear-gradient(var(--hero-tint) var(--sl-nav-height), transparent 28rem);
 	background-repeat: no-repeat;
 }
+
+.status-note {
+	color: var(--sl-color-gray-3);
+	font-size: var(--sl-text-sm);
+}
+
+.card {
+	--sl-card-border: var(--sl-color-accent);
+	--sl-card-bg: var(--sl-color-accent-low);
+	border-radius: 0.5rem;
+}
+
+@media (min-width: 50rem) {
+	[data-has-hero] .card-grid {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
