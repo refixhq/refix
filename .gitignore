@@ -39,5 +39,10 @@ __pypackages__/
 crates/refix-fix44/src/generated.rs
 python/refix-fix44/src/refix_fix44/__init__.py
 
+# Docs site
+node_modules/
+.astro/
+.wrangler/
+
 # Other
 .DS_Store
