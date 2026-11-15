@@ -60,6 +60,7 @@ const MESSAGE: &[&str] = &[
     "KNOWN_TAGS",
     "MSG_TYPE",
     "__init__",
+    "__repr__",
     "_raw",
     "cached_property",
     "header",
@@ -82,7 +83,14 @@ const VIEW: &[&str] = &[
 
 /// The members every group instance class defines, and the decorators its
 /// body looks up.
-const INSTANCE: &[&str] = &["__init__", "_scope", "cached_property", "property", "raw"];
+const INSTANCE: &[&str] = &[
+    "__init__",
+    "__repr__",
+    "_scope",
+    "cached_property",
+    "property",
+    "raw",
+];
 
 /// Every name the generated Python uses, settled before anything is emitted.
 pub(super) struct Names {

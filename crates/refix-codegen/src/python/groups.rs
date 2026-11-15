@@ -79,6 +79,9 @@ fn emit_instance_class(group: dictionary::Group<'_>, path: &str, names: &Names) 
     let mut members = vec![
         "    def __init__(self, scope: refix.Scope) -> None:\n        self._scope = scope\n"
             .to_owned(),
+        format!(
+            "    def __repr__(self) -> str:\n        return f\"{path}.Instance({{self._scope}})\"\n"
+        ),
         "    @property\n    def raw(self) -> refix.Scope:\n        return self._scope\n".to_owned(),
     ];
     let known_tags = format!("{path}.KNOWN_TAGS");

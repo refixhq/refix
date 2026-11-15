@@ -44,6 +44,9 @@ pub(super) fn emit_message(
     members.push(
         "    def __init__(self, raw: RawMessage) -> None:\n        self._raw = raw\n".to_owned(),
     );
+    members.push(format!(
+        "    def __repr__(self) -> str:\n        return f\"{name}({{self._raw}})\"\n"
+    ));
     members.push(
         "    @property\n    def raw(self) -> RawMessage:\n        return self._raw\n".to_owned(),
     );

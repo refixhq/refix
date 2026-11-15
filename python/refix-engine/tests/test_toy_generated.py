@@ -203,6 +203,28 @@ class TestGroups:
         assert new_order.party_ids is new_order.party_ids
 
 
+class TestPrinting:
+    def test_a_message_prints_under_its_class_name(self):
+        new_order = order("35=D|11=ORDER-1|")
+
+        assert (
+            repr(new_order) == "NewOrderSingle(8=FIX.4.4|9=16|35=D|11=ORDER-1|10=099)"
+        )
+
+    def test_a_group_instance_prints_its_own_fields(self):
+        new_order = order("35=D|453=2|448=AL|802=1|523=S1|448=BOB|")
+
+        first, second = new_order.party_ids
+        assert repr(first) == "Parties.Instance(448=AL|802=1|523=S1)"
+        assert repr(first.party_sub_ids[0]) == "PtysSubGrp.Instance(523=S1)"
+        assert repr(second) == "Parties.Instance(448=BOB)"
+
+    def test_a_group_a_message_declares_prints_its_path(self):
+        logon = Logon(tokenize_body("35=A|384=1|372=D|"))
+
+        assert repr(logon.msg_types[0]) == "Logon.MsgTypes.Instance(372=D)"
+
+
 class TestHeader:
     def test_reads_the_header_and_trailer(self):
         new_order = order(
