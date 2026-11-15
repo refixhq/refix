@@ -728,6 +728,7 @@ name = "refix-fix44"
 version = "0.5.0"
 dependencies = [
  "bytes",
+ "refix",
  "refix-message",
 ]
 
