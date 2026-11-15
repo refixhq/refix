@@ -18,3 +18,4 @@ refix-message = { workspace = true }
 
 [dev-dependencies]
 bytes = { workspace = true }
+refix = { path = "../refix" }

@@ -5,8 +5,8 @@ generated from QuickFIX's `FIX44.xml`.
 
 ```rust
 use bytes::Bytes;
+use refix::message::{Decimal, TimePrecision, Tokenizer, UtcTimestamp};
 use refix_fix44::{Message, OrdType, Side};
-use refix_message::{Decimal, TimePrecision, Tokenizer, UtcTimestamp};
 
 let frame = "8=FIX.4.4|9=118|35=D|49=SENDER|56=TARGET|34=1|52=20261008-09:30:00|\
              11=ORDER-1|55=ACME|54=1|60=20261008-09:30:00|40=2|44=101.25|38=100|10=194|";
