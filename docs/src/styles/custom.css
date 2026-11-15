@@ -11,6 +11,10 @@
 	--sl-color-gray-5: #2a3550;
 	--sl-color-gray-6: #161f33;
 	--sl-color-black: #0b1220;
+	--sl-color-bg-nav: var(--sl-color-black);
+	--sl-color-bg-sidebar: var(--sl-color-black);
+	--sl-color-hairline-shade: var(--sl-color-gray-6);
+	--hero-tint: #13213f;
 }
 
 /* Light theme */
@@ -27,6 +31,9 @@
 	--sl-color-gray-6: #e9eefa;
 	--sl-color-gray-7: #f4f7fc;
 	--sl-color-black: #ffffff;
+	--sl-color-bg-nav: var(--sl-color-gray-7);
+	--sl-color-hairline-shade: var(--sl-color-gray-6);
+	--hero-tint: #eaf1ff;
 }
 
 .site-title {
@@ -42,4 +49,9 @@
 	.hero > img {
 		width: min(100%, 20rem);
 	}
+}
+
+[data-has-hero] .main-frame {
+	background-image: linear-gradient(var(--hero-tint) var(--sl-nav-height), transparent 28rem);
+	background-repeat: no-repeat;
 }
