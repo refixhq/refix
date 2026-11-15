@@ -314,6 +314,14 @@ mod tests {
         }
 
         #[test]
+        fn a_message_prints_as_it_was_written() {
+            let text = "8=FIX.4.4|9=41|35=0|49=A|56=B|34=1|52=20260730-10:00:00|10=123";
+            let frame = to_wire(&format!("{text}|"));
+            let message = Tokenizer::default().tokenize(Bytes::from(frame)).unwrap();
+            assert_eq!(message.to_string(), text);
+        }
+
+        #[test]
         fn empty_value() {
             let message = tokenize_body("35=0|58=|");
             assert_body_entries(&message, &[(Tag(35), "0"), (Tag(58), "")]);
@@ -392,6 +400,12 @@ mod tests {
                 &message,
                 &[(Tag(35), "0"), (Tag::MALFORMED, "junk"), (Tag(58), "ok")],
             );
+        }
+
+        #[test]
+        fn a_malformed_run_prints_as_it_was_written() {
+            let message = tokenize_body("35=0|abc=x|junk|58=ok|");
+            assert!(message.to_string().contains("|35=0|abc=x|junk|58=ok|10="));
         }
 
         #[test]

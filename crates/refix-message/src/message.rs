@@ -1,3 +1,5 @@
+use std::fmt::{self, Write};
+
 use crate::{Date, Decimal, InvalidValue, MonthYear, Tag, Time, UtcTimestamp};
 use bytes::Bytes;
 
@@ -28,7 +30,7 @@ pub(crate) struct RawField {
 }
 
 /// Raw bytes of a FIX message and an index of every field in wire order.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RawMessage {
     bytes: Bytes,
     fields: Vec<RawField>,
@@ -126,6 +128,16 @@ impl RawMessage {
         &self.bytes[field.value_start as usize..field.value_end as usize]
     }
 
+    /// The bytes of the field at `index`, from its tag to the end of its value.
+    fn field_text(&self, index: usize) -> &[u8] {
+        let start = match index.checked_sub(1) {
+            Some(previous) => self.fields[previous].value_end as usize + 1,
+            None => 0,
+        };
+        let end = self.fields[index].value_end as usize;
+        self.bytes.get(start..end).unwrap_or_default()
+    }
+
     /// The index itself, for tests asserting offset-level invariants.
     #[cfg(test)]
     pub(crate) fn raw_fields(&self) -> &[RawField] {
@@ -133,9 +145,21 @@ impl RawMessage {
     }
 }
 
+impl fmt::Display for RawMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.scope().fmt(f)
+    }
+}
+
+impl fmt::Debug for RawMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RawMessage({self})")
+    }
+}
+
 /// A bounded view of a message's fields - the whole frame or one group
 /// instance.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Scope<'a> {
     message: &'a RawMessage,
     start: Slot,
@@ -262,6 +286,30 @@ impl<'a> Scope<'a> {
 
     pub(crate) fn value_at(&self, slot: Slot) -> &'a [u8] {
         self.message.value(slot)
+    }
+}
+
+impl fmt::Display for Scope<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for index in self.start.index()..self.end.index() {
+            if index > self.start.index() {
+                f.write_char('|')?;
+            }
+            for &byte in self.message.field_text(index) {
+                match byte {
+                    b'\\' => f.write_str("\\\\")?,
+                    b' '..=b'~' => f.write_char(char::from(byte))?,
+                    _ => write!(f, "\\x{byte:02x}")?,
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for Scope<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Scope({self})")
     }
 }
 
@@ -507,6 +555,36 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_message_prints_its_fields_joined_by_pipes() {
+        let message = message_of(&[(8, "FIX.4.4"), (35, "0"), (10, "161")]);
+        assert_eq!(message.to_string(), "8=FIX.4.4|35=0|10=161");
+    }
+
+    #[test]
+    fn debug_wraps_the_printed_message() {
+        let message = message_of(&[(8, "FIX.4.4"), (35, "0")]);
+        assert_eq!(format!("{message:?}"), "RawMessage(8=FIX.4.4|35=0)");
+    }
+
+    #[test]
+    fn an_empty_message_prints_nothing() {
+        let message = message_of::<&str>(&[]);
+        assert_eq!(message.to_string(), "");
+    }
+
+    #[test]
+    fn a_byte_outside_printable_ascii_prints_as_an_escape() {
+        let message = message_of(&[(58, b"caf\xE9".as_slice()), (96, b"a\x01b".as_slice())]);
+        assert_eq!(message.to_string(), r"58=caf\xe9|96=a\x01b");
+    }
+
+    #[test]
+    fn a_backslash_prints_doubled() {
+        let message = message_of(&[(58, r"a\b")]);
+        assert_eq!(message.to_string(), r"58=a\\b");
+    }
+
     mod scope {
         use super::*;
 
@@ -564,6 +642,21 @@ mod tests {
 
             assert_eq!(tail.get_str(Tag(58)), Ok(Some("second")));
             assert_eq!(tail.get_int(Tag(38)), Err(InvalidValue { tag: Tag(38) }));
+        }
+
+        #[test]
+        fn a_scope_prints_only_its_fields() {
+            let message = message_of(&[(453, "2"), (448, "AL"), (452, "3"), (448, "BOB")]);
+            let first_instance = scope_of(&message, 1, 3);
+
+            assert_eq!(first_instance.to_string(), "448=AL|452=3");
+            assert_eq!(format!("{first_instance:?}"), "Scope(448=AL|452=3)");
+        }
+
+        #[test]
+        fn an_empty_scope_prints_nothing() {
+            let message = message_of(&[(35, "D")]);
+            assert_eq!(scope_of(&message, 1, 1).to_string(), "");
         }
 
         #[test]
