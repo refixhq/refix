@@ -276,6 +276,8 @@ class ExecInst(enum.StrEnum):
 
 
 class NewOrderSingle:
+    """The NewOrderSingle (35=D) message."""
+
     MSG_TYPE: ClassVar[bytes] = b"D"
 
     KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((11, 18, 38, 40, 44, 452))
@@ -341,6 +343,17 @@ CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
                 field: "Price".to_owned(),
                 data_type: DataType::Other("PRICE".to_owned()),
             }]
+        );
+    }
+
+    #[test]
+    fn a_message_docstring_escapes_the_msg_type() {
+        let generated = generated(vec![message("Quote", "\"", vec![])], vec![], vec![]);
+
+        assert!(
+            generated
+                .code
+                .contains("class Quote:\n    \"\"\"The Quote (35=\\\") message.\"\"\"\n")
         );
     }
 
@@ -724,6 +737,8 @@ class Parties:
 
 
 class NewOrderSingle:
+    """The NewOrderSingle (35=D) message."""
+
     MSG_TYPE: ClassVar[bytes] = b"D"
 
     KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((448, 453, 523, 802))
@@ -796,7 +811,7 @@ CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
         );
 
         assert!(generated.code.contains(
-            "class Logon:\n    MSG_TYPE: ClassVar[bytes] = b\"A\"\n\n    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((372, 384))\n\n    class MsgTypes:\n        TABLE: ClassVar[GroupTable] = GroupTable(384, 372, (372,), ())\n"
+            "class Logon:\n    \"\"\"The Logon (35=A) message.\"\"\"\n\n    MSG_TYPE: ClassVar[bytes] = b\"A\"\n\n    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((372, 384))\n\n    class MsgTypes:\n        TABLE: ClassVar[GroupTable] = GroupTable(384, 372, (372,), ())\n"
         ));
         assert!(
             generated

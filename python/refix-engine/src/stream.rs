@@ -7,6 +7,7 @@ use refix_message::framing::GarbledReason;
 use refix_message::stream::Outcome;
 use refix_message::{Dialect as CoreDialect, MessageStream as CoreMessageStream};
 
+/// Splits a stream of bytes into FIX messages.
 #[pyclass(module = "refix._core")]
 pub(crate) struct MessageStream(CoreMessageStream);
 
@@ -21,10 +22,12 @@ impl MessageStream {
         Self(CoreMessageStream::new(dialect))
     }
 
+    /// Append bytes to the buffer.
     fn feed(&mut self, data: &[u8]) {
         self.0.feed(data);
     }
 
+    /// Return the next `RawMessage` or `Garble`, or `None` until more bytes are fed.
     fn next_message(&mut self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         match self.0.next_message() {
             Outcome::Message(message) => {
@@ -48,11 +51,13 @@ pub(crate) struct Garble {
 
 #[pymethods]
 impl Garble {
+    /// The bytes that were skipped.
     #[getter]
     fn bytes<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
         PyBytes::new(py, &self.bytes)
     }
 
+    /// Why the bytes cannot begin a message.
     #[getter]
     fn reason<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let reasons = PyModule::import(py, "refix.errors")?.getattr("GarbledReason")?;

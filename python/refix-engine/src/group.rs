@@ -2,6 +2,9 @@ use pyo3::exceptions::PyValueError;
 use pyo3::{Bound, PyResult, pyclass, pymethods};
 use refix_message::{OwnedGroupTable, Tag};
 
+/// The structure of a repeating group.
+///
+/// Instances start with `delimiter` and directly contain the sorted `members`.
 #[pyclass(frozen, module = "refix._core")]
 pub(crate) struct GroupTable(OwnedGroupTable);
 
@@ -28,6 +31,7 @@ impl GroupTable {
     }
 }
 
+/// Every tag a message or group instance can contain, sorted and unique.
 #[pyclass(frozen, module = "refix._core")]
 pub(crate) struct KnownTags(Vec<Tag>);
 

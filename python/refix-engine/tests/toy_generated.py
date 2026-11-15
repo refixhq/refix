@@ -176,6 +176,8 @@ class Trailer:
 
 
 class NewOrderSingle:
+    """The NewOrderSingle (35=D) message."""
+
     MSG_TYPE: ClassVar[bytes] = b"D"
 
     KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((
@@ -255,6 +257,8 @@ class NewOrderSingle:
 
 
 class Logon:
+    """The Logon (35=A) message."""
+
     MSG_TYPE: ClassVar[bytes] = b"A"
 
     KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((

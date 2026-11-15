@@ -24,11 +24,13 @@ impl LogReader {
         Self(Some(CoreLogReader::new(dialect, separator)))
     }
 
+    /// Append bytes to the buffer.
     fn feed(&mut self, data: &[u8]) -> PyResult<()> {
         self.reader()?.feed(data);
         Ok(())
     }
 
+    /// Return the next record, or `None` until more bytes are fed.
     fn next_record<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Record<'py>>> {
         Ok(self
             .reader()?
@@ -36,6 +38,7 @@ impl LogReader {
             .map(|record| convert(py, record)))
     }
 
+    /// End the input and return the records still pending.
     fn finish<'py>(&mut self, py: Python<'py>) -> PyResult<Vec<Record<'py>>> {
         let reader = self.0.take().ok_or_else(finished)?;
         Ok(reader.finish().map(|record| convert(py, record)).collect())
