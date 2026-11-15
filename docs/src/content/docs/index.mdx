@@ -3,8 +3,12 @@ title: A FIX engine for Rust and Python
 description: A FIX engine written in pure Rust with first-party bindings for Python.
 template: splash
 hero:
-  title: ReFIX
-  tagline: A FIX engine written in pure Rust with first-party bindings for Python.
+  title: A FIX engine for Rust and Python
+  tagline: Written in pure Rust with first-party bindings for Python.
+  image:
+    light: ../../assets/logo-stacked-light.svg
+    dark: ../../assets/logo-stacked-dark.svg
+    alt: ReFIX
   actions:
     - text: Quick start
       link: /quick-start/
@@ -15,18 +19,7 @@ hero:
       variant: minimal
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
-
-:::caution
-ReFIX is in early development. Building messages and the session layer are not implemented yet, and APIs change
-between 0.x releases.
-:::
-
-## What works today
-
-- Read FIX logs as they are, with any separator and a logger's prefix before each message.
-- Read fields as typed values through generated FIX 4.4 messages.
-- Generate typed messages from your own dictionary.
+import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Install
 
@@ -48,3 +41,80 @@ between 0.x releases.
 </Tabs>
 
 `refix` reads messages, and `refix-fix44` adds the typed FIX 4.4 messages.
+
+<p class="status-note">ReFIX is in early development. Building messages and the session layer are not implemented yet, and APIs change between 0.x releases.</p>
+
+## Read a log
+
+This log holds a NewOrderSingle and a Heartbeat, each after a logger's prefix.
+
+```text title="fix.log"
+2026-10-08 09:30:00.000 OUT 8=FIX.4.4|9=118|35=D|49=SENDER|56=TARGET|34=1|52=20261008-09:30:00|11=ORDER-1|55=ACME|54=1|60=20261008-09:30:00|40=2|44=101.25|38=100|10=194|
+2026-10-08 09:30:00.250 IN  8=FIX.4.4|9=5|35=0|10=163|
+```
+
+Print each order's fields as typed values.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		import refix
+		from refix_fix44 import CODEC, NewOrderSingle
+
+		for record in refix.decode_log("fix.log", CODEC):
+		    order = record.message
+		    if isinstance(order, NewOrderSingle):
+		        print(order.cl_ord_id, order.side.name, order.order_qty, order.price)
+		```
+
+		```text
+		ORDER-1 BUY 100 101.25
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::LogReader;
+		use refix_fix44::{DIALECT, Message};
+
+		fn main() -> Result<(), Box<dyn std::error::Error>> {
+		    let mut reader = LogReader::new(DIALECT, None);
+		    reader.feed(&std::fs::read("fix.log")?);
+		    for record in reader.finish() {
+		        let Message::NewOrderSingle(order) = Message::from_raw(record.message) else {
+		            continue;
+		        };
+		        let (Some(id), Some(side), Some(qty), Some(price)) = (
+		            order.cl_ord_id()?,
+		            order.side()?,
+		            order.order_qty()?,
+		            order.price()?,
+		        ) else {
+		            continue;
+		        };
+		        println!("{id} {side:?} {qty} {price}");
+		    }
+		    Ok(())
+		}
+		```
+
+		```text
+		ORDER-1 Buy 100 101.25
+		```
+	</TabItem>
+</Tabs>
+
+The [quick start](/quick-start/) explains each step.
+
+## What works today
+
+<CardGrid>
+	<Card title="Read logs" icon="document">
+		Read FIX logs as they are, with any separator and a logger's prefix before each message.
+	</Card>
+	<Card title="Typed messages" icon="list-format">
+		Read fields as typed values through generated FIX 4.4 messages.
+	</Card>
+	<Card title="Your own dictionary" icon="setting">
+		Generate typed messages from your own dictionary.
+	</Card>
+</CardGrid>
