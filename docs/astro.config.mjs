@@ -12,6 +12,15 @@ export default defineConfig({
 				dark: './src/assets/mark-dark.svg',
 			},
 			customCss: ['./src/styles/custom.css'],
+			head: [
+				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://refix.dev/social-card.png' } },
+				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+				{
+					tag: 'meta',
+					attrs: { property: 'og:image:alt', content: 'ReFIX, a FIX engine for Rust and Python' },
+				},
+			],
 			expressiveCode: { styleOverrides: { borderRadius: '0.5rem' } },
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/refixhq/refix' }],
 			sidebar: [
