@@ -1,0 +1,37 @@
+---
+title: Reference
+description: Where to find the API reference for the Rust crates, the Python packages and the command-line tool.
+---
+
+## Rust
+
+The API reference for each crate is on docs.rs.
+
+| Crate                                                | Holds                                                               |
+| ---------------------------------------------------- | ------------------------------------------------------------------- |
+| [refix](https://docs.rs/refix)                       | The crate to depend on. It re-exports `refix-message` as `message`. |
+| [refix-message](https://docs.rs/refix-message)       | The log reader, the tokenizer, the message stream and raw messages. |
+| [refix-fix44](https://docs.rs/refix-fix44)           | Typed FIX 4.4 messages.                                             |
+| [refix-dictionary](https://docs.rs/refix-dictionary) | The dictionary model and the parser for QuickFIX XML.               |
+| [refix-codegen](https://docs.rs/refix-codegen)       | The code generator behind `refix codegen`.                          |
+
+## Python
+
+There is no hosted Python reference yet. The packages have type hints and docstrings, so an editor shows each
+signature and its description, and `help` prints them:
+
+```python
+import refix
+
+help(refix.read_log)
+```
+
+| Package                                              | Holds                                                               |
+| ---------------------------------------------------- | ------------------------------------------------------------------- |
+| [refix](https://pypi.org/project/refix/)             | The log reader, the tokenizer, the message stream and raw messages. |
+| [refix-fix44](https://pypi.org/project/refix-fix44/) | Typed FIX 4.4 messages.                                             |
+
+## Command-line tool
+
+The `refix` tool comes from [refix-cli](https://pypi.org/project/refix-cli/). `refix --help` lists its commands, and
+`refix codegen --help` shows the options for generating code.
