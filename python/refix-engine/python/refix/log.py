@@ -2,12 +2,18 @@ import enum
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import BinaryIO
+from typing import Protocol
 
 from refix._core import Dialect, LogReader, RawMessage
 from refix.codec import Codec
 
 _CHUNK_SIZE = 65536
+
+
+class _Readable(Protocol):
+    """An open binary file, or any other object with its `read`."""
+
+    def read(self, size: int, /) -> bytes: ...
 
 
 class LogDiagnostic(enum.Enum):
@@ -33,7 +39,7 @@ class LogRecord[T]:
 
 
 def read_log(
-    source: str | os.PathLike[str] | BinaryIO,
+    source: str | os.PathLike[str] | _Readable,
     dialect: Dialect | None = None,
     *,
     separator: bytes | None = None,
@@ -54,7 +60,7 @@ def read_log(
 
 
 def decode_log[T](
-    source: str | os.PathLike[str] | BinaryIO,
+    source: str | os.PathLike[str] | _Readable,
     codec: Codec[T],
     *,
     separator: bytes | None = None,
@@ -65,7 +71,7 @@ def decode_log[T](
 
 
 def _drive(
-    file: BinaryIO, dialect: Dialect | None, separator: int | None
+    file: _Readable, dialect: Dialect | None, separator: int | None
 ) -> Iterator[LogRecord[RawMessage]]:
     reader = LogReader(dialect, separator)
     while chunk := file.read(_CHUNK_SIZE):

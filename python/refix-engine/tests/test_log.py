@@ -1,3 +1,4 @@
+import gzip
 from io import BytesIO
 from pathlib import Path
 
@@ -129,6 +130,17 @@ class TestReadLog:
 
         assert len(records) == count
         assert all(record.message.bytes == frame for record in records)
+
+    def test_reads_a_gzip_file(self, tmp_path: Path):
+        frame = construct_valid_frame("FIX.4.4", "35=0|58=hello|")
+        path = tmp_path / "fix.log.gz"
+        with gzip.open(path, "wb") as f:
+            f.write(frame)
+
+        with gzip.open(path, "rb") as f:
+            records = list(refix.read_log(f))
+
+        assert [record.message.bytes for record in records] == [frame]
 
 
 class TestDecodeLog:
