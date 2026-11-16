@@ -129,10 +129,7 @@ The fields come in the order sent, with duplicates. Printing a message gives its
 		use refix::message::Tokenizer;
 
 		let tokenizer = Tokenizer::default();
-		match tokenizer.tokenize(data.into()) {
-		    Ok(message) => println!("{message}"),
-		    Err(error) => println!("not a message: {error:?}"),
-		}
+		let message = tokenizer.tokenize(data.into())?;
 		```
 
 		`tokenize` takes a `bytes::Bytes`, which a `Vec<u8>` converts into. It returns a `TokenizeError` unless the

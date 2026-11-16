@@ -85,6 +85,6 @@ defined in the Apache-2.0 license, shall be dual licensed as above, without any 
 
 [license-apache]: https://github.com/refixhq/refix/blob/main/LICENSE-APACHE
 
-[benchmarks]: https://github.com/refixhq/refix/blob/main/benchmarks/README.md
+[benchmarks]: https://refix.dev/benchmarks/
 
 [refix-fix44]: https://crates.io/crates/refix-fix44

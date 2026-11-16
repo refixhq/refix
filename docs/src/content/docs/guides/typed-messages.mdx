@@ -249,6 +249,7 @@ order above.
 		let desk = order.raw().get_str(Tag(5001))?;  // Some("desk-4")
 		```
 
-		To print a typed message, print its raw message.
+		Printing a typed message with `{:?}` shows its name and wire form, such as
+		`NewOrderSingle(8=FIX.4.4|9=145|35=D|...)`. With `{}` it shows the wire form alone.
 	</TabItem>
 </Tabs>
