@@ -1,7 +1,7 @@
 [package]
 name = "refix-message"
 description = "FIX protocol message framing, log reading and tokenisation for the ReFIX engine"
-version = "0.4.4"
+version = "0.4.5"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
