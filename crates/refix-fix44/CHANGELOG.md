@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/refixhq/refix/compare/refix-fix44-v0.7.0...refix-fix44-v0.8.0) - 2026-11-16
+
+### Other
+
+- say FIX protocol in the package descriptions ([#158](https://github.com/refixhq/refix/pull/158))
+
 ## [0.7.0](https://github.com/refixhq/refix/compare/refix-fix44-v0.6.0...refix-fix44-v0.7.0) - 2026-11-16
 
 ### Added
