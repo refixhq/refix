@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/refixhq/refix/compare/python-v0.7.1...python-v0.8.0) - 2026-11-16
+
+### Added
+
+- add repr to the Python messages ([#140](https://github.com/refixhq/refix/pull/140))
+- [**breaking**] name group accessors after the count field ([#138](https://github.com/refixhq/refix/pull/138))
+
+### Other
+
+- point the packages at refix.dev ([#148](https://github.com/refixhq/refix/pull/148))
+- declare the minimum Rust version ([#145](https://github.com/refixhq/refix/pull/145))
+- link the benchmarks from the READMEs ([#144](https://github.com/refixhq/refix/pull/144))
+- add docstrings to the Python classes ([#141](https://github.com/refixhq/refix/pull/141))
+
 ## [0.7.1](https://github.com/refixhq/refix/compare/python-v0.7.0...python-v0.7.1) - 2026-11-14
 
 ### Other
