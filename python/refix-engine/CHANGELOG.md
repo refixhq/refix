@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2](https://github.com/refixhq/refix/compare/python-v0.8.1...python-v0.8.2) - 2026-11-16
+
+### Fixed
+
+- accept any binary reader in read_log and give every tokenizer error a message ([#156](https://github.com/refixhq/refix/pull/156))
+
+### Other
+
+- update the guides and links for the latest release ([#154](https://github.com/refixhq/refix/pull/154))
+
 ## [0.8.1](https://github.com/refixhq/refix/compare/python-v0.8.0...python-v0.8.1) - 2026-11-16
 
 ### Other
