@@ -699,7 +699,7 @@ dependencies = [
 
 [[package]]
 name = "refix-codegen"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "bytes",
  "refix-dictionary",
@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "refix-engine"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "bytes",
  "pyo3",
@@ -725,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "refix-fix44"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "bytes",
  "refix",
@@ -734,7 +734,7 @@ dependencies = [
 
 [[package]]
 name = "refix-message"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "bigdecimal",
  "bytes",

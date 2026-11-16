@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/refixhq/refix/compare/refix-fix44-v0.6.0...refix-fix44-v0.7.0) - 2026-11-16
+
+### Added
+
+- document the generated Rust code ([#152](https://github.com/refixhq/refix/pull/152))
+- make TokenizeError a standard error and print generated messages ([#151](https://github.com/refixhq/refix/pull/151))
+
 ## [0.6.0](https://github.com/refixhq/refix/compare/refix-fix44-v0.5.0...refix-fix44-v0.6.0) - 2026-11-16
 
 ### Added

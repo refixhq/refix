@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4](https://github.com/refixhq/refix/compare/refix-message-v0.4.3...refix-message-v0.4.4) - 2026-11-16
+
+### Added
+
+- make TokenizeError a standard error and print generated messages ([#151](https://github.com/refixhq/refix/pull/151))
+
+### Other
+
+- add the guides, benchmarks, reference and roadmap ([#149](https://github.com/refixhq/refix/pull/149))
+
 ## [0.4.3](https://github.com/refixhq/refix/compare/refix-message-v0.4.2...refix-message-v0.4.3) - 2026-11-16
 
 ### Added
