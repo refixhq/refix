@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)][license-mit]
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)][license-apache]
 
-**ReFIX is a FIX engine written in pure Rust with first-party bindings for Python.**
+**ReFIX is a FIX protocol engine written in pure Rust with first-party bindings for Python.**
 
 [Documentation](https://refix.dev)
 
