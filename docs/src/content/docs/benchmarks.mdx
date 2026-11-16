@@ -1,0 +1,90 @@
+---
+title: Benchmarks
+description: How many FIX messages ReFIX reads a second in Rust and Python, and how that compares with other libraries.
+---
+
+ReFIX is pretty fast. On one core of an Apple M3 Max, it reads this many 30-field messages a second:
+
+|        | Raw values  | Typed values |
+| ------ | ----------- | ------------ |
+| Rust   | 4.2 million | 3.7 million  |
+| Python | 2.0 million | 1.1 million  |
+
+From Python, that is 7 to 8 times faster than the [QuickFIX](https://pypi.org/project/quickfix/) bindings and 50
+to 90 times faster than [simplefix](https://pypi.org/project/simplefix/).
+
+:::note[Parsing only]
+ReFIX reads messages and does not build them or run sessions yet, so these benchmarks measure parsing. End-to-end
+throughput will be the interesting number once the session layer exists.
+:::
+
+## What is measured
+
+Each benchmark parses a 30-field ExecutionReport and reads ClOrdID, OrderQty, Price and TransactTime, in two ways:
+
+- Raw values are returned as bytes.
+- Typed values are returned as text, an integer, a decimal and a timestamp. In Python these are a `str`, an `int`, a
+`Decimal` and a `datetime`.
+
+## Results
+
+Median time to read one message, in microseconds.
+
+### Apple M3 Max
+
+|        | Raw values | Typed values |
+| ------ | ---------- | ------------ |
+| Rust   | 0.24       | 0.27         |
+| Python | 0.50       | 0.88         |
+
+### AMD EPYC 9R14
+
+|        | Raw values | Typed values |
+| ------ | ---------- | ------------ |
+| Python | 0.73       | 1.35         |
+
+Rust has not been measured on this machine.
+
+## Compared with other Python libraries
+
+Because only parsing is implemented, the comparison is with the two Python libraries that give a convenient way to
+parse a message: [simplefix](https://pypi.org/project/simplefix/) and the
+[QuickFIX](https://pypi.org/project/quickfix/) bindings.
+
+Median time to read one message, in microseconds, with the ratio to ReFIX.
+
+### Apple M3 Max
+
+|           | Raw values  | Typed values |
+| --------- | ----------- | ------------ |
+| ReFIX     | 0.50        | 0.88         |
+| QuickFIX  | 3.37 (6.8x) | 6.54 (7.5x)  |
+| simplefix | 40.50 (81x) | 44.04 (50x)  |
+
+### AMD EPYC 9R14
+
+|           | Raw values  | Typed values |
+| --------- | ----------- | ------------ |
+| ReFIX     | 0.73        | 1.35         |
+| QuickFIX  | 5.86 (8.0x) | 10.98 (8.1x) |
+| simplefix | 64.94 (89x) | 70.56 (52x)  |
+
+## Setup
+
+| Library              | Version |
+| -------------------- | ------- |
+| refix-message (Rust) | 0.4.3   |
+| refix (Python)       | 0.7.1   |
+| simplefix            | 1.0.17  |
+| quickfix             | 1.16.0  |
+
+The machines:
+
+- A MacBook Pro with an Apple M3 Max, running macOS 26.3, Rust 1.94.1 and Python 3.12.13.
+- An AWS c7a.xlarge with an AMD EPYC 9R14, running Ubuntu 26.04 and Python 3.12.16.
+
+## Run them yourself
+
+From a checkout of the [repository](https://github.com/refixhq/refix), `just bench read_message` runs the Rust
+benchmarks. The [benchmarks directory](https://github.com/refixhq/refix/tree/main/benchmarks) has the Python ones
+and the commands to run them.

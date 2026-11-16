@@ -1,0 +1,116 @@
+---
+title: Your own dictionary
+description: Generate typed messages from your own FIX dictionary with the command-line tool.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The `refix` command-line tool generates [typed messages](/guides/typed-messages/) from your own FIX dictionary.
+
+- It reads a dictionary in QuickFIX's XML format, with the custom messages, fields, values and groups it defines.
+- It writes a Python module, a Rust module or both, each as a single file.
+- It accepts a dictionary with common defects, and prints a warning for each thing it dropped or changed.
+
+## Install the tool
+
+```sh
+uv tool install refix-cli
+```
+
+This installs a prebuilt binary. With a Rust toolchain, `cargo install refix-cli` builds it from source.
+
+## Generate the code
+
+```sh
+refix codegen venue.xml --python venue.py --rust venue.rs
+```
+
+Give `--python`, `--rust` or both, each with the path of the file to write. Do not edit the generated files. Run the
+tool again when the dictionary changes.
+
+## Use the module
+
+In these examples the dictionary gives NewOrderSingle a custom DeskID (5001) field.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		Put `venue.py` where your code can import it. It needs the `refix` package.
+
+		```python
+		import refix
+		from venue import CODEC, NewOrderSingle
+
+		for record in refix.decode_log("session.log", CODEC):
+		    order = record.message
+		    if isinstance(order, NewOrderSingle):
+		        print(order.cl_ord_id, order.desk_id)
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		Put `venue.rs` in `src/` and declare the module. It needs the `refix-message` crate, so run
+		`cargo add refix-message`.
+
+		```rust
+		#[allow(dead_code)]
+		mod venue;
+
+		use refix::message::LogReader;
+		use venue::{DIALECT, Message};
+
+		fn main() -> Result<(), Box<dyn std::error::Error>> {
+		    let mut reader = LogReader::new(DIALECT, None);
+		    reader.feed(&std::fs::read("session.log")?);
+		    for record in reader.finish() {
+		        if let Message::NewOrderSingle(order) = Message::from_raw(record.message) {
+		            println!("{:?} {:?}", order.cl_ord_id()?, order.desk_id()?);
+		        }
+		    }
+		    Ok(())
+		}
+		```
+
+		Without `#[allow(dead_code)]`, a binary gets a warning for each generated item it does not use.
+	</TabItem>
+</Tabs>
+
+The module is used like the FIX 4.4 package in [Typed messages](/guides/typed-messages/).
+
+## How names are derived
+
+| In the dictionary        | Python                | Rust                  |
+| ------------------------ | --------------------- | --------------------- |
+| Message `NewOrderSingle` | `NewOrderSingle`      | `NewOrderSingle`      |
+| Field `DeskID`           | `desk_id`             | `desk_id()`           |
+| Field `SettlCycle`       | `settl_cycle`         | `settl_cycle()`       |
+| Its values, as an enum   | `SettlCycle`          | `SettlCycle`          |
+| Value `SAME_DAY`         | `SettlCycle.SAME_DAY` | `SettlCycle::SameDay` |
+| Group `NoAllocAccounts`  | `alloc_accounts`      | `alloc_accounts()`    |
+
+Some names need a change to be valid or unique:
+
+- A value whose description starts with a digit gets an `N` in front. `2_DAYS` becomes `N_2_DAYS` in Python and
+  `N2Days` in Rust.
+- An enum with the same name as a message gets `Enum` on the end, such as `SecurityStatusEnum`.
+- Two values of one field with the same description are numbered, such as `EURIBOR` and `EURIBOR_2` in Python, and
+  `Euribor` and `Euribor2` in Rust.
+
+## Warnings and errors
+
+A defect that leaves the dictionary usable is a warning, and the code is still generated.
+
+```text
+warning: message 'VenueStatus' has unknown msgcat 'venue', which is read as app
+```
+
+| Defect                                              | What the tool does                 |
+| --------------------------------------------------- | ---------------------------------- |
+| A tag appears twice in one message                  | Keeps the first and drops the rest |
+| A value code is listed twice for one field          | Keeps the first and drops the rest |
+| A message's `msgcat` is not `admin` or `app`        | Reads it as `app`                  |
+| The XML declaration is not at the start of the file | Ignores it                         |
+
+Any other problem stops the tool with an error that names it.
+
+```text
+error: cannot parse 'venue.xml': message 'VenueStatus' references unknown field 'NoSuchField'
+```

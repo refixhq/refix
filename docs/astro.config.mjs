@@ -14,7 +14,21 @@ export default defineConfig({
 			customCss: ['./src/styles/custom.css'],
 			expressiveCode: { styleOverrides: { borderRadius: '0.5rem' } },
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/refixhq/refix' }],
-			sidebar: [{ label: 'Quick start', slug: 'quick-start' }],
+			sidebar: [
+				{ label: 'Quick start', slug: 'quick-start' },
+				{
+					label: 'Guides',
+					items: [
+						{ label: 'Reading logs', slug: 'guides/reading-logs' },
+						{ label: 'Raw messages', slug: 'guides/raw-messages' },
+						{ label: 'Typed messages', slug: 'guides/typed-messages' },
+						{ label: 'Your own dictionary', slug: 'guides/your-own-dictionary' },
+					],
+				},
+				{ label: 'Benchmarks', slug: 'benchmarks' },
+				{ label: 'Reference', slug: 'reference' },
+				{ label: 'Roadmap', slug: 'roadmap' },
+			],
 		}),
 	],
 });

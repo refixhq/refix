@@ -1,0 +1,216 @@
+---
+title: Raw messages
+description: Read the fields of any FIX message by tag, without a dictionary.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+A raw message reads the fields of any FIX message by tag, with no dictionary.
+
+- It converts values to integers, decimals, timestamps and the other FIX types.
+- It indexes the fields once and converts a value only when it is asked for.
+- It keeps every field in the order sent, including custom tags and duplicates.
+
+## Get a raw message
+
+| Source                           | Use                                                             |
+| -------------------------------- | --------------------------------------------------------------- |
+| A log                            | The [log reader](/guides/reading-logs/). Each record holds one. |
+| Bytes that hold one message      | The [tokenizer](#one-message-from-bytes).                       |
+| Bytes arriving from a connection | The [message stream](#messages-from-a-connection).              |
+
+The log reader is lenient. The tokenizer and the message stream are strict, and need SOH separators, a correct
+BodyLength and a correct CheckSum.
+
+## Read fields
+
+The examples read this order, shown as ReFIX prints it:
+
+```text
+8=FIX.4.4|9=129|35=D|49=BUYSIDE|56=VENUE|34=3|52=20261103-09:30:36|11=ORDER-1|1=XXXXXXXX|55=ACME|54=1|60=20261103-09:30:36|40=2|44=101.25|38=100|10=021
+```
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		message.get_str(11)            # 'ORDER-1'
+		message.get_int(34)            # 3
+		message.get_decimal(44)        # Decimal('101.25')
+		message.get_utc_timestamp(60)  # datetime(2026, 11, 3, 9, 30, 36, tzinfo=timezone.utc)
+		message.get(55)                # b'ACME'
+		message.get_str(58)            # None
+		```
+
+		A field that is absent reads as `None`. A value that cannot be converted raises `InvalidValueError` from
+		`refix.errors`, which names the tag.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::Tag;
+
+		let id = message.get_str(Tag(11))?;              // Some("ORDER-1")
+		let seq = message.get_int(Tag(34))?;             // Some(3)
+		let price = message.get_decimal(Tag(44))?;       // Some(101.25)
+		let time = message.get_utc_timestamp(Tag(60))?;  // Some(2026-11-03 09:30:36 UTC)
+		let symbol = message.get(Tag(55));               // Some(b"ACME")
+		let text = message.get_str(Tag(58))?;            // None
+		```
+
+		A field that is absent reads as `Ok(None)`. A value that cannot be converted is an `Err` holding an
+		`InvalidValue`, which names the tag.
+	</TabItem>
+</Tabs>
+
+Each method returns the first field with the tag.
+
+| Method              | Python      | Rust           |
+| ------------------- | ----------- | -------------- |
+| `get`               | `bytes`     | `&[u8]`        |
+| `get_str`           | `str`       | `&str`         |
+| `get_int`           | `int`       | `i64`          |
+| `get_bool`          | `bool`      | `bool`         |
+| `get_decimal`       | `Decimal`   | `Decimal`      |
+| `get_utc_timestamp` | `datetime`  | `UtcTimestamp` |
+| `get_date`          | `date`      | `Date`         |
+| `get_time`          | `time`      | `Time`         |
+| `get_month_year`    | `MonthYear` | `MonthYear`    |
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		`get_utc_timestamp_ns` and `get_time_ns` return nanoseconds as an `int`, for values finer than `datetime` and
+		`time` can hold.
+	</TabItem>
+	<TabItem label="Rust">
+		The value types are ReFIX's own. Cargo features convert them to the types of other crates: `rust_decimal-1`
+		and `bigdecimal-04` for `Decimal`, and `chrono-04`, `jiff-02` and `time-03` for `Date`, `Time` and
+		`UtcTimestamp`.
+	</TabItem>
+</Tabs>
+
+## Every field
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		for tag, value in message.entries():
+		    print(tag, value)
+		```
+
+		Bytes that are not a field, such as text without an `=`, come under the tag `refix.MALFORMED_TAG`.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		for (tag, value) in message.entries() {
+		    println!("{tag} {}", String::from_utf8_lossy(value));
+		}
+		```
+
+		Bytes that are not a field, such as text without an `=`, come under the tag `Tag::MALFORMED`.
+	</TabItem>
+</Tabs>
+
+The fields come in the order sent, with duplicates. Printing a message gives its wire form, with `|` for SOH.
+
+## One message from bytes
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		import refix
+
+		tokenizer = refix.Tokenizer()
+		message = tokenizer.tokenize(data)
+		```
+
+		`tokenize` raises a `TokenizeError` from `refix.errors` unless `data` holds exactly one valid message.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::Tokenizer;
+
+		let tokenizer = Tokenizer::default();
+		match tokenizer.tokenize(data.into()) {
+		    Ok(message) => println!("{message}"),
+		    Err(error) => println!("not a message: {error:?}"),
+		}
+		```
+
+		`tokenize` takes a `bytes::Bytes`, which a `Vec<u8>` converts into. It returns a `TokenizeError` unless the
+		bytes hold exactly one valid message.
+	</TabItem>
+</Tabs>
+
+Bytes that end before the message does, bytes after the message and a failed check are all errors.
+
+## Messages from a connection
+
+Feed the message stream the bytes as they arrive, in pieces of any size. It returns each complete message, and
+reports bytes that are not part of a message with the reason.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		import refix
+
+		stream = refix.MessageStream()
+
+
+		def on_bytes(data: bytes) -> None:
+		    stream.feed(data)
+		    while (item := stream.next_message()) is not None:
+		        if isinstance(item, refix.Garble):
+		            print("skipped", len(item.bytes), "bytes:", item.reason.name)
+		        else:
+		            print(item.get_str(35))
+		```
+
+		`next_message` returns `None` when it needs more bytes.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::stream::Outcome;
+		use refix::message::{MessageStream, Tag};
+
+		fn on_bytes(stream: &mut MessageStream, data: &[u8]) {
+		    stream.feed(data);
+		    loop {
+		        match stream.next_message() {
+		            Outcome::Message(message) => println!("{:?}", message.get_str(Tag(35))),
+		            Outcome::Garbled { reason, bytes } => {
+		                println!("skipped {} bytes: {reason:?}", bytes.len());
+		            }
+		            Outcome::Incomplete => break,
+		        }
+		    }
+		}
+		```
+
+		`next_message` returns `Outcome::Incomplete` when it needs more bytes.
+	</TabItem>
+</Tabs>
+
+## Custom data fields
+
+The value of a data field can contain SOH, so it is read by the length in the field before it. The standard length
+fields are built in. Name any custom ones in a dialect:
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		dialect = refix.Dialect(extra_length_tags=[5001])
+		tokenizer = refix.Tokenizer(dialect)
+		```
+
+		`MessageStream` and `read_log` take a dialect in the same way.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::{Dialect, Tag, Tokenizer};
+
+		let dialect = Dialect::new().with_extra_length_tags(&[Tag(5001)]);
+		let tokenizer = Tokenizer::new(dialect);
+		```
+
+		`MessageStream::new` and `LogReader::new` take a dialect in the same way.
+	</TabItem>
+</Tabs>

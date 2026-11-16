@@ -1,0 +1,254 @@
+---
+title: Typed messages
+description: Read FIX messages through named fields, enums and repeating groups.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+A typed message reads a FIX message through named fields, with no tag numbers. Its code is generated from a FIX
+dictionary.
+
+- Each message type in the dictionary has its own type, with an accessor for every field the dictionary gives it.
+- Values are converted to the field's type, and a field with a fixed set of values is an enum.
+- A repeating group is read as a sequence of instances.
+- Messages and values that the dictionary does not list are kept, not rejected.
+
+## Choose a dictionary
+
+- For standard FIX 4.4, install the `refix-fix44` package next to `refix`. It is the only ready-made package for
+  now.
+- For any other dictionary, such as a venue's, generate your own module with the command-line tool.
+  [Your own dictionary](/guides/your-own-dictionary/) explains how.
+
+The examples on this page use `refix-fix44`. A module generated from your own dictionary is used the same way, with
+the names your dictionary gives.
+
+## Get typed messages
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		import refix
+		from refix_fix44 import CODEC
+
+		for record in refix.decode_log("session.log", CODEC):
+		    message = record.message
+		```
+
+		`CODEC` comes with every generated module. For a raw message from somewhere else, the module's `from_raw`
+		does the same conversion. Give the module's `DIALECT` to the tokenizer or the message stream that reads it.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::LogReader;
+		use refix_fix44::{DIALECT, Message};
+
+		let mut reader = LogReader::new(DIALECT, None);
+		reader.feed(&std::fs::read("session.log")?);
+		for record in reader.finish() {
+		    let message = Message::from_raw(record.message);
+		}
+		```
+
+		`Message` and `DIALECT` come with every generated module. `Message::from_raw` takes a raw message from any
+		source. Give `DIALECT` to the reader, tokenizer or message stream that reads it.
+	</TabItem>
+</Tabs>
+
+Each message is read as the type its MsgType names.
+
+## Tell messages apart
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		from refix_fix44 import MarketDataSnapshotFullRefresh, NewOrderSingle
+
+		match message:
+		    case NewOrderSingle():
+		        print("order", message.cl_ord_id)
+		    case MarketDataSnapshotFullRefresh():
+		        print("snapshot", message.symbol)
+		    case refix.RawMessage():
+		        print("not in the dictionary:", message.get_str(35))
+		```
+
+		A message whose MsgType is not in the dictionary stays a `RawMessage`.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		match Message::from_raw(record.message) {
+		    Message::NewOrderSingle(order) => println!("order {:?}", order.cl_ord_id()?),
+		    Message::MarketDataSnapshotFullRefresh(snapshot) => {
+		        println!("snapshot {:?}", snapshot.symbol()?);
+		    }
+		    Message::Unrecognized(raw) => println!("not in the dictionary: {raw}"),
+		    _ => {}
+		}
+		```
+
+		A message whose MsgType is not in the dictionary is a `Message::Unrecognized` holding the raw message.
+	</TabItem>
+</Tabs>
+
+## Read fields
+
+The examples read this order:
+
+```text
+8=FIX.4.4|9=145|35=D|49=BUYSIDE|56=VENUE|34=3|52=20261103-09:30:36|11=ORDER-1|1=ACC-7731|55=ACME|54=1|60=20261103-09:30:36.250|40=2|44=101.25|38=100|5001=desk-4|10=228
+```
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		order.cl_ord_id      # 'ORDER-1'
+		order.side           # <Side.BUY: '1'>
+		order.ord_type       # <OrdType.LIMIT: '2'>
+		order.price          # Decimal('101.25')
+		order.order_qty      # Decimal('100')
+		order.transact_time  # datetime(2026, 11, 3, 9, 30, 36, 250000, tzinfo=timezone.utc)
+		order.text           # None
+		```
+
+		A field that is absent reads as `None`, and a value that cannot be converted raises `InvalidValueError`.
+		Timestamps and times also have a property ending in `_ns`, such as `transact_time_ns`, that gives nanoseconds
+		as an `int`.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		let id = order.cl_ord_id()?;        // Some("ORDER-1")
+		let side = order.side()?;           // Some(Side::Buy)
+		let ord_type = order.ord_type()?;   // Some(OrdType::Limit)
+		let price = order.price()?;         // Some(101.25)
+		let qty = order.order_qty()?;       // Some(100)
+		let time = order.transact_time()?;  // Some(2026-11-03 09:30:36.250 UTC)
+		let text = order.text()?;           // None
+		```
+
+		A field that is absent reads as `Ok(None)`, and a value that cannot be converted is an `Err`.
+	</TabItem>
+</Tabs>
+
+Each accessor is named after its field in the dictionary, in snake case.
+
+## Enums
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		from refix_fix44 import Side
+
+		order.side is Side.BUY  # True
+		order.side.name         # 'BUY'
+		order.side.value        # '1'
+		```
+
+		A value the dictionary does not list reads as an `Unrecognized` from `refix.enums`, which holds it in `value`.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix_fix44::Side;
+
+		match order.side()? {
+		    Some(Side::Buy) => println!("buy"),
+		    Some(Side::Sell) => println!("sell"),
+		    Some(Side::Unrecognized(value)) => println!("not in the dictionary: {value}"),
+		    _ => {}
+		}
+		```
+
+		A value the dictionary does not list reads as the enum's `Unrecognized` variant, which holds it.
+	</TabItem>
+</Tabs>
+
+## Header and trailer
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		order.header.sender_comp_id  # 'BUYSIDE'
+		order.header.msg_seq_num     # 3
+		order.header.sending_time    # datetime(2026, 11, 3, 9, 30, 36, tzinfo=timezone.utc)
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		let header = order.header();
+		let sender = header.sender_comp_id()?;  // Some("BUYSIDE")
+		let seq = header.msg_seq_num()?;        // Some(3)
+		```
+	</TabItem>
+</Tabs>
+
+The trailer's fields are read the same way from `trailer`.
+
+## Repeating groups
+
+A group is named after its count field without the `No`, so NoMDEntries (268) is `md_entries`. This market data
+snapshot has two entries:
+
+```text
+8=FIX.4.4|9=125|35=W|49=VENUE|56=BUYSIDE|34=9|52=20261103-09:30:37|262=REQ-1|55=ACME|268=2|269=0|270=101.20|271=500|269=1|270=101.30|271=300|10=216
+```
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		for entry in snapshot.md_entries:
+		    print(entry.md_entry_type.name, entry.md_entry_px, entry.md_entry_size)
+		```
+
+		```text
+		BID 101.20 500
+		OFFER 101.30 300
+		```
+
+		The group is a tuple of instances, and is empty when the group is absent.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		for entry in &snapshot.md_entries()? {
+		    let (Some(kind), Some(price), Some(size)) =
+		        (entry.md_entry_type()?, entry.md_entry_px()?, entry.md_entry_size()?)
+		    else {
+		        continue;
+		    };
+		    println!("{kind:?} {price} {size}");
+		}
+		```
+
+		```text
+		Bid 101.20 500
+		Offer 101.30 300
+		```
+
+		The group also has `len`, `is_empty` and `get`, and is empty when the group is absent.
+	</TabItem>
+</Tabs>
+
+A group inside a group is read the same way from each instance.
+
+## Fields outside the dictionary
+
+The [raw message](/guides/raw-messages/) behind a typed one reads any field by tag, such as the custom 5001 in the
+order above.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		order.raw.get_str(5001)  # 'desk-4'
+		```
+
+		Printing a typed message shows its name and wire form, such as `NewOrderSingle(8=FIX.4.4|9=145|35=D|...)`.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::Tag;
+
+		let desk = order.raw().get_str(Tag(5001))?;  // Some("desk-4")
+		```
+
+		To print a typed message, print its raw message.
+	</TabItem>
+</Tabs>
