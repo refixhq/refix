@@ -1,6 +1,6 @@
 # refix-fix44
 
-Typed FIX 4.4 messages for [ReFIX](https://github.com/refixhq/refix),
+Typed FIX 4.4 messages for [ReFIX](https://refix.dev),
 generated from QuickFIX's `FIX44.xml`.
 
 ```rust

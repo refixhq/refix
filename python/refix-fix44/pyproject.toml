@@ -14,9 +14,10 @@ classifiers = [
     "Topic :: Office/Business :: Financial",
     "Typing :: Typed",
 ]
-dependencies = ["refix>=0.6"]
+dependencies = ["refix>=0.8"]
 
 [project.urls]
+Homepage = "https://refix.dev"
 Repository = "https://github.com/refixhq/refix"
 
 # Same version as the crate, generated from the same source.

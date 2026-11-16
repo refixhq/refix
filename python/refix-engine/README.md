@@ -1,7 +1,7 @@
 # refix
 
 FIX message processing for Python, powered by Rust. These are the Python bindings
-of [ReFIX](https://github.com/refixhq/refix). Requires Python 3.12 or later.
+of [ReFIX](https://refix.dev). Requires Python 3.12 or later.
 
 > ReFIX is in early development. It reads FIX messages and types them through
 > generated code. Building messages and the session layer are not implemented

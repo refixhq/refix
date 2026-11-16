@@ -1,6 +1,6 @@
 # refix-dictionary
 
-The FIX dictionary model for [ReFIX](https://github.com/refixhq/refix), and a parser for QuickFIX XML dictionaries.
+The FIX dictionary model for [ReFIX](https://refix.dev), and a parser for QuickFIX XML dictionaries.
 A `Dictionary` is resolved, so every reference in it is valid.
 
 > ReFIX is in early development, and APIs change between 0.x releases.

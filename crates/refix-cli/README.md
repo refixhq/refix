@@ -1,6 +1,6 @@
 # refix-cli
 
-The `refix` command-line tool for [ReFIX](https://github.com/refixhq/refix). It generates typed Rust and Python messages
+The `refix` command-line tool for [ReFIX](https://refix.dev). It generates typed Rust and Python messages
 from a QuickFIX-format dictionary.
 
 > ReFIX is in early development, and APIs change between 0.x releases.

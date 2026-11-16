@@ -21,6 +21,7 @@ classifiers = [
 dynamic = ["version"]
 
 [project.urls]
+Homepage = "https://refix.dev"
 Repository = "https://github.com/refixhq/refix"
 
 [tool.maturin]
