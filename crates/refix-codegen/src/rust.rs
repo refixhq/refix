@@ -259,6 +259,18 @@ impl NewOrderSingle {
     }
 }
 
+impl std::fmt::Debug for NewOrderSingle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NewOrderSingle({})", self.0)
+    }
+}
+
+impl std::fmt::Display for NewOrderSingle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
 pub enum Message {
     NewOrderSingle(NewOrderSingle),
     Unrecognized(RawMessage),
@@ -269,6 +281,24 @@ impl Message {
         match raw.get(Tag(35)) {
             Some(NewOrderSingle::MSG_TYPE) => Self::NewOrderSingle(NewOrderSingle::from_raw(raw)),
             _ => Self::Unrecognized(raw),
+        }
+    }
+}
+
+impl std::fmt::Debug for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NewOrderSingle(message) => std::fmt::Debug::fmt(message, f),
+            Self::Unrecognized(raw) => write!(f, "Unrecognized({raw})"),
+        }
+    }
+}
+
+impl std::fmt::Display for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NewOrderSingle(message) => std::fmt::Display::fmt(message, f),
+            Self::Unrecognized(raw) => std::fmt::Display::fmt(raw, f),
         }
     }
 }
@@ -694,6 +724,18 @@ impl NewOrderSingle {
     }
 }
 
+impl std::fmt::Debug for NewOrderSingle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NewOrderSingle({})", self.0)
+    }
+}
+
+impl std::fmt::Display for NewOrderSingle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
 pub enum Message {
     NewOrderSingle(NewOrderSingle),
     Unrecognized(RawMessage),
@@ -704,6 +746,24 @@ impl Message {
         match raw.get(Tag(35)) {
             Some(NewOrderSingle::MSG_TYPE) => Self::NewOrderSingle(NewOrderSingle::from_raw(raw)),
             _ => Self::Unrecognized(raw),
+        }
+    }
+}
+
+impl std::fmt::Debug for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NewOrderSingle(message) => std::fmt::Debug::fmt(message, f),
+            Self::Unrecognized(raw) => write!(f, "Unrecognized({raw})"),
+        }
+    }
+}
+
+impl std::fmt::Display for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NewOrderSingle(message) => std::fmt::Display::fmt(message, f),
+            Self::Unrecognized(raw) => std::fmt::Display::fmt(raw, f),
         }
     }
 }
