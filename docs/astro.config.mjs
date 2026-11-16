@@ -25,6 +25,7 @@ export default defineConfig({
 						{ label: 'Your own dictionary', slug: 'guides/your-own-dictionary' },
 					],
 				},
+				{ label: 'Benchmarks', slug: 'benchmarks' },
 			],
 		}),
 	],

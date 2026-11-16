@@ -1,6 +1,6 @@
 use bytes::Bytes;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use refix_message::{RawMessage, Tag, Tokenizer};
+use refix_message::{Decimal, RawMessage, Tag, TimePrecision, Tokenizer, UtcTimestamp};
 use std::hint::black_box;
 
 fn read_message_raw(c: &mut Criterion) {
@@ -15,6 +15,30 @@ fn read_message_raw(c: &mut Criterion) {
         b.iter(|| {
             let message = tokenizer.tokenize(black_box(frame.clone())).unwrap();
             black_box(read(&message));
+        })
+    });
+}
+
+fn read_message_typed(c: &mut Criterion) {
+    let tokenizer = Tokenizer::default();
+    let frame = frame(EXECUTION_REPORT);
+
+    let message = tokenizer.tokenize(frame.clone()).unwrap();
+    let expected = (
+        Some("CLT0001"),
+        Some(1_000_000),
+        Some(Decimal::new(10925, -4)),
+        Some(UtcTimestamp::new(
+            1_785_492_000_120_000_000,
+            TimePrecision::MILLIS,
+        )),
+    );
+    assert_eq!(read_typed(&message), expected);
+
+    c.bench_function("read_message_typed", |b| {
+        b.iter(|| {
+            let message = tokenizer.tokenize(black_box(frame.clone())).unwrap();
+            black_box(read_typed(&message));
         })
     });
 }
@@ -70,5 +94,21 @@ fn read(message: &RawMessage) -> [Option<&[u8]>; 4] {
     TAGS.map(|tag| message.get(tag))
 }
 
-criterion_group!(benches, read_message_raw, parse);
+type Typed<'a> = (
+    Option<&'a str>,
+    Option<i64>,
+    Option<Decimal>,
+    Option<UtcTimestamp>,
+);
+
+fn read_typed(message: &RawMessage) -> Typed<'_> {
+    (
+        message.get_str(Tag(11)).unwrap(),
+        message.get_int(Tag(38)).unwrap(),
+        message.get_decimal(Tag(44)).unwrap(),
+        message.get_utc_timestamp(Tag(60)).unwrap(),
+    )
+}
+
+criterion_group!(benches, read_message_raw, read_message_typed, parse);
 criterion_main!(benches);
