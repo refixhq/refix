@@ -31,6 +31,9 @@ class GarbledError(TokenizeError):
 class IncompleteError(TokenizeError):
     """The bytes end mid-message."""
 
+    def __str__(self) -> str:
+        return "incomplete message"
+
 
 class TrailingBytesError(TokenizeError):
     """One message was found, but the input continues past it."""
@@ -45,6 +48,9 @@ class TrailingBytesError(TokenizeError):
 
 class TooLargeToIndexError(TokenizeError):
     """The frame is too long for the index's offsets to address."""
+
+    def __str__(self) -> str:
+        return "frame too large to index"
 
 
 class InvalidValueError(ValueError):
