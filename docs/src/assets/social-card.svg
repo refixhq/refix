@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+	<defs>
+		<linearGradient id="tint" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="0" stop-color="#eaf1ff"/>
+			<stop offset="0.7" stop-color="#ffffff"/>
+		</linearGradient>
+	</defs>
+	<rect width="1200" height="630" fill="url(#tint)"/>
+	<rect y="618" width="1200" height="12" fill="#0052d9"/>
+	<g font-family="system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif">
+		<text x="90" y="236" font-size="66" font-weight="700" fill="#0b1220" letter-spacing="-1">
+			<tspan x="90">A FIX engine for Rust</tspan>
+			<tspan x="90" dy="80">and Python</tspan>
+		</text>
+		<text x="90" y="388" font-size="29" fill="#4d5a78">
+			<tspan x="90">The FIX protocol in pure Rust,</tspan>
+			<tspan x="90" dy="40">with first-party bindings for Python.</tspan>
+		</text>
+		<text x="90" y="530" font-size="30" font-weight="600" fill="#0052d9">refix.dev</text>
+	</g>
+	<svg x="810" y="206.1" width="300" height="217.8" viewBox="0 0 327.2 237.5"><g fill="#031b45"><path d="M69.6 0H201.85A46 46 0 0 1 215.97 89.68L257.6 141.9H226.74L168 68.2H201.85A22.3 22.3 0 0 0 201.85 23.6H88.18Z"/><path fill-rule="evenodd" d="M0 237.5V188.9A11 11 0 0 1 11 177.9H54.2A12 12 0 0 1 66.2 189.9V200.9A14 14 0 0 1 52.2 214.9H10.1V237.5ZM10.1 192.1A4 4 0 0 1 14.1 188.1H51.5A5 5 0 0 1 56.5 193.1V200.1A5 5 0 0 1 51.5 205.1H10.1Z"/><path d="M38.3 214.9H50.4L66.6 237.5H54.5Z"/><path fill-rule="evenodd" d="M137.2 219.6V204.8A11 11 0 0 0 126.2 193.8H93.1A11.5 11.5 0 0 0 81.6 205.3V226.2A11.5 11.5 0 0 0 93.1 237.7H133V228.7H95.5A4 4 0 0 1 91.5 224.7V219.6ZM91.5 211V207.4A4.5 4.5 0 0 1 96 202.9H122.8A4.5 4.5 0 0 1 127.3 207.4V211Z"/></g><g fill="#0052d9"><path d="M78.96 68.35H140.12L198.74 141.9H169.38L148.13 115.25Q144.15 110.25 139.65 110.25H91.06A6.3 6.3 0 0 1 91.06 97.65H126.21A8.35 8.35 0 0 0 126.21 80.95H78.96A6.3 6.3 0 0 1 78.96 68.35Z"/><path d="M152.2 237.5V190.1A12 12 0 0 1 164.2 178.1H214.8V188H166A4 4 0 0 0 162 192V202.9H214.7V212.1H162V237.5Z"/><path d="M229.8 178.1H239.7V237.5H229.8Z"/><path d="M255.5 178.1H268.8L327.2 237.5H313.9Z"/><path d="M313.2 178.1H326.7L268.2 237.5H254.7Z"/></g></svg>
+</svg>
