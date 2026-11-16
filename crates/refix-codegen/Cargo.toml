@@ -1,6 +1,6 @@
 [package]
 name = "refix-codegen"
-description = "Typed message code generator for the ReFIX engine"
+description = "Code generator for typed FIX protocol messages, for the ReFIX engine"
 version = "0.5.1"
 authors.workspace = true
 edition.workspace = true

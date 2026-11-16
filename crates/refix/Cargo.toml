@@ -1,6 +1,6 @@
 [package]
 name = "refix"
-description = "A FIX engine written in pure Rust with Python bindings"
+description = "A FIX protocol engine written in pure Rust with Python bindings"
 version = "0.3.2"
 authors.workspace = true
 edition.workspace = true
