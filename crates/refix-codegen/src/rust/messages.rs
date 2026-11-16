@@ -1,6 +1,7 @@
 use refix_dictionary::spec::Field;
 use refix_dictionary::{MemberContext, Tag, dictionary};
 
+use super::docs::{code, member_docs, plain};
 use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::names::Names;
@@ -28,7 +29,12 @@ pub(super) fn emit_message(
 }
 
 fn emit_message_struct(message: dictionary::Message<'_>) -> String {
-    format!("pub struct {}(RawMessage);\n", message.name())
+    format!(
+        "/// The {} (35={}) message.\npub struct {}(RawMessage);\n",
+        code(message.name()),
+        plain(message.msg_type()),
+        message.name()
+    )
 }
 
 fn emit_message_impl(
@@ -118,7 +124,7 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         Lifetime::Scope => ("&'a ", "'a"),
     };
 
-    match Conversion::of(field) {
+    let method = match Conversion::of(field) {
         Conversion::Str => format!(
             "    pub fn {name}(&self) -> Result<Option<{reference}str>, InvalidValue> {{\n        self.0.get_str(Tag({tag}))\n    }}\n"
         ),
@@ -164,7 +170,9 @@ pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) ->
         Conversion::Bytes | Conversion::Raw => format!(
             "    pub fn {name}(&self) -> Option<{reference}[u8]> {{\n        self.0.get(Tag({tag}))\n    }}\n"
         ),
-    }
+    };
+    let summary = format!("The {} ({tag}) field.", code(&field.name));
+    format!("{}{method}", member_docs(&summary, &field.name, name))
 }
 
 /// An accessor reading `tag` with `getter` and classifying it into the
@@ -219,9 +227,30 @@ mod tests {
         )
     }
 
+    /// An accessor from its signature on, without its doc comment.
+    fn method(accessor: &str) -> &str {
+        &accessor[accessor.find("    pub fn").unwrap()..]
+    }
+
     fn scope_signature(field: &Field) -> String {
         let accessor = accessor(field, Lifetime::Scope);
-        accessor.lines().next().unwrap().trim().to_owned()
+        method(&accessor).lines().next().unwrap().trim().to_owned()
+    }
+
+    #[test]
+    fn an_accessor_is_documented_and_found_by_its_fix_name() {
+        let accessor = accessor(&field("ClOrdID", 11, DataType::String), Lifetime::Receiver);
+
+        assert!(accessor.starts_with(
+            "    /// The `ClOrdID` (11) field.\n    #[doc(alias = \"ClOrdID\")]\n    pub fn cl_ord_id("
+        ));
+    }
+
+    #[test]
+    fn an_accessor_named_like_its_field_has_no_alias() {
+        let accessor = accessor(&field("symbol", 55, DataType::String), Lifetime::Receiver);
+
+        assert!(accessor.starts_with("    /// The `symbol` (55) field.\n    pub fn symbol("));
     }
 
     #[test]
@@ -308,7 +337,7 @@ mod tests {
         let accessor = emit_accessor(&signature, &names, Lifetime::Scope);
 
         assert_eq!(
-            accessor.lines().next().unwrap().trim(),
+            method(&accessor).lines().next().unwrap().trim(),
             "pub fn signature(&self) -> Option<&'a [u8]> {"
         );
     }
@@ -354,7 +383,7 @@ mod tests {
         let accessor = accessor(&exec_inst, Lifetime::Receiver);
 
         assert_eq!(
-            accessor,
+            method(&accessor),
             "    pub fn exec_inst(&self) -> Result<Option<MultipleValues<'_, ExecInst<'_>>>, InvalidValue> {\n        self.0.get_multiple_values(Tag(18))\n    }\n"
         );
     }
@@ -383,7 +412,7 @@ mod tests {
         let ord_type = with_value(field("OrdType", 40, DataType::Char));
         let body = |field: &Field| {
             let accessor = accessor(field, Lifetime::Receiver);
-            accessor.lines().nth(1).unwrap().trim().to_owned()
+            method(&accessor).lines().nth(1).unwrap().trim().to_owned()
         };
 
         assert_eq!(

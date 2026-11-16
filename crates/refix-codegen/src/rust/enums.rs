@@ -1,5 +1,6 @@
 use refix_dictionary::spec::Field;
 
+use super::docs::code;
 use super::names::Names;
 use crate::literal::int_literal;
 
@@ -24,9 +25,18 @@ pub(super) fn emit_enum(field: &Field, names: &Names) -> String {
         ("<'a>", "&'a str")
     };
 
-    let declarations: String = variants
+    let declarations: String = field
+        .values
         .iter()
-        .map(|variant| format!("    {variant},\n"))
+        .zip(variants)
+        .map(|(value, variant)| {
+            let wire = if int_based {
+                int_literal(&value.value)
+            } else {
+                value.value.clone()
+            };
+            format!("    /// {}\n    {variant},\n", code(&wire))
+        })
         .collect();
     let from_arms: String = codes
         .iter()
@@ -41,7 +51,9 @@ pub(super) fn emit_enum(field: &Field, names: &Names) -> String {
 
     let mut items = vec![
         format!(
-            "#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\npub enum {name}{generics} {{\n{declarations}    Unrecognized({payload}),\n}}\n"
+            "/// The values of the {} ({}) field.\n#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\npub enum {name}{generics} {{\n{declarations}    /// A value the dictionary does not list.\n    Unrecognized({payload}),\n}}\n",
+            code(&field.name),
+            field.tag
         ),
         format!(
             "impl{generics} {name}{generics} {{\n    pub fn from_value(value: {payload}) -> Self {{\n        match value {{\n{from_arms}            unrecognized => Self::Unrecognized(unrecognized),\n        }}\n    }}\n\n    pub fn value(self) -> {payload} {{\n        match self {{\n{value_arms}            Self::Unrecognized(value) => value,\n        }}\n    }}\n}}\n"
@@ -94,10 +106,14 @@ mod tests {
         );
 
         let expected = "\
+/// The values of the `PartyRole` (1) field.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PartyRole {
+    /// `1`
     ExecutingFirm,
+    /// `3`
     ClientId,
+    /// A value the dictionary does not list.
     Unrecognized(i64),
 }
 
@@ -159,5 +175,27 @@ impl PartyRole {
         let code = emitted(field);
 
         assert!(code.contains("            \"a\\\"b\\\\\" => Self::Odd,\n"));
+    }
+
+    #[test]
+    fn a_string_coded_enum_documents_each_wire_value() {
+        let field = enum_field("Side", DataType::Char, &[("1", "BUY")]);
+
+        let code = emitted(field);
+
+        assert!(code.starts_with("/// The values of the `Side` (1) field.\n#[derive("));
+        assert!(code.contains("    /// `1`\n    Buy,\n"));
+        assert!(code.contains(
+            "    /// A value the dictionary does not list.\n    Unrecognized(&'a str),\n"
+        ));
+    }
+
+    #[test]
+    fn a_value_stays_on_its_doc_comment_line() {
+        let field = enum_field("Code", DataType::String, &[("a\nb", "ODD")]);
+
+        let code = emitted(field);
+
+        assert!(code.contains("    /// `a\\nb`\n    Odd,\n"));
     }
 }

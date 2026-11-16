@@ -4,12 +4,17 @@
 
 use refix_message::{Date, Decimal, Dialect, GroupTable, Instances, InvalidValue, KnownTags, MonthYear, MultipleValues, RawMessage, Tag, Time, UtcTimestamp};
 
+/// The dialect of this dictionary.
 pub const DIALECT: Dialect<'static> = Dialect::new().with_extra_length_tags(&[Tag(93)]);
 
+/// The values of the `OrdType` (40) field.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrdType<'a> {
+    /// `1`
     Market,
+    /// `2`
     Limit,
+    /// A value the dictionary does not list.
     Unrecognized(&'a str),
 }
 
@@ -37,10 +42,14 @@ impl<'a> From<&'a str> for OrdType<'a> {
     }
 }
 
+/// The values of the `ExecInst` (18) field.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ExecInst<'a> {
+    /// `1`
     NotHeld,
+    /// `6`
     ParticipateDontInitiate,
+    /// A value the dictionary does not list.
     Unrecognized(&'a str),
 }
 
@@ -68,10 +77,14 @@ impl<'a> From<&'a str> for ExecInst<'a> {
     }
 }
 
+/// The values of the `PartyRole` (452) field.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PartyRole {
+    /// `1`
     ExecutingFirm,
+    /// `3`
     ClientId,
+    /// A value the dictionary does not list.
     Unrecognized(i64),
 }
 
@@ -121,10 +134,14 @@ pub mod parties {
             self.0
         }
 
+        /// The `PartyID` (448) field.
+        #[doc(alias = "PartyID")]
         pub fn party_id(&self) -> Result<Option<&'a str>, InvalidValue> {
             self.0.get_str(Tag(448))
         }
 
+        /// The `PartyRole` (452) field.
+        #[doc(alias = "PartyRole")]
         pub fn party_role(&self) -> Result<Option<PartyRole>, InvalidValue> {
             Ok(self.0.get_int(Tag(452))?.map(PartyRole::from_value))
         }
@@ -158,12 +175,15 @@ pub mod ptys_sub_grp {
             self.0
         }
 
+        /// The `PartySubID` (523) field.
+        #[doc(alias = "PartySubID")]
         pub fn party_sub_id(&self) -> Result<Option<&'a str>, InvalidValue> {
             self.0.get_str(Tag(523))
         }
     }
 }
 
+/// The header fields of a message.
 #[derive(Clone, Copy, Debug)]
 pub struct Header<'a>(refix_message::Scope<'a>, KnownTags<'static>);
 
@@ -183,30 +203,44 @@ impl<'a> Header<'a> {
         self.0
     }
 
+    /// The `BeginString` (8) field.
+    #[doc(alias = "BeginString")]
     pub fn begin_string(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(8))
     }
 
+    /// The `BodyLength` (9) field.
+    #[doc(alias = "BodyLength")]
     pub fn body_length(&self) -> Result<Option<i64>, InvalidValue> {
         self.0.get_int(Tag(9))
     }
 
+    /// The `MsgType` (35) field.
+    #[doc(alias = "MsgType")]
     pub fn msg_type(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(35))
     }
 
+    /// The `SenderCompID` (49) field.
+    #[doc(alias = "SenderCompID")]
     pub fn sender_comp_id(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(49))
     }
 
+    /// The `TargetCompID` (56) field.
+    #[doc(alias = "TargetCompID")]
     pub fn target_comp_id(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(56))
     }
 
+    /// The `MsgSeqNum` (34) field.
+    #[doc(alias = "MsgSeqNum")]
     pub fn msg_seq_num(&self) -> Result<Option<i64>, InvalidValue> {
         self.0.get_int(Tag(34))
     }
 
+    /// The `SendingTime` (52) field.
+    #[doc(alias = "SendingTime")]
     pub fn sending_time(&self) -> Result<Option<UtcTimestamp>, InvalidValue> {
         self.0.get_utc_timestamp(Tag(52))
     }
@@ -245,6 +279,8 @@ pub mod header {
                 self.0
             }
 
+            /// The `HopCompID` (628) field.
+            #[doc(alias = "HopCompID")]
             pub fn hop_comp_id(&self) -> Result<Option<&'a str>, InvalidValue> {
                 self.0.get_str(Tag(628))
             }
@@ -252,6 +288,7 @@ pub mod header {
     }
 }
 
+/// The trailer fields of a message.
 #[derive(Clone, Copy, Debug)]
 pub struct Trailer<'a>(refix_message::Scope<'a>);
 
@@ -266,19 +303,26 @@ impl<'a> Trailer<'a> {
         self.0
     }
 
+    /// The `SignatureLength` (93) field.
+    #[doc(alias = "SignatureLength")]
     pub fn signature_length(&self) -> Result<Option<i64>, InvalidValue> {
         self.0.get_int(Tag(93))
     }
 
+    /// The `Signature` (89) field.
+    #[doc(alias = "Signature")]
     pub fn signature(&self) -> Option<&'a [u8]> {
         self.0.get(Tag(89))
     }
 
+    /// The `CheckSum` (10) field.
+    #[doc(alias = "CheckSum")]
     pub fn check_sum(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(10))
     }
 }
 
+/// The `NewOrderSingle` (35=D) message.
 pub struct NewOrderSingle(RawMessage);
 
 impl NewOrderSingle {
@@ -306,6 +350,8 @@ impl NewOrderSingle {
         Trailer(self.0.scope())
     }
 
+    /// The `ClOrdID` (11) field.
+    #[doc(alias = "ClOrdID")]
     pub fn cl_ord_id(&self) -> Result<Option<&str>, InvalidValue> {
         self.0.get_str(Tag(11))
     }
@@ -316,38 +362,56 @@ impl NewOrderSingle {
         self.0.get_group(&parties::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
     }
 
+    /// The `OrderQty` (38) field.
+    #[doc(alias = "OrderQty")]
     pub fn order_qty(&self) -> Result<Option<i64>, InvalidValue> {
         self.0.get_int(Tag(38))
     }
 
+    /// The `Price` (44) field.
+    #[doc(alias = "Price")]
     pub fn price(&self) -> Result<Option<Decimal>, InvalidValue> {
         self.0.get_decimal(Tag(44))
     }
 
+    /// The `SettlDate` (64) field.
+    #[doc(alias = "SettlDate")]
     pub fn settl_date(&self) -> Result<Option<Date>, InvalidValue> {
         self.0.get_date(Tag(64))
     }
 
+    /// The `MaturityMonthYear` (200) field.
+    #[doc(alias = "MaturityMonthYear")]
     pub fn maturity_month_year(&self) -> Result<Option<MonthYear>, InvalidValue> {
         self.0.get_month_year(Tag(200))
     }
 
+    /// The `LocateReqd` (114) field.
+    #[doc(alias = "LocateReqd")]
     pub fn locate_reqd(&self) -> Result<Option<bool>, InvalidValue> {
         self.0.get_bool(Tag(114))
     }
 
+    /// The `MDEntryTime` (273) field.
+    #[doc(alias = "MDEntryTime")]
     pub fn md_entry_time(&self) -> Result<Option<Time>, InvalidValue> {
         self.0.get_time(Tag(273))
     }
 
+    /// The `OrdType` (40) field.
+    #[doc(alias = "OrdType")]
     pub fn ord_type(&self) -> Result<Option<OrdType<'_>>, InvalidValue> {
         Ok(self.0.get_str(Tag(40))?.map(OrdType::from_value))
     }
 
+    /// The `ExecInst` (18) field.
+    #[doc(alias = "ExecInst")]
     pub fn exec_inst(&self) -> Result<Option<MultipleValues<'_, ExecInst<'_>>>, InvalidValue> {
         self.0.get_multiple_values(Tag(18))
     }
 
+    /// The `DeskOrderHandlingInst` (1035) field.
+    #[doc(alias = "DeskOrderHandlingInst")]
     pub fn desk_order_handling_inst(&self) -> Result<Option<MultipleValues<'_, &str>>, InvalidValue> {
         self.0.get_multiple_values(Tag(1035))
     }
@@ -365,6 +429,7 @@ impl std::fmt::Display for NewOrderSingle {
     }
 }
 
+/// The `Logon` (35=A) message.
 pub struct Logon(RawMessage);
 
 impl Logon {
@@ -437,6 +502,8 @@ pub mod logon {
                 self.0
             }
 
+            /// The `RefMsgType` (372) field.
+            #[doc(alias = "RefMsgType")]
             pub fn ref_msg_type(&self) -> Result<Option<&'a str>, InvalidValue> {
                 self.0.get_str(Tag(372))
             }
@@ -444,6 +511,7 @@ pub mod logon {
     }
 }
 
+/// A message read as the type its MsgType names.
 pub enum Message {
     NewOrderSingle(NewOrderSingle),
     Logon(Logon),
