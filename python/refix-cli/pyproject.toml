@@ -4,7 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "refix-cli"
-description = "Command-line tools for ReFIX"
+description = "Command-line tools for ReFIX, a FIX protocol engine"
+keywords = ["fix", "fix-protocol", "fix-engine", "trading", "finance"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE"]

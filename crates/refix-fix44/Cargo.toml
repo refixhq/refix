@@ -1,6 +1,6 @@
 [package]
 name = "refix-fix44"
-description = "Typed FIX 4.4 messages for the ReFIX engine"
+description = "Typed FIX 4.4 protocol messages for the ReFIX engine"
 version = "0.7.0"
 authors.workspace = true
 edition.workspace = true

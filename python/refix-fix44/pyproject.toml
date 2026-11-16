@@ -1,7 +1,8 @@
 [project]
 name = "refix-fix44"
 dynamic = ["version"]
-description = "Typed FIX 4.4 messages for ReFIX"
+description = "Typed FIX 4.4 protocol messages for ReFIX"
+keywords = ["fix", "fix-protocol", "fix-engine", "trading", "finance"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE", "LICENSE-QUICKFIX"]
