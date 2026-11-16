@@ -353,6 +353,18 @@ impl NewOrderSingle {
     }
 }
 
+impl std::fmt::Debug for NewOrderSingle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NewOrderSingle({})", self.0)
+    }
+}
+
+impl std::fmt::Display for NewOrderSingle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
 pub struct Logon(RawMessage);
 
 impl Logon {
@@ -383,6 +395,18 @@ impl Logon {
     #[doc(alias = "NoMsgTypes")]
     pub fn msg_types(&self) -> Result<Instances<'_, logon::msg_types::Instance<'_>>, InvalidValue> {
         self.0.get_group(&logon::msg_types::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
+    }
+}
+
+impl std::fmt::Debug for Logon {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Logon({})", self.0)
+    }
+}
+
+impl std::fmt::Display for Logon {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -432,6 +456,26 @@ impl Message {
             Some(NewOrderSingle::MSG_TYPE) => Self::NewOrderSingle(NewOrderSingle::from_raw(raw)),
             Some(Logon::MSG_TYPE) => Self::Logon(Logon::from_raw(raw)),
             _ => Self::Unrecognized(raw),
+        }
+    }
+}
+
+impl std::fmt::Debug for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NewOrderSingle(message) => std::fmt::Debug::fmt(message, f),
+            Self::Logon(message) => std::fmt::Debug::fmt(message, f),
+            Self::Unrecognized(raw) => write!(f, "Unrecognized({raw})"),
+        }
+    }
+}
+
+impl std::fmt::Display for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NewOrderSingle(message) => std::fmt::Display::fmt(message, f),
+            Self::Logon(message) => std::fmt::Display::fmt(message, f),
+            Self::Unrecognized(raw) => std::fmt::Display::fmt(raw, f),
         }
     }
 }

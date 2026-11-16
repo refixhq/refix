@@ -19,6 +19,7 @@ pub(super) fn emit_message(
     let mut items = vec![
         emit_message_struct(message),
         emit_message_impl(message, envelope, names),
+        emit_message_printing(message),
     ];
     if let Some(module) = emit_message_module(message, names) {
         items.push(module);
@@ -65,6 +66,15 @@ fn emit_message_impl(
     }
 
     format!("impl {} {{\n{}}}\n", message.name(), members.join("\n"))
+}
+
+/// `Debug` prints the message's name around its wire form, and `Display`
+/// the wire form alone.
+fn emit_message_printing(message: dictionary::Message<'_>) -> String {
+    let name = message.name();
+    format!(
+        "impl std::fmt::Debug for {name} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        write!(f, \"{name}({{}})\", self.0)\n    }}\n}}\n\nimpl std::fmt::Display for {name} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        std::fmt::Display::fmt(&self.0, f)\n    }}\n}}\n"
+    )
 }
 
 /// The module holding the groups declared directly in a message, if it

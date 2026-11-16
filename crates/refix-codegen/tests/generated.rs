@@ -105,6 +105,44 @@ fn an_unknown_msg_type_reads_as_unrecognized() {
 }
 
 #[test]
+fn a_message_prints_its_name_and_wire_form() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|11=ORDER-1|"))
+        .unwrap();
+    let wire = raw.to_string();
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(order.to_string(), wire);
+    assert_eq!(format!("{order:?}"), format!("NewOrderSingle({wire})"));
+}
+
+#[test]
+fn the_message_enum_prints_as_the_message_it_holds() {
+    let order = Tokenizer::default()
+        .tokenize(frame("35=D|11=ORDER-1|"))
+        .unwrap();
+    let unknown = Tokenizer::default()
+        .tokenize(frame("35=ZZ|58=hello|"))
+        .unwrap();
+    let order_wire = order.to_string();
+    let unknown_wire = unknown.to_string();
+
+    let order = Message::from_raw(order);
+    let unknown = Message::from_raw(unknown);
+
+    assert_eq!(order.to_string(), order_wire);
+    assert_eq!(
+        format!("{order:?}"),
+        format!("NewOrderSingle({order_wire})")
+    );
+    assert_eq!(unknown.to_string(), unknown_wire);
+    assert_eq!(
+        format!("{unknown:?}"),
+        format!("Unrecognized({unknown_wire})")
+    );
+}
+
+#[test]
 fn an_absent_field_reads_as_none() {
     let raw = Tokenizer::default()
         .tokenize(frame("35=D|11=ORDER-1|"))

@@ -46,6 +46,7 @@ const ROOT: &[&str] = &[
     "header",
     "i64",
     "refix_message",
+    "std",
     "str",
     "trailer",
     "u8",
