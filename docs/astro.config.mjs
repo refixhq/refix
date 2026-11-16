@@ -26,6 +26,7 @@ export default defineConfig({
 					],
 				},
 				{ label: 'Benchmarks', slug: 'benchmarks' },
+				{ label: 'Roadmap', slug: 'roadmap' },
 			],
 		}),
 	],
