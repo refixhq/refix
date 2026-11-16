@@ -16,7 +16,13 @@ export default defineConfig({
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/refixhq/refix' }],
 			sidebar: [
 				{ label: 'Quick start', slug: 'quick-start' },
-				{ label: 'Guides', items: [{ label: 'Reading logs', slug: 'guides/reading-logs' }] },
+				{
+					label: 'Guides',
+					items: [
+						{ label: 'Reading logs', slug: 'guides/reading-logs' },
+						{ label: 'Raw messages', slug: 'guides/raw-messages' },
+					],
+				},
 			],
 		}),
 	],
