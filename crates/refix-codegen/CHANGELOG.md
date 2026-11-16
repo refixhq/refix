@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/refixhq/refix/compare/refix-codegen-v0.4.0...refix-codegen-v0.5.0) - 2026-11-16
+
+### Added
+
+- [**breaking**] move the authored dictionary types under spec ([#143](https://github.com/refixhq/refix/pull/143))
+- add repr to the Python messages ([#140](https://github.com/refixhq/refix/pull/140))
+- [**breaking**] name group accessors after the count field ([#138](https://github.com/refixhq/refix/pull/138))
+
+### Other
+
+- point the packages at refix.dev ([#148](https://github.com/refixhq/refix/pull/148))
+- declare the minimum Rust version ([#145](https://github.com/refixhq/refix/pull/145))
+- add docstrings to the Python classes ([#141](https://github.com/refixhq/refix/pull/141))
+
 ## [0.4.0](https://github.com/refixhq/refix/compare/refix-codegen-v0.3.0...refix-codegen-v0.4.0) - 2026-11-13
 
 ### Added

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3](https://github.com/refixhq/refix/compare/refix-message-v0.4.2...refix-message-v0.4.3) - 2026-11-16
+
+### Added
+
+- print messages in wire form ([#139](https://github.com/refixhq/refix/pull/139))
+
+### Other
+
+- point the packages at refix.dev ([#148](https://github.com/refixhq/refix/pull/148))
+- declare the minimum Rust version ([#145](https://github.com/refixhq/refix/pull/145))
+
 ## [0.4.2](https://github.com/refixhq/refix/compare/refix-message-v0.4.1...refix-message-v0.4.2) - 2026-11-14
 
 ### Other

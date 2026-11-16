@@ -37,6 +37,6 @@ rust_decimal-1 = { package = "rust_decimal", version = "1.13.0", default-feature
 time-03 = { package = "time", version = "0.3.38", default-features = false }
 
 # Major and minor only, so a patch release doesn't re-release dependents.
-refix-codegen = { version = "0.4", path = "crates/refix-codegen" }
-refix-dictionary = { version = "0.4", path = "crates/refix-dictionary" }
+refix-codegen = { version = "0.5", path = "crates/refix-codegen" }
+refix-dictionary = { version = "0.5", path = "crates/refix-dictionary" }
 refix-message = { version = "0.4", path = "crates/refix-message" }

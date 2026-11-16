@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/refixhq/refix/compare/refix-v0.3.0...refix-v0.3.1) - 2026-11-16
+
+### Other
+
+- point the packages at refix.dev ([#148](https://github.com/refixhq/refix/pull/148))
+- declare the minimum Rust version ([#145](https://github.com/refixhq/refix/pull/145))
+- link the benchmarks from the READMEs ([#144](https://github.com/refixhq/refix/pull/144))
+- document the refix crate ([#142](https://github.com/refixhq/refix/pull/142))
+
 ## [0.3.0](https://github.com/refixhq/refix/compare/refix-v0.2.0...refix-v0.3.0) - 2026-11-13
 
 ### Added
