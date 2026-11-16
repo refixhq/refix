@@ -95,14 +95,18 @@ class TestErrors:
     def test_truncated_frame_is_incomplete(self):
         frame = construct_valid_frame("FIX.4.4", "35=0|")
 
-        with pytest.raises(IncompleteError):
+        with pytest.raises(IncompleteError) as excinfo:
             refix.Tokenizer().tokenize(frame[:-1])
+
+        assert str(excinfo.value) == "incomplete message"
 
     def test_absurd_body_length_is_too_large_to_index(self):
         frame = to_wire("8=FIX.4.4|9=4294967295|35=0|")
 
-        with pytest.raises(TooLargeToIndexError):
+        with pytest.raises(TooLargeToIndexError) as excinfo:
             refix.Tokenizer().tokenize(frame)
+
+        assert str(excinfo.value) == "frame too large to index"
 
     def test_two_messages_are_trailing_bytes(self):
         frame = construct_valid_frame("FIX.4.4", "35=0|")
