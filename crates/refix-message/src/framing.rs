@@ -393,6 +393,22 @@ pub enum GarbledReason {
     FrameTooLarge,
 }
 
+impl std::fmt::Display for GarbledReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            GarbledReason::MissingBeginString => "missing BeginString",
+            GarbledReason::MalformedBeginString => "malformed BeginString",
+            GarbledReason::MissingBodyLength => "missing BodyLength",
+            GarbledReason::MalformedBodyLength => "malformed BodyLength",
+            GarbledReason::BodyLengthMismatch => "BodyLength mismatch",
+            GarbledReason::MissingMsgType => "missing MsgType",
+            GarbledReason::MalformedChecksum => "malformed CheckSum",
+            GarbledReason::ChecksumMismatch => "CheckSum mismatch",
+            GarbledReason::FrameTooLarge => "frame too large",
+        })
+    }
+}
+
 /// The value of `BeginString(8)`, with recognised protocol versions decoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BeginString<'a> {
