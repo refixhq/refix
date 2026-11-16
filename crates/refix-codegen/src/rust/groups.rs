@@ -1,5 +1,6 @@
 use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
+use super::docs::{code, member_docs};
 use super::layout::{MAX_WIDTH, indent, slice};
 use super::messages::{Lifetime, emit_accessor};
 use super::names::Names;
@@ -100,8 +101,13 @@ pub(super) fn emit_group_accessor(
         Lifetime::Receiver => "'_",
         Lifetime::Scope => "'a",
     };
+    let summary = format!(
+        "The instances of the {} ({count_tag}) group.",
+        code(count_name)
+    );
+    let docs = member_docs(&summary, count_name, name);
     format!(
-        "    /// The instances of the `{count_name}` ({count_tag}) group.\n    #[doc(alias = \"{count_name}\")]\n    pub fn {name}(&self) -> Result<Instances<{lifetime}, {path}::Instance<{lifetime}>>, InvalidValue> {{\n        self.0.get_group(&{path}::TABLE, &{known_tags}).map(Instances::from)\n    }}\n"
+        "{docs}    pub fn {name}(&self) -> Result<Instances<{lifetime}, {path}::Instance<{lifetime}>>, InvalidValue> {{\n        self.0.get_group(&{path}::TABLE, &{known_tags}).map(Instances::from)\n    }}\n"
     )
 }
 

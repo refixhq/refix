@@ -54,7 +54,10 @@ pub(super) fn emit_view(
     }
 
     let mut items = vec![
-        format!("#[derive(Clone, Copy, Debug)]\npub struct {name}<'a>{fields};\n"),
+        format!(
+            "/// The {} fields of a message.\n#[derive(Clone, Copy, Debug)]\npub struct {name}<'a>{fields};\n",
+            section.member_name()
+        ),
         format!(
             "impl<'a> From<refix_message::Scope<'a>> for {name}<'a> {{\n    fn from(scope: refix_message::Scope<'a>) -> Self {{\n        {from_scope}\n    }}\n}}\n"
         ),

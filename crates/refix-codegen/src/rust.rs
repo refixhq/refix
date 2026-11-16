@@ -1,5 +1,6 @@
 mod dialect;
 mod dispatch;
+mod docs;
 mod enums;
 mod error;
 mod groups;
@@ -192,12 +193,17 @@ mod tests {
 
 use refix_message::{Dialect, InvalidValue, KnownTags, RawMessage, Tag};
 
+/// The dialect of this dictionary.
 pub const DIALECT: Dialect<'static> = Dialect::new();
 
+/// The values of the `OrdType` (40) field.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OrdType<'a> {
+    /// `1`
     Market,
+    /// `2`
     Limit,
+    /// A value the dictionary does not list.
     Unrecognized(&'a str),
 }
 
@@ -225,6 +231,7 @@ impl<'a> From<&'a str> for OrdType<'a> {
     }
 }
 
+/// The `NewOrderSingle` (35=D) message.
 pub struct NewOrderSingle(RawMessage);
 
 impl NewOrderSingle {
@@ -242,18 +249,26 @@ impl NewOrderSingle {
         &self.0
     }
 
+    /// The `ClOrdID` (11) field.
+    #[doc(alias = "ClOrdID")]
     pub fn cl_ord_id(&self) -> Result<Option<&str>, InvalidValue> {
         self.0.get_str(Tag(11))
     }
 
+    /// The `OrderQty` (38) field.
+    #[doc(alias = "OrderQty")]
     pub fn order_qty(&self) -> Result<Option<i64>, InvalidValue> {
         self.0.get_int(Tag(38))
     }
 
+    /// The `Price` (44) field.
+    #[doc(alias = "Price")]
     pub fn price_raw(&self) -> Option<&[u8]> {
         self.0.get(Tag(44))
     }
 
+    /// The `OrdType` (40) field.
+    #[doc(alias = "OrdType")]
     pub fn ord_type(&self) -> Result<Option<OrdType<'_>>, InvalidValue> {
         Ok(self.0.get_str(Tag(40))?.map(OrdType::from_value))
     }
@@ -271,6 +286,7 @@ impl std::fmt::Display for NewOrderSingle {
     }
 }
 
+/// A message read as the type its MsgType names.
 pub enum Message {
     NewOrderSingle(NewOrderSingle),
     Unrecognized(RawMessage),
@@ -633,6 +649,7 @@ impl std::fmt::Display for Message {
 
 use refix_message::{Dialect, GroupTable, Instances, InvalidValue, KnownTags, RawMessage, Tag};
 
+/// The dialect of this dictionary.
 pub const DIALECT: Dialect<'static> = Dialect::new();
 
 pub mod parties {
@@ -661,6 +678,8 @@ pub mod parties {
             self.0
         }
 
+        /// The `PartyID` (448) field.
+        #[doc(alias = "PartyID")]
         pub fn party_id(&self) -> Result<Option<&'a str>, InvalidValue> {
             self.0.get_str(Tag(448))
         }
@@ -694,12 +713,15 @@ pub mod ptys_sub_grp {
             self.0
         }
 
+        /// The `PartySubID` (523) field.
+        #[doc(alias = "PartySubID")]
         pub fn party_sub_id(&self) -> Result<Option<&'a str>, InvalidValue> {
             self.0.get_str(Tag(523))
         }
     }
 }
 
+/// The `NewOrderSingle` (35=D) message.
 pub struct NewOrderSingle(RawMessage);
 
 impl NewOrderSingle {
@@ -736,6 +758,7 @@ impl std::fmt::Display for NewOrderSingle {
     }
 }
 
+/// A message read as the type its MsgType names.
 pub enum Message {
     NewOrderSingle(NewOrderSingle),
     Unrecognized(RawMessage),
