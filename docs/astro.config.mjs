@@ -21,6 +21,7 @@ export default defineConfig({
 					items: [
 						{ label: 'Reading logs', slug: 'guides/reading-logs' },
 						{ label: 'Raw messages', slug: 'guides/raw-messages' },
+						{ label: 'Typed messages', slug: 'guides/typed-messages' },
 					],
 				},
 			],
