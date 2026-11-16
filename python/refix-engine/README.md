@@ -23,7 +23,7 @@ Typed messages come from generated code: `refix-fix44` for FIX 4.4, or
 messages through the generated module's `CODEC`.
 
 Reading a message is 7 to 8 times faster than the QuickFIX bindings and 50 to 90 times faster than simplefix. See the
-[benchmarks](https://github.com/refixhq/refix/blob/main/benchmarks/README.md).
+[benchmarks](https://refix.dev/benchmarks/).
 
 Up to 0.2, this package was published as `refix-engine`. Uninstall that before installing `refix`, as both
 provide the same module.
