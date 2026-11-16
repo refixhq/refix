@@ -56,11 +56,6 @@
 	background-repeat: no-repeat;
 }
 
-.status-note {
-	color: var(--sl-color-gray-3);
-	font-size: var(--sl-text-sm);
-}
-
 .card {
 	--sl-card-border: var(--sl-color-accent);
 	--sl-card-bg: var(--sl-color-accent-low);
