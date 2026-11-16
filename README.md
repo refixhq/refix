@@ -12,6 +12,8 @@
 
 **ReFIX is a FIX engine written in pure Rust with first-party bindings for Python.**
 
+[Documentation](https://refix.dev)
+
 </div>
 
 > [!WARNING]

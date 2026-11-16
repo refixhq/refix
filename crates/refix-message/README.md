@@ -1,6 +1,6 @@
 # refix-message
 
-Framing, log reading, tokenising and raw FIX messages for [ReFIX](https://github.com/refixhq/refix). A `RawMessage`
+Framing, log reading, tokenising and raw FIX messages for [ReFIX](https://refix.dev). A `RawMessage`
 indexes a frame's fields and reads them on demand, without copying.
 
 > ReFIX is in early development, and APIs change between 0.x releases.

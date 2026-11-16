@@ -1,6 +1,6 @@
 # refix-codegen
 
-Generates typed FIX messages for [ReFIX](https://github.com/refixhq/refix), in Rust and Python, from a `Dictionary` read
+Generates typed FIX messages for [ReFIX](https://refix.dev), in Rust and Python, from a `Dictionary` read
 by `refix-dictionary`.
 
 > ReFIX is in early development, and APIs change between 0.x releases.

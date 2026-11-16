@@ -17,6 +17,7 @@ classifiers = [
 dependencies = ["refix>=0.6"]
 
 [project.urls]
+Homepage = "https://refix.dev"
 Repository = "https://github.com/refixhq/refix"
 
 # Same version as the crate, generated from the same source.
