@@ -1,0 +1,198 @@
+---
+title: Reading logs
+description: Read the messages in a FIX log, whatever prefix and separator its logger used.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+The log reader reads the messages in a log file as its logger wrote it.
+
+- It detects the separator of each message, so a log that replaced SOH with `|` or `^A` is read without converting it.
+- It skips the text before each message, such as a timestamp, and keeps it with the record.
+- It returns a message that fails a check, such as a wrong checksum or a line cut short, with diagnostics that say what
+  failed.
+
+## Read a log
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		import refix
+
+		for record in refix.read_log("session.log"):
+		    print(record.message.get_str(35), [d.name for d in record.diagnostics])
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::{LogReader, Tag};
+
+		fn main() -> Result<(), Box<dyn std::error::Error>> {
+		    let mut reader = LogReader::default();
+		    reader.feed(&std::fs::read("session.log")?);
+		    for record in reader.finish() {
+		        let msg_type = record.message.get_str(Tag(35))?.unwrap_or("?");
+		        println!("{msg_type} {:?}", record.diagnostics);
+		    }
+		    Ok(())
+		}
+		```
+	</TabItem>
+</Tabs>
+
+Each record holds one message, in the order they appear in the log. A message that fails a check is still returned,
+with diagnostics that say what failed.
+
+## An example
+
+This log has a line without a message, an order whose account was masked after it was logged, and a last line that
+was cut short.
+
+```text
+2026-11-03 09:30:00.004 INFO  Sent: 8=FIX.4.4|9=63|35=A|49=BUYSIDE|56=VENUE|34=1|52=20261103-09:30:00|98=0|108=30|10=196|
+2026-11-03 09:30:35.002 WARN  No data for 35s, sending TestRequest
+2026-11-03 09:30:35.003 INFO  Sent: 8=FIX.4.4|9=60|35=1|49=BUYSIDE|56=VENUE|34=2|52=20261103-09:30:35|112=PING|10=161|
+2026-11-03 09:30:36.110 INFO  Sent: 8=FIX.4.4|9=129|35=D|49=BUYSIDE|56=VENUE|34=3|52=20261103-09:30:36|11=ORDER-1|1=XXXXXXXX|55=ACME|54=1|60=20261103-09:30:36|40=2|44=101.25|38=100|10=021|
+2026-11-03 09:30:36.142 INFO  Received: 8=FIX.4.4|9=175|35=8|49=VENUE|56=BUYSIDE|34=2|52=20261103-09:30:36|37=V-501|11=ORDER-1|17=E-1|150=0|39=0|55=ACME|54=1|38=100|44=101.25|151=100|14=0|6=0|58=Accepted for
+```
+
+The code above prints each message's type and diagnostics:
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```text
+		A []
+		1 []
+		D ['CHECKSUM_MISMATCH']
+		8 ['TRUNCATED']
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		```text
+		A []
+		1 []
+		D [ChecksumMismatch]
+		8 [Truncated]
+		```
+	</TabItem>
+</Tabs>
+
+## What a record holds
+
+| Field         | Holds                                                          |
+| ------------- | -------------------------------------------------------------- |
+| `prefix`      | The bytes between the previous record and this message.        |
+| `message`     | The raw message.                                               |
+| `diagnostics` | The problems found with the message, or none if it checks out. |
+
+The prefix is kept as bytes and is not parsed. A line without a message goes into the prefix of the next record, so
+the TestRequest's prefix in the example is:
+
+```text
+2026-11-03 09:30:35.002 WARN  No data for 35s, sending TestRequest
+2026-11-03 09:30:35.003 INFO  Sent:
+```
+
+Bytes after the last message are dropped.
+
+To read each message as a typed one, pass a codec to `decode_log` in Python or convert `record.message` in Rust. The
+[quick start](/quick-start/) shows both.
+
+## Separators
+
+The separator is detected for each message from the byte after its BeginString value. Any single byte works, and so
+does the two-character `^A` that `less` and `cat -v` show for SOH. One log can mix separators.
+
+To read only the messages that use one separator, name it:
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		records = refix.read_log("session.log", separator=b"|")
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::{Dialect, LogReader};
+
+		let mut reader = LogReader::new(Dialect::new(), Some(b'|'));
+		```
+	</TabItem>
+</Tabs>
+
+The separator is a single byte, so `^A` can only be detected.
+
+A value that contains the separator byte is split there. Free text with a `|` in it is cut short in a log that
+separates fields with `|`.
+
+## Diagnostics
+
+| Diagnostic              | Meaning                                                                           |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| `MISSING_BODY_LENGTH`   | The second field is not BodyLength (9).                                           |
+| `MALFORMED_BODY_LENGTH` | BodyLength is not a number.                                                       |
+| `BODY_LENGTH_MISMATCH`  | BodyLength does not point at the CheckSum field.                                  |
+| `MISSING_MSG_TYPE`      | The field after BodyLength is not MsgType (35).                                   |
+| `MALFORMED_CHECKSUM`    | CheckSum (10) is not three digits.                                                |
+| `CHECKSUM_MISMATCH`     | The calculated checksum differs from CheckSum.                                    |
+| `TRUNCATED`             | The message ends before its CheckSum field.                                       |
+| `PREFIX_TRUNCATED`      | The prefix was longer than 1 MiB, and only the part nearest the message was kept. |
+
+These are the Python names. In Rust the same diagnostics are variants of `refix::message::log::LogDiagnostic`, such as
+`ChecksumMismatch`.
+
+A message without a CheckSum field ends at a line break, at the start of the next message, at the end of the log or
+at 1 MiB, and is reported as truncated.
+
+Every separator counts as SOH in the BodyLength and CheckSum checks. A log that only replaced its separators passes
+both.
+
+## Large logs
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		`read_log` and `decode_log` read the log in chunks and yield each record as it is found. They take a path or
+		an open binary file, such as standard input:
+
+		```python
+		import sys
+
+		import refix
+
+		for record in refix.read_log(sys.stdin.buffer):
+		    print(record.message.get_str(35))
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		Feed the reader a chunk at a time and take the records that are complete. `next_record` returns `None` until
+		more bytes are fed, and `finish` returns the records still pending at the end of the log.
+
+		```rust
+		use refix::message::LogReader;
+		use refix::message::log::LogRecord;
+		use std::io::Read;
+
+		fn handle(record: LogRecord) {
+		    println!("{}", record.message);
+		}
+
+		fn main() -> std::io::Result<()> {
+		    let mut file = std::fs::File::open("session.log")?;
+		    let mut reader = LogReader::default();
+		    let mut chunk = [0; 65536];
+		    loop {
+		        let read = file.read(&mut chunk)?;
+		        if read == 0 {
+		            break;
+		        }
+		        reader.feed(&chunk[..read]);
+		        while let Some(record) = reader.next_record() {
+		            handle(record);
+		        }
+		    }
+		    reader.finish().for_each(handle);
+		    Ok(())
+		}
+		```
+	</TabItem>
+</Tabs>

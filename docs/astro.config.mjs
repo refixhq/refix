@@ -14,7 +14,10 @@ export default defineConfig({
 			customCss: ['./src/styles/custom.css'],
 			expressiveCode: { styleOverrides: { borderRadius: '0.5rem' } },
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/refixhq/refix' }],
-			sidebar: [{ label: 'Quick start', slug: 'quick-start' }],
+			sidebar: [
+				{ label: 'Quick start', slug: 'quick-start' },
+				{ label: 'Guides', items: [{ label: 'Reading logs', slug: 'guides/reading-logs' }] },
+			],
 		}),
 	],
 });
