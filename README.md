@@ -38,7 +38,7 @@ for record in refix.decode_log("fix.log", CODEC):
         print(record.message.header.sender_comp_id, record.message.cl_ord_id)
 ```
 
-In Rust, `cargo add refix refix-fix44`; see [refix-fix44].
+In Rust, `cargo add refix refix-fix44`; see [refix-fix44]. For FIX 4.2, use `refix-fix42` in either language.
 
 ## Why ReFIX?
 

@@ -35,6 +35,17 @@ refix codegen venue.xml --python venue.py --rust venue.rs
 Give `--python`, `--rust` or both, each with the path of the file to write. Do not edit the generated files. Run the
 tool again when the dictionary changes.
 
+## Other FIX versions
+
+FIX 4.2 and 4.4 have ready-made packages. For FIX 4.0, 4.1 or 4.3, generate a module from QuickFIX's dictionary
+for that version, found in its [spec directory](https://github.com/quickfix/quickfix/tree/master/spec):
+
+```sh
+refix codegen FIX43.xml --python fix43.py --rust fix43.rs
+```
+
+Those dictionaries are under the QuickFIX Software License.
+
 ## Use the module
 
 In these examples the dictionary gives NewOrderSingle a custom DeskID (5001) field.
