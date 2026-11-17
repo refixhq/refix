@@ -10,11 +10,11 @@ use refix_fix44::{Message, OrdType, Side};
 
 let frame = "8=FIX.4.4|9=118|35=D|49=SENDER|56=TARGET|34=1|52=20261008-09:30:00|\
              11=ORDER-1|55=ACME|54=1|60=20261008-09:30:00|40=2|44=101.25|38=100|10=194|";
-let raw = Tokenizer::default ()
-.tokenize(Bytes::from(frame.replace('|', "\x01")))
-.unwrap();
+let raw = Tokenizer::default()
+    .tokenize(Bytes::from(frame.replace('|', "\x01")))
+    .unwrap();
 let Message::NewOrderSingle(order) = Message::from_raw(raw) else {
-panic ! ("expected a NewOrderSingle");
+    panic!("expected a NewOrderSingle");
 };
 
 assert_eq!(order.header().sender_comp_id(), Ok(Some("SENDER")));
