@@ -42,7 +42,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .filter(|field| Conversion::of(field).is_enum())
         .map(|field| emit_enum(field, &names))
         .collect();
-    let groups: Vec<String> = shared_groups(dictionary, &mut warnings)
+    let groups: Vec<String> = shared_groups(dictionary)
         .into_iter()
         .map(|group| emit_group_module(group, &names))
         .collect();
@@ -110,11 +110,11 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
 mod tests {
     use super::*;
     use crate::Warning;
+    use refix_dictionary::Tag;
     use refix_dictionary::spec::{
         Category, DataType, EnumValue, Field, FieldRef, Group, Member, Message, Protocol, Spec,
         Version,
     };
-    use refix_dictionary::{MemberContext, Tag};
 
     fn field(name: &str, tag: u32, data_type: DataType) -> Field {
         Field {
@@ -847,7 +847,7 @@ impl std::fmt::Display for Message {
         }
 
         #[test]
-        fn a_group_in_a_group_instance_is_skipped_with_a_warning() {
+        fn a_group_in_a_group_instance_gets_a_module_in_its_parents() {
             let mut spec = parties_spec(vec![message(
                 "NewOrderSingle",
                 "D",
@@ -863,20 +863,19 @@ impl std::fmt::Display for Message {
 
             let generated = generated(spec);
 
-            assert!(!generated.code.contains("party_sub_ids"));
-            assert!(
-                generated
-                    .code
-                    .contains("&[GroupTable::new(Tag(802), Tag(523), &[Tag(523)], &[])]")
-            );
-            assert_eq!(
-                generated.warnings,
-                vec![Warning::UnsupportedGroup {
-                    context: MemberContext::Component("Parties".to_owned())
-                        .group("NoPartyIDs")
-                        .group("NoPartySubIDs"),
-                }]
-            );
+            assert!(generated.code.contains(
+                "        &[Tag(448), Tag(802)],\n        &[parties::party_sub_ids::TABLE],\n    );\n"
+            ));
+            assert!(generated.code.contains(
+                "        pub fn party_sub_ids(&self) -> Result<Instances<'a, parties::party_sub_ids::Instance<'a>>, InvalidValue> {\n            self.0.get_group(&parties::party_sub_ids::TABLE, &KNOWN_TAGS).map(Instances::from)\n        }\n"
+            ));
+            assert!(generated.code.contains(
+                "    }\n\n    pub mod party_sub_ids {\n        use super::super::*;\n\n        pub const TABLE: GroupTable<'static> = GroupTable::new(\n            Tag(802),\n"
+            ));
+            assert!(generated.code.contains(
+                "        impl<'a> Instance<'a> {\n            pub fn raw(&self) -> refix_message::Scope<'a> {\n"
+            ));
+            assert_eq!(generated.warnings, vec![]);
         }
     }
 }

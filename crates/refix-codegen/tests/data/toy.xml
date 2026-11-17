@@ -30,6 +30,15 @@
         <field name="RefMsgType" required="N"/>
       </group>
     </message>
+    <message name="MassQuote" msgtype="i" msgcat="app">
+      <field name="QuoteID" required="Y"/>
+      <group name="NoQuoteSets" required="Y">
+        <field name="QuoteSetID" required="N"/>
+        <group name="NoQuoteEntries" required="N">
+          <field name="QuoteEntryID" required="N"/>
+        </group>
+      </group>
+    </message>
   </messages>
   <trailer>
     <field name="SignatureLength" required="N"/>
@@ -95,5 +104,10 @@
     <field number="523" name="PartySubID" type="STRING"/>
     <field number="384" name="NoMsgTypes" type="NUMINGROUP"/>
     <field number="372" name="RefMsgType" type="STRING"/>
+    <field number="117" name="QuoteID" type="STRING"/>
+    <field number="296" name="NoQuoteSets" type="NUMINGROUP"/>
+    <field number="302" name="QuoteSetID" type="STRING"/>
+    <field number="295" name="NoQuoteEntries" type="NUMINGROUP"/>
+    <field number="299" name="QuoteEntryID" type="STRING"/>
   </fields>
 </fix>

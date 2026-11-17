@@ -66,6 +66,11 @@ impl Namespace {
         Self { owners }
     }
 
+    /// What has taken `name`, if anything has.
+    pub(crate) fn owner(&self, name: &str) -> Option<&Owner> {
+        self.owners.get(name)
+    }
+
     /// Takes `name` for `owner`, unless something else already has it.
     pub(crate) fn claim(&mut self, name: &str, owner: Owner) -> Result<(), Box<NameClash>> {
         match self.owners.entry(name.to_owned()) {

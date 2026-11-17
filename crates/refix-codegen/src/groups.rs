@@ -2,12 +2,6 @@ use std::collections::HashSet;
 
 use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
-/// Whether a group gets generated types. Groups declared directly in
-/// another group's instance don't.
-pub(crate) fn is_generated(group: dictionary::Group<'_>) -> bool {
-    !matches!(group.declared_in(), MemberContext::Group { .. })
-}
-
 /// The context of a group's instances, which identifies its declaration.
 pub(crate) fn instance_context(group: dictionary::Group<'_>) -> MemberContext {
     group.declared_in().group(&group.count_field().name)
@@ -86,10 +80,7 @@ fn collect_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a>>, tags:
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        declared_groups, instance_context, is_generated, known_tags, member_tags,
-        message_known_tags,
-    };
+    use super::{declared_groups, instance_context, known_tags, member_tags, message_known_tags};
     use refix_dictionary::spec::{
         Category, DataType, Field, FieldRef, Group, Member, Message, Protocol, Spec, Version,
     };
@@ -222,16 +213,5 @@ mod tests {
                 "group 'NoPartySubIDs' in group 'NoPartyIDs' in message 'NewOrderSingle'",
             ]
         );
-    }
-
-    #[test]
-    fn a_group_declared_in_an_instance_is_not_generated() {
-        let dictionary = dictionary();
-        let message = dictionary.messages().next().unwrap();
-        let parties = groups(message.members())[0];
-        let sub_ids = groups(parties.members())[0];
-
-        assert!(is_generated(parties));
-        assert!(!is_generated(sub_ids));
     }
 }

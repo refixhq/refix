@@ -4,25 +4,20 @@ use super::docs::{code, member_docs};
 use super::layout::{MAX_WIDTH, indent, slice};
 use super::messages::{Lifetime, emit_accessor};
 use super::names::Names;
-use crate::Warning;
-use crate::groups::{is_generated, known_tags, member_tags};
+use crate::groups::{known_tags, member_tags};
 
 /// The groups declared in components, each once, in order of first
 /// appearance across the header, messages and trailer.
 ///
-/// A group declared directly in another group's instance gets no module
-/// and is reported instead.
-pub(super) fn shared_groups<'a>(
-    dictionary: &'a Dictionary,
-    warnings: &mut Vec<Warning>,
-) -> Vec<dictionary::Group<'a>> {
+/// Every other group's module sits where the group is declared.
+pub(super) fn shared_groups(dictionary: &Dictionary) -> Vec<dictionary::Group<'_>> {
     let mut groups = Vec::new();
     let mut seen = Vec::new();
-    collect_groups(dictionary.header(), &mut groups, &mut seen, warnings);
+    collect_groups(dictionary.header(), &mut groups, &mut seen);
     for message in dictionary.messages() {
-        collect_groups(message.members(), &mut groups, &mut seen, warnings);
+        collect_groups(message.members(), &mut groups, &mut seen);
     }
-    collect_groups(dictionary.trailer(), &mut groups, &mut seen, warnings);
+    collect_groups(dictionary.trailer(), &mut groups, &mut seen);
     groups
 }
 
@@ -30,7 +25,6 @@ fn collect_groups<'a>(
     members: impl Iterator<Item = dictionary::Member<'a>>,
     groups: &mut Vec<dictionary::Group<'a>>,
     seen: &mut Vec<MemberContext>,
-    warnings: &mut Vec<Warning>,
 ) {
     for member in members {
         let dictionary::Member::Group(group) = member else {
@@ -40,20 +34,20 @@ fn collect_groups<'a>(
         if seen.contains(&context) {
             continue;
         }
-        seen.push(context.clone());
-        match group.declared_in() {
-            MemberContext::Component(_) => groups.push(group),
-            MemberContext::Message(_) | MemberContext::Header | MemberContext::Trailer => {}
-            MemberContext::Group { .. } => warnings.push(Warning::UnsupportedGroup { context }),
+        seen.push(context);
+        if matches!(group.declared_in(), MemberContext::Component(_)) {
+            groups.push(group);
         }
-        collect_groups(group.members(), groups, seen, warnings);
+        collect_groups(group.members(), groups, seen);
     }
 }
 
+/// A group's module, with the modules of the groups declared directly in
+/// its instances inside it.
 pub(super) fn emit_group_module(group: dictionary::Group<'_>, names: &Names) -> String {
     let depth = names.group_path(group).split("::").count();
     let width = MAX_WIDTH - 4 * depth;
-    let items = [
+    let mut items = vec![
         format!("use {}*;\n", "super::".repeat(depth)),
         emit_table(group, names, width),
         emit_known_tags(&known_tags(group.members()), width),
@@ -61,6 +55,13 @@ pub(super) fn emit_group_module(group: dictionary::Group<'_>, names: &Names) -> 
         "impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {\n    fn from(scope: refix_message::Scope<'a>) -> Self {\n        Self(scope)\n    }\n}\n".to_owned(),
         emit_instance_impl(group, names),
     ];
+    for member in group.members() {
+        if let dictionary::Member::Group(nested) = member
+            && matches!(nested.declared_in(), MemberContext::Group { .. })
+        {
+            items.push(emit_group_module(nested, names));
+        }
+    }
     format!(
         "pub mod {} {{\n{}}}\n",
         names.group_module(group),
@@ -77,10 +78,12 @@ fn emit_instance_impl(group: dictionary::Group<'_>, names: &Names) -> String {
             dictionary::Member::Field { field, .. } => {
                 members.push(emit_accessor(field, names, Lifetime::Scope))
             }
-            dictionary::Member::Group(nested) if is_generated(nested) => members.push(
-                emit_group_accessor(nested, names, Lifetime::Scope, "KNOWN_TAGS"),
-            ),
-            dictionary::Member::Group(_) => {}
+            dictionary::Member::Group(nested) => members.push(emit_group_accessor(
+                nested,
+                names,
+                Lifetime::Scope,
+                "KNOWN_TAGS",
+            )),
         }
     }
     format!("impl<'a> Instance<'a> {{\n{}}}\n", members.join("\n"))
@@ -142,7 +145,7 @@ fn table_arguments(
     let nested = group
         .members()
         .filter_map(|member| match member {
-            dictionary::Member::Group(child) => Some(table_reference(child, names)),
+            dictionary::Member::Group(child) => Some(format!("{}::TABLE", names.group_path(child))),
             dictionary::Member::Field { .. } => None,
         })
         .collect();
@@ -155,19 +158,6 @@ fn table_arguments(
         group.delimiter().tag,
         members,
         nested,
-    )
-}
-
-/// A nested group's `TABLE`, written out in place for a group without a module.
-fn table_reference(group: dictionary::Group<'_>, names: &Names) -> String {
-    if is_generated(group) {
-        return format!("{}::TABLE", names.group_path(group));
-    }
-    let (count_tag, delimiter, members, nested) = table_arguments(group, names);
-    format!(
-        "GroupTable::new(Tag({count_tag}), Tag({delimiter}), &[{}], &[{}])",
-        members.join(", "),
-        nested.join(", ")
     )
 }
 

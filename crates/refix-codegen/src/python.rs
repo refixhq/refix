@@ -36,7 +36,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .filter(|field| Conversion::of(field).is_enum())
         .map(|field| emit_enum(field, &names))
         .collect();
-    let groups: Vec<String> = shared_groups(dictionary, &mut warnings)
+    let groups: Vec<String> = shared_groups(dictionary)
         .into_iter()
         .map(|group| emit_group_class(group, 0, &names))
         .collect();
@@ -160,11 +160,11 @@ fn emit_imports(dictionary: &Dictionary, envelope: &Envelope, has_enums: bool) -
 mod tests {
     use super::*;
     use crate::Warning;
+    use refix_dictionary::Tag;
     use refix_dictionary::spec::{
         Category, Component, ComponentRef, DataType, EnumValue, Field, FieldRef, Group, Member,
         Message, Protocol, Spec, Version,
     };
-    use refix_dictionary::{MemberContext, Tag};
 
     fn field(name: &str, tag: u32, data_type: DataType, values: &[(&str, &str)]) -> Field {
         Field {
@@ -852,7 +852,7 @@ CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
     }
 
     #[test]
-    fn a_group_in_a_group_instance_is_skipped_with_a_warning() {
+    fn a_group_in_a_group_instance_gets_a_class_in_its_parents() {
         let generated = generated(
             vec![message(
                 "NewOrderSingle",
@@ -869,19 +869,20 @@ CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
             )],
         );
 
-        assert!(!generated.code.contains("party_sub_id"));
+        assert!(generated.code.contains(
+            "class Parties:\n    class PartySubIDs:\n        TABLE: ClassVar[GroupTable] = GroupTable(802, 523, (523,), ())\n"
+        ));
         assert!(
-            generated
-                .code
-                .contains("        (GroupTable(802, 523, (523,), ()),),\n")
+            generated.code.contains(
+                "                return f\"Parties.PartySubIDs.Instance({self._scope})\"\n"
+            )
         );
-        assert_eq!(
-            generated.warnings,
-            vec![Warning::UnsupportedGroup {
-                context: MemberContext::Component("Parties".to_owned())
-                    .group("NoPartyIDs")
-                    .group("NoPartySubIDs"),
-            }]
-        );
+        assert!(generated.code.contains(
+            "\n    TABLE: ClassVar[GroupTable] = GroupTable(453, 448, (448, 802), (PartySubIDs.TABLE,))\n"
+        ));
+        assert!(generated.code.contains(
+            "        def party_sub_ids(self) -> tuple[Parties.PartySubIDs.Instance, ...]:\n            \"\"\"The instances of the NoPartySubIDs (802) group.\"\"\"\n            scopes = self._scope.get_group(Parties.PartySubIDs.TABLE, Parties.KNOWN_TAGS)\n"
+        ));
+        assert_eq!(generated.warnings, vec![]);
     }
 }

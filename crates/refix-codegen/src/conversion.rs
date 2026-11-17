@@ -2,7 +2,6 @@ use refix_dictionary::spec::{DataType, Field};
 use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Warning;
-use crate::groups::is_generated;
 
 /// How generated code reads a field's value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -115,9 +114,7 @@ fn reads_in<'a>(
 ) -> bool {
     members.any(|member| match member {
         dictionary::Member::Field { field, .. } => wanted(field),
-        dictionary::Member::Group(group) => {
-            is_generated(group) && reads_in(group.members(), wanted)
-        }
+        dictionary::Member::Group(group) => reads_in(group.members(), wanted),
     })
 }
 
