@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2](https://github.com/refixhq/refix/compare/refix-dictionary-v0.5.1...refix-dictionary-v0.5.2) - 2026-11-17
+
+### Added
+
+- add stock FIX 4.2 packages ([#163](https://github.com/refixhq/refix/pull/163))
+
 ## [0.5.1](https://github.com/refixhq/refix/compare/refix-dictionary-v0.5.0...refix-dictionary-v0.5.1) - 2026-11-16
 
 ### Other
