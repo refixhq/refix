@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/refixhq/refix/compare/refix-dictionary-v0.5.2...refix-dictionary-v0.6.0) - 2026-11-17
+
+### Added
+
+- generate FIX 5.0 messages with their transport dictionary ([#168](https://github.com/refixhq/refix/pull/168))
+
 ## [0.5.2](https://github.com/refixhq/refix/compare/refix-dictionary-v0.5.1...refix-dictionary-v0.5.2) - 2026-11-17
 
 ### Added

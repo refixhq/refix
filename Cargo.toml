@@ -38,5 +38,5 @@ time-03 = { package = "time", version = "0.3.38", default-features = false }
 
 # Major and minor only, so a patch release doesn't re-release dependents.
 refix-codegen = { version = "0.6", path = "crates/refix-codegen" }
-refix-dictionary = { version = "0.5", path = "crates/refix-dictionary" }
+refix-dictionary = { version = "0.6", path = "crates/refix-dictionary" }
 refix-message = { version = "0.4", path = "crates/refix-message" }

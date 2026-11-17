@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/refixhq/refix/compare/refix-fix44-v0.8.0...refix-fix44-v0.9.0) - 2026-11-17
+
+### Other
+
+- tidy the Rust example in the refix-fix44 README ([#169](https://github.com/refixhq/refix/pull/169))
+
 ## [0.8.0](https://github.com/refixhq/refix/compare/refix-fix44-v0.7.0...refix-fix44-v0.8.0) - 2026-11-16
 
 ### Other
