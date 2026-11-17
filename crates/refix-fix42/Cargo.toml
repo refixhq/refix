@@ -1,0 +1,22 @@
+[package]
+name = "refix-fix42"
+description = "Typed FIX 4.2 protocol messages for the ReFIX engine"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+# Packages the gitignored generated module, and the fingerprint release-plz watches.
+include = ["src/**/*.rs", "generated.sha256", "README.md", "LICENSE-*"]
+
+[dependencies]
+refix-message = { workspace = true }
+
+[dev-dependencies]
+bytes = { workspace = true }
+refix = { path = "../refix" }
