@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/refixhq/refix/compare/refix-codegen-v0.5.2...refix-codegen-v0.6.0) - 2026-11-17
+
+### Added
+
+- [**breaking**] generate groups declared in group instances ([#160](https://github.com/refixhq/refix/pull/160))
+
 ## [0.5.2](https://github.com/refixhq/refix/compare/refix-codegen-v0.5.1...refix-codegen-v0.5.2) - 2026-11-16
 
 ### Other
