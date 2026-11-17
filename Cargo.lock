@@ -724,6 +724,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "refix-fix42"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "refix",
+ "refix-message",
+]
+
+[[package]]
 name = "refix-fix44"
 version = "0.8.0"
 dependencies = [

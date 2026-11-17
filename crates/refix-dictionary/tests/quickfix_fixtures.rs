@@ -13,6 +13,59 @@ const FIX44: &str = include_str!(concat!(
     "/../../dictionaries/quickfix/FIX44.xml"
 ));
 
+const FIX42: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../dictionaries/quickfix/FIX42.xml"
+));
+
+#[test]
+fn parses_the_full_fix42_dictionary() {
+    let parsed = quickfix::parse(FIX42).unwrap();
+
+    assert_eq!(
+        parsed.dictionary.version(),
+        Version {
+            protocol: Protocol::Fix,
+            major: 4,
+            minor: 2,
+            service_pack: 0,
+        }
+    );
+    assert_eq!(parsed.dictionary.fields().len(), 405);
+    assert_eq!(parsed.dictionary.spec().messages.len(), 46);
+    // FIX 4.2 has no components, so every group is declared in place.
+    assert!(parsed.dictionary.spec().components.is_empty());
+
+    // MassQuote's NoQuoteSets declares NoQuoteEntries in its instances.
+    let quote_sets = parsed
+        .dictionary
+        .messages()
+        .find(|message| message.name() == "MassQuote")
+        .unwrap()
+        .members()
+        .find_map(|member| match member {
+            dictionary::Member::Group(group) => Some(group),
+            dictionary::Member::Field { .. } => None,
+        })
+        .unwrap();
+    assert_eq!(quote_sets.count_field().name, "NoQuoteSets");
+    let quote_entries = quote_sets
+        .members()
+        .find_map(|member| match member {
+            dictionary::Member::Group(group) => Some(group),
+            dictionary::Member::Field { .. } => None,
+        })
+        .unwrap();
+    assert_eq!(quote_entries.count_field().name, "NoQuoteEntries");
+    assert_eq!(
+        quote_entries.declared_in(),
+        &MemberContext::Message("MassQuote".to_owned()).group("NoQuoteSets")
+    );
+
+    // Nothing is left unmodelled.
+    assert!(parsed.warnings.is_empty());
+}
+
 #[test]
 fn parses_the_full_fix44_dictionary() {
     let parsed = quickfix::parse(FIX44).unwrap();

@@ -1,5 +1,4 @@
 py := "python/refix-engine"
-stock := "python/refix-fix44"
 
 # List available recipes
 default:
@@ -31,22 +30,31 @@ pycompare *args:
     uv run --project {{ py }} pytest benchmarks --benchmark-columns=min,median,iqr,ops,rounds {{ args }}
 
 # Generate the stock packages' code and its fingerprint
-generate-stock:
-    cargo run -q -p refix-cli -- codegen dictionaries/quickfix/FIX44.xml \
-        --rust crates/refix-fix44/src/generated.rs \
-        --python python/refix-fix44/src/refix_fix44/__init__.py
-    shasum -a 256 crates/refix-fix44/src/generated.rs \
-        python/refix-fix44/src/refix_fix44/__init__.py > crates/refix-fix44/generated.sha256
+generate-stock: (_generate-stock "42") (_generate-stock "44")
+
+# Generate one FIX version's stock packages
+_generate-stock version:
+    cargo run -q -p refix-cli -- codegen dictionaries/quickfix/FIX{{ version }}.xml \
+        --rust crates/refix-fix{{ version }}/src/generated.rs \
+        --python python/refix-fix{{ version }}/src/refix_fix{{ version }}/__init__.py
+    shasum -a 256 crates/refix-fix{{ version }}/src/generated.rs \
+        python/refix-fix{{ version }}/src/refix_fix{{ version }}/__init__.py \
+        > crates/refix-fix{{ version }}/generated.sha256
 
 # Check the stock packages as published
-check-stock: generate-stock
-    git diff --exit-code -- crates/refix-fix44/generated.sha256
-    cargo clippy -p refix-fix44 --all-targets -- -D warnings
-    cargo test -p refix-fix44
-    rm -rf target/stock && uv build --wheel {{ stock }} -o target/stock
-    cd {{ stock }} && uv run --project ../refix-engine pyright
-    uv pip install -q --python {{ py }}/.venv --no-deps target/stock/refix_fix44-*.whl
-    cd {{ stock }} && uv run --project ../refix-engine python -m doctest README.md
+check-stock: (_check-stock "42") (_check-stock "44")
+
+# Check one FIX version's stock packages
+_check-stock version: (_generate-stock version)
+    git diff --exit-code -- crates/refix-fix{{ version }}/generated.sha256
+    cargo clippy -p refix-fix{{ version }} --all-targets -- -D warnings
+    cargo test -p refix-fix{{ version }}
+    rm -rf target/stock/{{ version }}
+    uv build --wheel python/refix-fix{{ version }} -o target/stock/{{ version }}
+    cd python/refix-fix{{ version }} && uv run --project ../refix-engine pyright
+    uv pip install -q --python {{ py }}/.venv --no-deps \
+        target/stock/{{ version }}/refix_fix{{ version }}-*.whl
+    cd python/refix-fix{{ version }} && uv run --project ../refix-engine python -m doctest README.md
 
 # Check the CLI as published, through a wheel built from its sdist
 check-cli:
