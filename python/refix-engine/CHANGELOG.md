@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/refixhq/refix/compare/python-v0.8.3...python-v0.9.0) - 2026-11-17
+
+### Added
+
+- [**breaking**] generate groups declared in group instances ([#160](https://github.com/refixhq/refix/pull/160))
+
 ## [0.8.3](https://github.com/refixhq/refix/compare/python-v0.8.2...python-v0.8.3) - 2026-11-16
 
 ### Other
