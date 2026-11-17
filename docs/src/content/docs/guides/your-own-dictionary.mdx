@@ -37,12 +37,22 @@ tool again when the dictionary changes.
 
 ## Other FIX versions
 
-FIX 4.2 and 4.4 have ready-made packages. For FIX 4.0, 4.1 or 4.3, generate a module from QuickFIX's dictionary
-for that version, found in its [spec directory](https://github.com/quickfix/quickfix/tree/master/spec):
+FIX 4.2 and 4.4 have ready-made packages. For another version, generate a module from QuickFIX's dictionary for
+it, found in its [spec directory](https://github.com/quickfix/quickfix/tree/master/spec). For FIX 4.0, 4.1 or 4.3:
 
 ```sh
 refix codegen FIX43.xml --python fix43.py --rust fix43.rs
 ```
+
+From FIX 5.0 the header, the trailer and the session messages, such as Logon, are in a transport dictionary of
+their own, `FIXT11.xml`. Give it with `--transport`:
+
+```sh
+refix codegen FIX50SP2.xml --transport FIXT11.xml --python fix50sp2.py --rust fix50sp2.rs
+```
+
+This works for FIX 5.0, 5.0 SP1 and 5.0 SP2. QuickFIX's `FIX50SP2.xml` also holds every extension pack released
+since SP2, so its Python module is about 10 MB and pyright cannot check code that uses it.
 
 Those dictionaries are under the QuickFIX Software License.
 
