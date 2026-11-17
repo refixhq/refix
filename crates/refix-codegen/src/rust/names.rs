@@ -11,8 +11,8 @@ use super::naming::{
 use crate::Warning;
 use crate::conversion::Conversion;
 use crate::envelope::Section;
-use crate::groups::{declared_groups, instance_context, is_generated};
-use crate::namespace::{Namespace, Owner};
+use crate::groups::{declared_groups, instance_context};
+use crate::namespace::{NameClash, Namespace, Owner};
 
 /// Names the generated root defines or relies on.
 ///
@@ -111,6 +111,9 @@ impl Names {
         for section in [Section::Header, Section::Trailer] {
             names.name_section(section, dictionary)?;
         }
+        for group in declared_groups(dictionary) {
+            names.name_nested_modules(group, &root)?;
+        }
         for field in dictionary.fields() {
             if Conversion::of(field).is_enum() {
                 let type_name = root.claim_enum(&field.name, warnings)?;
@@ -121,9 +124,7 @@ impl Names {
             names.name_accessors(message.members(), Namespace::with_generated(MESSAGE))?;
         }
         for group in declared_groups(dictionary) {
-            if is_generated(group) {
-                names.name_accessors(group.members(), Namespace::with_generated(INSTANCE))?;
-            }
+            names.name_accessors(group.members(), Namespace::with_generated(INSTANCE))?;
         }
         Ok(names)
     }
@@ -159,6 +160,40 @@ impl Names {
         }
         self.message_modules
             .insert(message.name().to_owned(), module);
+        Ok(())
+    }
+
+    /// Names the modules of the groups declared directly in a group's
+    /// instances, which sit inside the group's own module.
+    ///
+    /// Inside that module such a name would hide a root name, so it must
+    /// not be one.
+    fn name_nested_modules(
+        &mut self,
+        group: dictionary::Group<'_>,
+        root: &Namespace,
+    ) -> Result<(), Error> {
+        let mut modules = Namespace::default();
+        for member in group.members() {
+            let dictionary::Member::Group(nested) = member else {
+                continue;
+            };
+            if !matches!(nested.declared_in(), MemberContext::Group { .. }) {
+                continue;
+            }
+            let name = group_module_name(nested)?;
+            let owner = Owner::Group(instance_context(nested));
+            if let Some(first) = root.owner(&name) {
+                return Err(Box::new(NameClash {
+                    name,
+                    first: first.clone(),
+                    second: owner,
+                })
+                .into());
+            }
+            modules.claim(&name, owner)?;
+            self.group_modules.insert(instance_context(nested), name);
+        }
         Ok(())
     }
 
@@ -222,12 +257,11 @@ impl Names {
                     namespace.claim(&name, Owner::Field(field.name.clone()))?;
                     self.accessors.insert(field.tag, name);
                 }
-                dictionary::Member::Group(group) if is_generated(group) => {
+                dictionary::Member::Group(group) => {
                     let name = group_accessor_name(group)?;
                     namespace.claim(&name, Owner::Group(instance_context(group)))?;
                     self.group_accessors.insert(instance_context(group), name);
                 }
-                dictionary::Member::Group(_) => {}
             }
         }
         Ok(())
@@ -265,12 +299,20 @@ impl Names {
 
     /// The path of a group's module from the generated root.
     pub(super) fn group_path(&self, group: dictionary::Group<'_>) -> String {
-        let name = self.group_module(group);
-        match group.declared_in() {
+        self.module_path(group.declared_in(), self.group_module(group))
+    }
+
+    /// The path of the module `name` of a group declared in `context`.
+    fn module_path(&self, context: &MemberContext, name: &str) -> String {
+        match context {
             MemberContext::Message(message) => format!("{}::{name}", self.message_module(message)),
             MemberContext::Header => format!("{}::{name}", Section::Header.member_name()),
             MemberContext::Trailer => format!("{}::{name}", Section::Trailer.member_name()),
-            _ => name.to_owned(),
+            MemberContext::Component(_) => name.to_owned(),
+            MemberContext::Group { parent, .. } => {
+                let outer = self.module_path(parent, &self.group_modules[context]);
+                format!("{outer}::{name}")
+            }
         }
     }
 }
@@ -278,6 +320,7 @@ impl Names {
 #[cfg(test)]
 mod tests {
     use super::Names;
+    use crate::groups::declared_groups;
     use crate::rust::Error;
     use crate::test_utils::message_with;
     use crate::{NameClash, Owner, Warning};
@@ -561,6 +604,58 @@ mod tests {
                 first: Owner::Message("Parties".to_owned()),
                 second: Owner::Group(
                     MemberContext::Component("Parties".to_owned()).group("NoPartyIDs")
+                ),
+            }
+        );
+    }
+
+    /// A message whose `NoMsgTypes` group declares `NoMsgSubTypes` in its
+    /// instances.
+    fn with_a_group_in_a_group(message_name: &str) -> Dictionary {
+        with_parties(
+            vec![message(
+                message_name,
+                "A",
+                vec![group(
+                    384,
+                    vec![field_ref(372), group(9001, vec![field_ref(9002)])],
+                )],
+            )],
+            vec![
+                field("NoMsgTypes", 384, DataType::NumInGroup),
+                field("RefMsgType", 372, DataType::String),
+                field("NoMsgSubTypes", 9001, DataType::NumInGroup),
+                field("MsgSubType", 9002, DataType::String),
+            ],
+        )
+    }
+
+    #[test]
+    fn a_group_in_a_group_instance_sits_in_its_parents_module() {
+        let dictionary = with_a_group_in_a_group("Logon");
+        let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
+        let groups = declared_groups(&dictionary);
+        let nested = groups
+            .iter()
+            .find(|group| group.count_field().name == "NoMsgSubTypes")
+            .unwrap();
+
+        assert_eq!(names.group_path(*nested), "logon::msg_types::msg_sub_types");
+        assert_eq!(names.group_accessor(*nested), "msg_sub_types");
+    }
+
+    #[test]
+    fn a_nested_group_module_named_like_a_root_module_clashes() {
+        let dictionary = with_a_group_in_a_group("MsgSubTypes");
+        assert_eq!(
+            clash_in(&dictionary),
+            NameClash {
+                name: "msg_sub_types".to_owned(),
+                first: Owner::Message("MsgSubTypes".to_owned()),
+                second: Owner::Group(
+                    MemberContext::Message("MsgSubTypes".to_owned())
+                        .group("NoMsgTypes")
+                        .group("NoMsgSubTypes")
                 ),
             }
         );
