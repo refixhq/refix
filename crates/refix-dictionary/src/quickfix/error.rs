@@ -1,4 +1,4 @@
-use crate::{MemberContext, dictionary};
+use crate::{MemberContext, dictionary, transport};
 use std::fmt;
 
 /// A defect that prevents producing a dictionary at all.
@@ -35,6 +35,11 @@ pub enum Error {
         second: String,
     },
     Invalid(dictionary::Error),
+    /// A defect in the transport dictionary.
+    Transport(Box<Error>),
+    /// An application dictionary and a transport dictionary that cannot be
+    /// joined.
+    Unjoinable(transport::Error),
 }
 
 impl fmt::Display for Error {
@@ -92,6 +97,8 @@ impl fmt::Display for Error {
             Error::Invalid(error) => {
                 write!(f, "invalid dictionary: {error}")
             }
+            Error::Transport(error) => write!(f, "in the transport dictionary: {error}"),
+            Error::Unjoinable(error) => write!(f, "{error}"),
         }
     }
 }
@@ -101,6 +108,8 @@ impl std::error::Error for Error {
         match self {
             Error::Xml(error) => Some(error),
             Error::Invalid(error) => Some(error),
+            Error::Transport(error) => Some(error),
+            Error::Unjoinable(error) => Some(error),
             _ => None,
         }
     }
