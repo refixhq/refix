@@ -4,6 +4,7 @@ mod context;
 pub mod dictionary;
 pub mod quickfix;
 pub mod spec;
+pub mod transport;
 
 pub use context::MemberContext;
 pub use dictionary::Dictionary;

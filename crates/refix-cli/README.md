@@ -11,8 +11,14 @@ refix codegen FIX44.xml --rust fix44.rs --python fix44.py
 ```
 
 Without a Rust toolchain, `uv tool install refix-cli` installs a prebuilt binary. The generated Rust module depends on
-`refix-message`, and the Python module on the `refix` package from PyPI. The stock FIX 4.4 messages are published
-ready-made as `refix-fix44`.
+`refix-message`, and the Python module on the `refix` package from PyPI. The stock FIX 4.2 and 4.4 messages are
+published ready-made as `refix-fix42` and `refix-fix44`.
+
+From FIX 5.0 the header, trailer and session messages are in a transport dictionary. Give it with `--transport`:
+
+```sh
+refix codegen FIX50SP2.xml --transport FIXT11.xml --rust fix50sp2.rs --python fix50sp2.py
+```
 
 ## License
 

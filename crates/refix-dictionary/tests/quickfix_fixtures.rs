@@ -66,6 +66,95 @@ fn parses_the_full_fix42_dictionary() {
     assert!(parsed.warnings.is_empty());
 }
 
+const FIX50: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../dictionaries/quickfix/FIX50.xml"
+));
+
+const FIXT11: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../dictionaries/quickfix/FIXT11.xml"
+));
+
+#[test]
+fn joins_the_fix50_dictionary_with_its_transport() {
+    let alone = quickfix::parse(FIX50).unwrap();
+    assert_eq!(alone.dictionary.header().count(), 0);
+    assert_eq!(alone.dictionary.spec().messages.len(), 93);
+
+    let parsed = quickfix::parse_with_transport(FIX50, FIXT11).unwrap();
+    let dictionary = &parsed.dictionary;
+
+    assert_eq!(
+        dictionary.version(),
+        Version {
+            protocol: Protocol::Fix,
+            major: 5,
+            minor: 0,
+            service_pack: 0,
+        }
+    );
+
+    // The envelope comes from the transport.
+    let header: Vec<dictionary::Member> = dictionary.header().collect();
+    assert_eq!(header.len(), 30);
+    let Some(dictionary::Member::Group(hops)) = header.last() else {
+        panic!("expected the header to end with a group");
+    };
+    assert_eq!(hops.count_field().name, "NoHops");
+    assert_eq!(dictionary.trailer().count(), 3);
+
+    // So do the eight session messages, listed first.
+    let messages: Vec<&str> = dictionary
+        .spec()
+        .messages
+        .iter()
+        .map(|message| message.name.as_str())
+        .collect();
+    assert_eq!(messages.len(), 101);
+    assert_eq!(messages[..3], ["Heartbeat", "TestRequest", "ResendRequest"]);
+    assert_eq!(messages[8], "IOI");
+
+    // The transport's MsgTypeGrp is empty, so Logon's group is the
+    // application dictionary's.
+    let msg_types = dictionary
+        .messages()
+        .find(|message| message.name() == "Logon")
+        .unwrap()
+        .members()
+        .find_map(|member| match member {
+            dictionary::Member::Group(group) => Some(group),
+            dictionary::Member::Field { .. } => None,
+        })
+        .unwrap();
+    assert_eq!(msg_types.count_field().name, "NoMsgTypes");
+    assert_eq!(msg_types.component(), Some("MsgTypeGrp"));
+    assert_eq!(msg_types.members().count(), 4);
+
+    let field = |name: &str| {
+        dictionary
+            .fields()
+            .iter()
+            .find(|field| field.name == name)
+            .unwrap()
+    };
+    // Ten fields are the transport's alone.
+    assert_eq!(dictionary.fields().len(), 1100);
+    assert_eq!(field("SessionStatus").tag, Tag(1409));
+    // ApplVerID gains the two versions only the transport lists.
+    let versions: Vec<&str> = field("ApplVerID")
+        .values
+        .iter()
+        .map(|value| value.value.as_str())
+        .collect();
+    assert_eq!(versions, ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+    // The application dictionary never lists Signature after its length.
+    assert_eq!(field("Signature").length_tag, Some(Tag(93)));
+
+    // Joining adds no warnings to the application dictionary's own.
+    assert_eq!(parsed.warnings, alone.warnings);
+}
+
 #[test]
 fn parses_the_full_fix44_dictionary() {
     let parsed = quickfix::parse(FIX44).unwrap();

@@ -18,7 +18,29 @@ pub use error::Error;
 /// Parses a QuickFIX-format XML data dictionary into a [`Dictionary`].
 pub fn parse(xml: &str) -> Result<Parsed, Error> {
     let mut warnings = Vec::new();
-    let xml = cut_misplaced_declaration(xml, &mut warnings);
+    let spec = parse_spec(xml, &mut warnings)?;
+    resolve(spec, warnings)
+}
+
+/// Parses an application dictionary and its transport dictionary, both
+/// QuickFIX-format XML, into one [`Dictionary`].
+///
+/// From FIX 5.0 the header, the trailer and the session messages are in
+/// the transport dictionary, such as `FIXT11.xml`. They are joined as
+/// [`Spec::with_transport`] describes.
+pub fn parse_with_transport(application: &str, transport: &str) -> Result<Parsed, Error> {
+    let mut warnings = Vec::new();
+    let application = parse_spec(application, &mut warnings)?;
+    let transport =
+        parse_spec(transport, &mut warnings).map_err(|error| Error::Transport(Box::new(error)))?;
+    let spec = application
+        .with_transport(transport)
+        .map_err(Error::Unjoinable)?;
+    resolve(spec, warnings)
+}
+
+fn parse_spec(xml: &str, warnings: &mut Vec<Warning>) -> Result<Spec, Error> {
+    let xml = cut_misplaced_declaration(xml, warnings);
     let document = roxmltree::Document::parse(&xml).map_err(Error::Xml)?;
     let root = document.root_element();
     if !root.has_tag_name("fix") {
@@ -26,7 +48,7 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
     }
 
     let version = parse_version(root)?;
-    let fields = parse_fields(root, &mut warnings)?;
+    let fields = parse_fields(root, warnings)?;
     let tags_by_name: HashMap<&str, Tag> = fields
         .iter()
         .map(|field| (field.name.as_str(), field.tag))
@@ -37,27 +59,30 @@ pub fn parse(xml: &str) -> Result<Parsed, Error> {
         "header",
         MemberContext::Header,
         &tags_by_name,
-        &mut warnings,
+        warnings,
     )?;
-    let components = parse_components(root, &tags_by_name, &mut warnings)?;
-    let messages = parse_messages(root, &tags_by_name, &mut warnings)?;
+    let components = parse_components(root, &tags_by_name, warnings)?;
+    let messages = parse_messages(root, &tags_by_name, warnings)?;
     let trailer = parse_section(
         root,
         "trailer",
         MemberContext::Trailer,
         &tags_by_name,
-        &mut warnings,
+        warnings,
     )?;
     let fields = link_length_fields(fields, &header, &trailer, &messages, &components)?;
 
-    let spec = Spec {
+    Ok(Spec {
         version,
         header,
         trailer,
         messages,
         components,
         fields,
-    };
+    })
+}
+
+fn resolve(spec: Spec, mut warnings: Vec<Warning>) -> Result<Parsed, Error> {
     let resolved = spec.resolve().map_err(Error::Invalid)?;
     warnings.extend(resolved.warnings.into_iter().map(Warning::Invalid));
 
@@ -628,6 +653,77 @@ mod tests {
             let error = parse("<fix major='4' minor='4'><?xml version='1.0'?></fix>").unwrap_err();
 
             assert!(matches!(error, Error::Xml(_)));
+        }
+    }
+
+    mod transport {
+        use super::*;
+        use crate::transport;
+
+        const APPLICATION: &str = "<fix major='5' minor='0'>\
+            <header/><trailer/>\
+            <messages><message name='News' msgtype='B' msgcat='app'>\
+            <field name='Headline' required='Y'/></message></messages>\
+            <fields><field number='148' name='Headline' type='STRING'/></fields>\
+            </fix>";
+
+        const TRANSPORT: &str = "<fix type='FIXT' major='1' minor='1'>\
+            <header><field name='BeginString' required='Y'/></header>\
+            <trailer><field name='CheckSum' required='Y'/></trailer>\
+            <messages><message name='Heartbeat' msgtype='0' msgcat='admin'/></messages>\
+            <fields><field number='8' name='BeginString' type='STRING'/>\
+            <field number='10' name='CheckSum' type='STRING'/></fields>\
+            </fix>";
+
+        #[test]
+        fn joins_two_dictionaries_into_one() {
+            let parsed = parse_with_transport(APPLICATION, TRANSPORT).unwrap();
+
+            let dictionary = parsed.dictionary;
+            assert_eq!(dictionary.version().major, 5);
+            assert_eq!(dictionary.header().count(), 1);
+            assert_eq!(dictionary.trailer().count(), 1);
+            let messages: Vec<&str> = dictionary
+                .messages()
+                .map(|message| message.name())
+                .collect();
+            assert_eq!(messages, ["Heartbeat", "News"]);
+            assert!(parsed.warnings.is_empty());
+        }
+
+        #[test]
+        fn a_defect_in_the_transport_names_the_transport() {
+            let error = parse_with_transport(APPLICATION, "<dictionary/>").unwrap_err();
+
+            assert!(matches!(
+                &error,
+                Error::Transport(inner) if matches!(**inner, Error::UnexpectedRoot(_))
+            ));
+            assert_eq!(
+                error.to_string(),
+                "in the transport dictionary: unexpected root element <dictionary>, expected <fix>"
+            );
+        }
+
+        #[test]
+        fn a_defect_in_the_application_dictionary_is_reported_as_is() {
+            let error = parse_with_transport("<dictionary/>", TRANSPORT).unwrap_err();
+
+            assert!(matches!(error, Error::UnexpectedRoot(_)));
+        }
+
+        #[test]
+        fn dictionaries_that_cannot_be_joined_are_an_error() {
+            let error = parse_with_transport(TRANSPORT, TRANSPORT).unwrap_err();
+
+            assert!(matches!(
+                error,
+                Error::Unjoinable(transport::Error::ApplicationHeader)
+            ));
+            assert_eq!(
+                error.to_string(),
+                "the application dictionary has a header of its own"
+            );
         }
     }
 
