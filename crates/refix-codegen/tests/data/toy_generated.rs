@@ -511,10 +511,139 @@ pub mod logon {
     }
 }
 
+/// The `MassQuote` (35=i) message.
+pub struct MassQuote(RawMessage);
+
+impl MassQuote {
+    pub const MSG_TYPE: &[u8] = b"i";
+
+    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
+        Tag(8), Tag(9), Tag(10), Tag(34), Tag(35), Tag(49), Tag(52), Tag(56), Tag(89), Tag(93),
+        Tag(117), Tag(295), Tag(296), Tag(299), Tag(302), Tag(627), Tag(628),
+    ]);
+
+    pub fn from_raw(raw: RawMessage) -> Self {
+        Self(raw)
+    }
+
+    pub fn raw(&self) -> &RawMessage {
+        &self.0
+    }
+
+    pub fn header(&self) -> Header<'_> {
+        Header(self.0.scope(), Self::KNOWN_TAGS)
+    }
+
+    pub fn trailer(&self) -> Trailer<'_> {
+        Trailer(self.0.scope())
+    }
+
+    /// The `QuoteID` (117) field.
+    #[doc(alias = "QuoteID")]
+    pub fn quote_id(&self) -> Result<Option<&str>, InvalidValue> {
+        self.0.get_str(Tag(117))
+    }
+
+    /// The instances of the `NoQuoteSets` (296) group.
+    #[doc(alias = "NoQuoteSets")]
+    pub fn quote_sets(&self) -> Result<Instances<'_, mass_quote::quote_sets::Instance<'_>>, InvalidValue> {
+        self.0.get_group(&mass_quote::quote_sets::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
+    }
+}
+
+impl std::fmt::Debug for MassQuote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MassQuote({})", self.0)
+    }
+}
+
+impl std::fmt::Display for MassQuote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+pub mod mass_quote {
+    pub mod quote_sets {
+        use super::super::*;
+
+        pub const TABLE: GroupTable<'static> = GroupTable::new(
+            Tag(296),
+            Tag(302),
+            &[Tag(295), Tag(302)],
+            &[mass_quote::quote_sets::quote_entries::TABLE],
+        );
+
+        pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(295), Tag(299), Tag(302)]);
+
+        #[derive(Clone, Copy, Debug)]
+        pub struct Instance<'a>(refix_message::Scope<'a>);
+
+        impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {
+            fn from(scope: refix_message::Scope<'a>) -> Self {
+                Self(scope)
+            }
+        }
+
+        impl<'a> Instance<'a> {
+            pub fn raw(&self) -> refix_message::Scope<'a> {
+                self.0
+            }
+
+            /// The `QuoteSetID` (302) field.
+            #[doc(alias = "QuoteSetID")]
+            pub fn quote_set_id(&self) -> Result<Option<&'a str>, InvalidValue> {
+                self.0.get_str(Tag(302))
+            }
+
+            /// The instances of the `NoQuoteEntries` (295) group.
+            #[doc(alias = "NoQuoteEntries")]
+            pub fn quote_entries(&self) -> Result<Instances<'a, mass_quote::quote_sets::quote_entries::Instance<'a>>, InvalidValue> {
+                self.0.get_group(&mass_quote::quote_sets::quote_entries::TABLE, &KNOWN_TAGS).map(Instances::from)
+            }
+        }
+
+        pub mod quote_entries {
+            use super::super::super::*;
+
+            pub const TABLE: GroupTable<'static> = GroupTable::new(
+                Tag(295),
+                Tag(299),
+                &[Tag(299)],
+                &[],
+            );
+
+            pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(299)]);
+
+            #[derive(Clone, Copy, Debug)]
+            pub struct Instance<'a>(refix_message::Scope<'a>);
+
+            impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {
+                fn from(scope: refix_message::Scope<'a>) -> Self {
+                    Self(scope)
+                }
+            }
+
+            impl<'a> Instance<'a> {
+                pub fn raw(&self) -> refix_message::Scope<'a> {
+                    self.0
+                }
+
+                /// The `QuoteEntryID` (299) field.
+                #[doc(alias = "QuoteEntryID")]
+                pub fn quote_entry_id(&self) -> Result<Option<&'a str>, InvalidValue> {
+                    self.0.get_str(Tag(299))
+                }
+            }
+        }
+    }
+}
+
 /// A message read as the type its MsgType names.
 pub enum Message {
     NewOrderSingle(NewOrderSingle),
     Logon(Logon),
+    MassQuote(MassQuote),
     Unrecognized(RawMessage),
 }
 
@@ -523,6 +652,7 @@ impl Message {
         match raw.get(Tag(35)) {
             Some(NewOrderSingle::MSG_TYPE) => Self::NewOrderSingle(NewOrderSingle::from_raw(raw)),
             Some(Logon::MSG_TYPE) => Self::Logon(Logon::from_raw(raw)),
+            Some(MassQuote::MSG_TYPE) => Self::MassQuote(MassQuote::from_raw(raw)),
             _ => Self::Unrecognized(raw),
         }
     }
@@ -533,6 +663,7 @@ impl std::fmt::Debug for Message {
         match self {
             Self::NewOrderSingle(message) => std::fmt::Debug::fmt(message, f),
             Self::Logon(message) => std::fmt::Debug::fmt(message, f),
+            Self::MassQuote(message) => std::fmt::Debug::fmt(message, f),
             Self::Unrecognized(raw) => write!(f, "Unrecognized({raw})"),
         }
     }
@@ -543,6 +674,7 @@ impl std::fmt::Display for Message {
         match self {
             Self::NewOrderSingle(message) => std::fmt::Display::fmt(message, f),
             Self::Logon(message) => std::fmt::Display::fmt(message, f),
+            Self::MassQuote(message) => std::fmt::Display::fmt(message, f),
             Self::Unrecognized(raw) => std::fmt::Display::fmt(raw, f),
         }
     }

@@ -13,7 +13,7 @@ use refix_message::{
 #[path = "data/toy_generated.rs"]
 mod toy;
 
-use toy::{ExecInst, Header, Logon, Message, NewOrderSingle, OrdType, PartyRole};
+use toy::{ExecInst, Header, Logon, MassQuote, Message, NewOrderSingle, OrdType, PartyRole};
 
 const TOY_XML: &str = include_str!("data/toy.xml");
 const TOY_GENERATED: &str = include_str!("data/toy_generated.rs");
@@ -320,6 +320,59 @@ fn reads_a_group_declared_in_its_message() {
         .map(|msg_type| msg_type.ref_msg_type().unwrap())
         .collect();
     assert_eq!(msg_types, [Some("D"), Some("8")]);
+}
+
+#[test]
+fn reads_a_group_declared_in_a_group_instance() {
+    let raw = Tokenizer::default()
+        .tokenize(frame(
+            "35=i|117=Q1|296=2|302=SET-1|295=2|299=E1|299=E2|302=SET-2|295=1|299=E3|",
+        ))
+        .unwrap();
+
+    let quote = MassQuote::from_raw(raw);
+
+    let mut entries = Vec::new();
+    for set in &quote.quote_sets().unwrap() {
+        for entry in &set.quote_entries().unwrap() {
+            entries.push((set.quote_set_id().unwrap(), entry.quote_entry_id().unwrap()));
+        }
+    }
+    assert_eq!(
+        entries,
+        [
+            (Some("SET-1"), Some("E1")),
+            (Some("SET-1"), Some("E2")),
+            (Some("SET-2"), Some("E3")),
+        ]
+    );
+}
+
+#[test]
+fn an_absent_group_in_a_group_instance_reads_as_empty() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=i|117=Q1|296=1|302=SET-1|"))
+        .unwrap();
+
+    let quote = MassQuote::from_raw(raw);
+    let sets = quote.quote_sets().unwrap();
+
+    assert!(sets.get(0).unwrap().quote_entries().unwrap().is_empty());
+}
+
+#[test]
+fn a_group_in_a_group_instance_has_a_type_in_its_parents_module() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=i|117=Q1|296=1|302=SET-1|295=1|299=E1|"))
+        .unwrap();
+
+    let quote = MassQuote::from_raw(raw);
+    let sets = quote.quote_sets().unwrap();
+    let set: toy::mass_quote::quote_sets::Instance<'_> = sets.get(0).unwrap();
+    let entries = set.quote_entries().unwrap();
+    let entry: toy::mass_quote::quote_sets::quote_entries::Instance<'_> = entries.get(0).unwrap();
+
+    assert_eq!(entry.quote_entry_id(), Ok(Some("E1")));
 }
 
 #[test]

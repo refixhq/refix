@@ -310,12 +310,97 @@ class Logon:
         return () if scopes is None else tuple(Logon.MsgTypes.Instance(scope) for scope in scopes)
 
 
-type Message = NewOrderSingle | Logon
+class MassQuote:
+    """The MassQuote (35=i) message."""
+
+    MSG_TYPE: ClassVar[bytes] = b"i"
+
+    KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((
+        8, 9, 10, 34, 35, 49, 52, 56, 89, 93, 117, 295, 296, 299, 302, 627, 628,
+    ))
+
+    class QuoteSets:
+        class QuoteEntries:
+            TABLE: ClassVar[GroupTable] = GroupTable(295, 299, (299,), ())
+
+            KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((299,))
+
+            class Instance:
+                def __init__(self, scope: refix.Scope) -> None:
+                    self._scope = scope
+
+                def __repr__(self) -> str:
+                    return f"MassQuote.QuoteSets.QuoteEntries.Instance({self._scope})"
+
+                @property
+                def raw(self) -> refix.Scope:
+                    return self._scope
+
+                @cached_property
+                def quote_entry_id(self) -> str | None:
+                    return self._scope.get_str(299)
+
+        TABLE: ClassVar[GroupTable] = GroupTable(296, 302, (295, 302), (QuoteEntries.TABLE,))
+
+        KNOWN_TAGS: ClassVar[KnownTags] = KnownTags((295, 299, 302))
+
+        class Instance:
+            def __init__(self, scope: refix.Scope) -> None:
+                self._scope = scope
+
+            def __repr__(self) -> str:
+                return f"MassQuote.QuoteSets.Instance({self._scope})"
+
+            @property
+            def raw(self) -> refix.Scope:
+                return self._scope
+
+            @cached_property
+            def quote_set_id(self) -> str | None:
+                return self._scope.get_str(302)
+
+            @cached_property
+            def quote_entries(self) -> tuple[MassQuote.QuoteSets.QuoteEntries.Instance, ...]:
+                """The instances of the NoQuoteEntries (295) group."""
+                scopes = self._scope.get_group(MassQuote.QuoteSets.QuoteEntries.TABLE, MassQuote.QuoteSets.KNOWN_TAGS)
+                return () if scopes is None else tuple(MassQuote.QuoteSets.QuoteEntries.Instance(scope) for scope in scopes)
+
+    def __init__(self, raw: RawMessage) -> None:
+        self._raw = raw
+
+    def __repr__(self) -> str:
+        return f"MassQuote({self._raw})"
+
+    @property
+    def raw(self) -> RawMessage:
+        return self._raw
+
+    @cached_property
+    def header(self) -> Header:
+        return Header(self._raw, MassQuote.KNOWN_TAGS)
+
+    @cached_property
+    def trailer(self) -> Trailer:
+        return Trailer(self._raw)
+
+    @cached_property
+    def quote_id(self) -> str | None:
+        return self._raw.get_str(117)
+
+    @cached_property
+    def quote_sets(self) -> tuple[MassQuote.QuoteSets.Instance, ...]:
+        """The instances of the NoQuoteSets (296) group."""
+        scopes = self._raw.get_group(MassQuote.QuoteSets.TABLE, MassQuote.KNOWN_TAGS)
+        return () if scopes is None else tuple(MassQuote.QuoteSets.Instance(scope) for scope in scopes)
+
+
+type Message = NewOrderSingle | Logon | MassQuote
 
 
 _MESSAGES: dict[bytes, type[Message]] = {
     NewOrderSingle.MSG_TYPE: NewOrderSingle,
     Logon.MSG_TYPE: Logon,
+    MassQuote.MSG_TYPE: MassQuote,
 }
 
 

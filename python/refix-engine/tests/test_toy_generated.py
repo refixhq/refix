@@ -13,6 +13,7 @@ from toy_generated import (
     ExecInst,
     Header,
     Logon,
+    MassQuote,
     Message,
     NewOrderSingle,
     OrdType,
@@ -89,6 +90,8 @@ class TestDispatch:
                     return "order"
                 case Logon():
                     return "logon"
+                case MassQuote():
+                    return "quote"
                 case RawMessage():
                     return "unrecognized"
                 case _:
@@ -192,6 +195,25 @@ class TestGroups:
 
         assert [msg_type.ref_msg_type for msg_type in logon.msg_types] == ["D", "8"]
 
+    def test_reads_a_group_declared_in_a_group_instance(self):
+        quote = MassQuote(
+            tokenize_body(
+                "35=i|117=Q1|296=2|302=SET-1|295=2|299=E1|299=E2|302=SET-2|295=1|299=E3|"
+            )
+        )
+
+        entries = [
+            (quote_set.quote_set_id, entry.quote_entry_id)
+            for quote_set in quote.quote_sets
+            for entry in quote_set.quote_entries
+        ]
+        assert entries == [("SET-1", "E1"), ("SET-1", "E2"), ("SET-2", "E3")]
+
+    def test_an_absent_group_in_a_group_instance_reads_as_empty(self):
+        quote = MassQuote(tokenize_body("35=i|117=Q1|296=1|302=SET-1|"))
+
+        assert quote.quote_sets[0].quote_entries == ()
+
     def test_a_header_field_after_a_group_ends_it(self):
         logon = Logon(tokenize_body("35=A|384=1|372=D|49=SENDER|"))
 
@@ -223,6 +245,13 @@ class TestPrinting:
         logon = Logon(tokenize_body("35=A|384=1|372=D|"))
 
         assert repr(logon.msg_types[0]) == "Logon.MsgTypes.Instance(372=D)"
+
+    def test_a_group_in_a_group_instance_prints_its_path(self):
+        quote = MassQuote(tokenize_body("35=i|296=1|302=SET-1|295=1|299=E1|"))
+
+        entries = quote.quote_sets[0].quote_entries
+        entry: MassQuote.QuoteSets.QuoteEntries.Instance = entries[0]
+        assert repr(entry) == "MassQuote.QuoteSets.QuoteEntries.Instance(299=E1)"
 
 
 class TestHeader:
