@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1](https://github.com/refixhq/refix/compare/refix-codegen-v0.6.0...refix-codegen-v0.6.1) - 2026-11-17
+
+### Other
+
+- updated the following local packages: refix-dictionary
+
 ## [0.6.0](https://github.com/refixhq/refix/compare/refix-codegen-v0.5.2...refix-codegen-v0.6.0) - 2026-11-17
 
 ### Added
