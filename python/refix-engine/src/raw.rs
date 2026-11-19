@@ -27,6 +27,10 @@ impl RawMessage {
     pub(crate) fn new(inner: CoreRawMessage) -> Self {
         Self(inner)
     }
+
+    pub(crate) fn scope(&self) -> CoreScope<'_> {
+        self.0.scope()
+    }
 }
 
 #[pymethods]
@@ -156,7 +160,7 @@ pub(crate) struct Scope {
 }
 
 impl Scope {
-    fn scope(&self) -> CoreScope<'_> {
+    pub(crate) fn scope(&self) -> CoreScope<'_> {
         self.message
             .get()
             .0
@@ -264,11 +268,15 @@ impl Scope {
     }
 }
 
-fn get<'py>(py: Python<'py>, scope: &CoreScope<'_>, tag: u32) -> Option<Bound<'py, PyBytes>> {
+pub(crate) fn get<'py>(
+    py: Python<'py>,
+    scope: &CoreScope<'_>,
+    tag: u32,
+) -> Option<Bound<'py, PyBytes>> {
     scope.get(Tag(tag)).map(|value| PyBytes::new(py, value))
 }
 
-fn get_str<'py>(
+pub(crate) fn get_str<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
@@ -277,15 +285,15 @@ fn get_str<'py>(
     Ok(value.map(|value| PyString::new(py, value)))
 }
 
-fn get_int(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
+pub(crate) fn get_int(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
     scope.get_int(Tag(tag)).map_err(to_py_err)
 }
 
-fn get_bool(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<bool>> {
+pub(crate) fn get_bool(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<bool>> {
     scope.get_bool(Tag(tag)).map_err(to_py_err)
 }
 
-fn get_decimal<'py>(
+pub(crate) fn get_decimal<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,

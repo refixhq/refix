@@ -1,8 +1,11 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
 import refix
 from refix import fields
+from refix.errors import InvalidValueError
+from test_raw_message import tokenize_bytes
 from test_tokenizer import tokenize_body
 
 PARTIES = refix.GroupTable(453, 448, (448, 452), ())
@@ -10,16 +13,25 @@ KNOWN = refix.KnownTags((35, 55, 448, 452, 453))
 
 
 class NewOrderSingle(fields.Message):
-    pass
+    order_qty = fields.Int(38)
+    poss_dup_flag = fields.Bool(43)
+    price = fields.Decimal(44)
+    symbol = fields.Str(55)
+    text = fields.Str(58)
+    raw_data = fields.Bytes(96)
 
 
 class Instrument(fields.Component):
-    pass
+    symbol = fields.Str(55)
 
 
 class Parties:
     class Instance(fields.GroupInstance):
-        pass
+        party_id = fields.Str(448)
+
+
+class Plain:
+    symbol = fields.Str(55)
 
 
 def order() -> refix.RawMessage:
@@ -125,3 +137,169 @@ class TestGroupInstance:
 
         with pytest.raises(TypeError):
             instance(raw=parties()[0])
+
+
+class TestStr:
+    def test_reads_text_from_a_message(self):
+        assert NewOrderSingle(order()).symbol == "ACME"
+
+    def test_reads_text_from_a_component(self):
+        assert Instrument(order()).symbol == "ACME"
+
+    def test_reads_text_from_a_group_instance(self):
+        ids = [Parties.Instance(scope).party_id for scope in parties()]
+
+        assert ids == ["AL", "BOB"]
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).text is None
+
+    def test_a_second_read_returns_the_same_object(self):
+        message = NewOrderSingle(order())
+
+        assert message.symbol is message.symbol
+
+    def test_invalid_utf8_raises(self):
+        message = NewOrderSingle(tokenize_bytes(b"35=D|58=caf\xe9|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.text
+
+        assert excinfo.value.tag == 58
+
+    def test_class_access_returns_the_declaration(self):
+        assert isinstance(NewOrderSingle.symbol, fields.Str)
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.symbol) == "Str(55)"
+
+    def test_assignment_raises(self):
+        message: Any = NewOrderSingle(order())
+
+        with pytest.raises(AttributeError, match="cannot change 'symbol'"):
+            message.symbol = "ACME"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Str
+
+        with pytest.raises(TypeError):
+            declaration(tag=55)
+
+    def test_a_class_without_a_base_raises(self):
+        with pytest.raises(TypeError, match="'Plain' is not a Message"):
+            _ = Plain().symbol
+
+
+class TestInt:
+    def test_reads_an_integer(self):
+        message = NewOrderSingle(tokenize_body("35=D|38=200|"))
+
+        assert message.order_qty == 200
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).order_qty is None
+
+    def test_a_non_integer_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|38=1.5|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.order_qty
+
+        assert excinfo.value.tag == 38
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.order_qty) == "Int(38)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Int
+
+        with pytest.raises(TypeError):
+            declaration(tag=38)
+
+
+class TestDecimal:
+    def test_reads_a_decimal(self):
+        message = NewOrderSingle(tokenize_body("35=D|44=101.25|"))
+
+        assert message.price == Decimal("101.25")
+
+    def test_keeps_the_scale(self):
+        message = NewOrderSingle(tokenize_body("35=D|44=1.50|"))
+
+        assert str(message.price) == "1.50"
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).price is None
+
+    def test_a_non_decimal_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|44=1e5|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.price
+
+        assert excinfo.value.tag == 44
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.price) == "Decimal(44)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Decimal
+
+        with pytest.raises(TypeError):
+            declaration(tag=44)
+
+
+class TestBool:
+    def test_reads_y_as_true(self):
+        message = NewOrderSingle(tokenize_body("35=D|43=Y|"))
+
+        assert message.poss_dup_flag is True
+
+    def test_reads_n_as_false(self):
+        message = NewOrderSingle(tokenize_body("35=D|43=N|"))
+
+        assert message.poss_dup_flag is False
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).poss_dup_flag is None
+
+    def test_anything_but_y_or_n_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|43=true|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.poss_dup_flag
+
+        assert excinfo.value.tag == 43
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.poss_dup_flag) == "Bool(43)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Bool
+
+        with pytest.raises(TypeError):
+            declaration(tag=43)
+
+
+class TestBytes:
+    def test_reads_bytes(self):
+        message = NewOrderSingle(tokenize_body("35=D|96=abc|"))
+
+        assert message.raw_data == b"abc"
+
+    def test_reads_bytes_that_are_not_text(self):
+        message = NewOrderSingle(tokenize_bytes(b"35=D|96=\xff\xfe|"))
+
+        assert message.raw_data == b"\xff\xfe"
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).raw_data is None
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.raw_data) == "Bytes(96)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Bytes
+
+        with pytest.raises(TypeError):
+            declaration(tag=96)

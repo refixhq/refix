@@ -1,7 +1,12 @@
-use crate::message::{RawMessage, Scope};
+mod field;
+
+pub(crate) use field::{Bool, Bytes, Decimal, Int, Str};
+
+use crate::raw::{RawMessage, Scope};
 use pyo3::exceptions::{PyAttributeError, PyTypeError};
 use pyo3::types::{PyAnyMethods, PyType, PyTypeMethods};
 use pyo3::{Bound, Py, PyAny, PyClassInitializer, PyErr, PyResult, Python, pyclass, pymethods};
+use refix_message::Scope as CoreScope;
 
 /// The base class of a generated message.
 #[pyclass(extends = Fields, subclass, frozen, module = "refix.fields")]
@@ -49,6 +54,15 @@ impl GroupInstance {
 #[pyclass(subclass, frozen, name = "_Fields", module = "refix._core")]
 pub(crate) struct Fields {
     source: Source,
+}
+
+impl Fields {
+    fn scope(&self) -> CoreScope<'_> {
+        match &self.source {
+            Source::Message(message) => message.get().scope(),
+            Source::Scope(scope) => scope.get().scope(),
+        }
+    }
 }
 
 #[pymethods]
