@@ -32,6 +32,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<fields::Bytes>()?;
     m.add_class::<fields::Date>()?;
     m.add_class::<fields::Time>()?;
+    m.add_class::<fields::TimeNs>()?;
     m.add_class::<log::LogReader>()?;
     m.add_class::<stream::Garble>()?;
     m.add_class::<stream::MessageStream>()?;

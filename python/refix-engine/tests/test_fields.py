@@ -22,6 +22,7 @@ class NewOrderSingle(fields.Message):
     trade_date = fields.Date(75)
     raw_data = fields.Bytes(96)
     md_entry_time = fields.Time(273)
+    md_entry_time_ns = fields.TimeNs(273)
 
 
 class Instrument(fields.Component):
@@ -362,6 +363,33 @@ class TestTime:
 
     def test_tag_by_keyword_raises(self):
         declaration: Any = fields.Time
+
+        with pytest.raises(TypeError):
+            declaration(tag=273)
+
+
+class TestTimeNs:
+    def test_reads_every_digit(self):
+        message = NewOrderSingle(tokenize_body("35=D|273=14:29:51.123456789|"))
+
+        assert message.md_entry_time_ns == 52_191_123_456_789
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).md_entry_time_ns is None
+
+    def test_an_invalid_time_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|273=24:00:00|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.md_entry_time_ns
+
+        assert excinfo.value.tag == 273
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.md_entry_time_ns) == "TimeNs(273)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.TimeNs
 
         with pytest.raises(TypeError):
             declaration(tag=273)

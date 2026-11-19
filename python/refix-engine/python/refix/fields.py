@@ -9,6 +9,7 @@ from refix._core import (
     Message,
     Str,
     Time,
+    TimeNs,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "Message",
     "Str",
     "Time",
+    "TimeNs",
 ]

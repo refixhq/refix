@@ -368,7 +368,7 @@ pub(crate) fn get_time<'py>(
     PyTime::new(py, hour, minute, second, microsecond, None).map(Some)
 }
 
-fn get_time_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
+pub(crate) fn get_time_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
     let value = scope.get_time(Tag(tag)).map_err(to_py_err)?;
     Ok(value.map(|value| value.nanos_since_midnight()))
 }
