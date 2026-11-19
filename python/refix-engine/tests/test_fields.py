@@ -1,3 +1,4 @@
+import enum
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Any
@@ -5,6 +6,7 @@ from typing import Any
 import pytest
 import refix
 from refix import fields
+from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
 from test_raw_message import tokenize_bytes
 from test_tokenizer import tokenize_body
@@ -13,11 +15,28 @@ PARTIES = refix.GroupTable(453, 448, (448, 452), ())
 KNOWN = refix.KnownTags((35, 55, 448, 452, 453))
 
 
+class Side(enum.StrEnum):
+    BUY = "1"
+    SELL = "2"
+
+
+class PartyRole(enum.IntEnum):
+    EXECUTING_FIRM = 1
+    CLIENT_ID = 3
+
+
+class QuoteCondition(enum.StrEnum):
+    OPEN = "A"
+    CLOSED = "B"
+
+
 class NewOrderSingle(fields.Message):
+    exec_inst = fields.MultipleValues(18)
     order_qty = fields.Int(38)
     poss_dup_flag = fields.Bool(43)
     price = fields.Decimal(44)
     sending_time = fields.UtcTimestamp(52)
+    side = fields.Str(54, Side)
     sending_time_ns = fields.UtcTimestampNs(52)
     symbol = fields.Str(55)
     text = fields.Str(58)
@@ -26,6 +45,8 @@ class NewOrderSingle(fields.Message):
     maturity_month_year = fields.MonthYear(200)
     md_entry_time = fields.Time(273)
     md_entry_time_ns = fields.TimeNs(273)
+    quote_condition = fields.MultipleValues(276, QuoteCondition)
+    party_role = fields.Int(452, PartyRole)
 
 
 class Instrument(fields.Component):
@@ -497,3 +518,177 @@ class TestMonthYear:
 
         with pytest.raises(TypeError):
             declaration(tag=200)
+
+
+class TestMultipleValues:
+    def test_reads_values_in_wire_order(self):
+        message = NewOrderSingle(tokenize_body("35=D|18=1 6 1|"))
+
+        assert message.exec_inst == ("1", "6", "1")
+
+    def test_reads_a_single_value(self):
+        message = NewOrderSingle(tokenize_body("35=D|18=G|"))
+
+        assert message.exec_inst == ("G",)
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).exec_inst is None
+
+    def test_a_double_space_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|18=1  6|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.exec_inst
+
+        assert excinfo.value.tag == 18
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.exec_inst) == "MultipleValues(18)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.MultipleValues
+
+        with pytest.raises(TypeError):
+            declaration(tag=18)
+
+
+class TestCodedStr:
+    def test_reads_a_member(self):
+        message = NewOrderSingle(tokenize_body("35=D|54=1|"))
+
+        assert message.side is Side.BUY
+
+    def test_an_unlisted_value_is_unrecognized(self):
+        message = NewOrderSingle(tokenize_body("35=D|54=X|"))
+
+        assert message.side == Unrecognized("X")
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).side is None
+
+    def test_the_missing_hook_of_the_enum_is_not_used(self):
+        class Lenient(enum.StrEnum):
+            BUY = "B"
+
+            @classmethod
+            def _missing_(cls, value: object) -> "Lenient":
+                return cls.BUY
+
+        class Order(fields.Message):
+            side = fields.Str(54, Lenient)
+
+        message = Order(tokenize_body("35=D|54=b|"))
+
+        assert message.side == Unrecognized("b")
+
+    def test_the_repr_shows_the_enum(self):
+        assert repr(NewOrderSingle.side) == "Str(54, Side)"
+
+    def test_an_int_enum_raises(self):
+        declaration: Any = fields.Str
+
+        with pytest.raises(TypeError, match="'PartyRole' is not a subclass of StrEnum"):
+            declaration(54, PartyRole)
+
+    def test_a_plain_enum_raises(self):
+        class Plain(enum.Enum):
+            BUY = "1"
+
+        declaration: Any = fields.Str
+
+        with pytest.raises(TypeError, match="is not a subclass of StrEnum"):
+            declaration(54, Plain)
+
+    def test_anything_but_a_class_raises(self):
+        declaration: Any = fields.Str
+
+        with pytest.raises(TypeError):
+            declaration(54, "Side")
+
+    def test_the_enum_by_keyword_raises(self):
+        declaration: Any = fields.Str
+
+        with pytest.raises(TypeError):
+            declaration(54, enum=Side)
+
+
+class TestCodedInt:
+    def test_reads_a_member(self):
+        message = NewOrderSingle(tokenize_body("35=D|452=3|"))
+
+        assert message.party_role is PartyRole.CLIENT_ID
+
+    def test_an_unlisted_value_is_unrecognized(self):
+        message = NewOrderSingle(tokenize_body("35=D|452=99|"))
+
+        assert message.party_role == Unrecognized(99)
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(tokenize_body("35=D|")).party_role is None
+
+    def test_a_non_integer_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|452=A|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.party_role
+
+        assert excinfo.value.tag == 452
+
+    def test_the_repr_shows_the_enum(self):
+        assert repr(NewOrderSingle.party_role) == "Int(452, PartyRole)"
+
+    def test_a_str_enum_raises(self):
+        declaration: Any = fields.Int
+
+        with pytest.raises(TypeError, match="'Side' is not a subclass of IntEnum"):
+            declaration(452, Side)
+
+    def test_the_enum_by_keyword_raises(self):
+        declaration: Any = fields.Int
+
+        with pytest.raises(TypeError):
+            declaration(452, enum=PartyRole)
+
+
+class TestCodedMultipleValues:
+    def test_reads_members_in_wire_order(self):
+        message = NewOrderSingle(tokenize_body("35=D|276=B A B|"))
+
+        assert message.quote_condition == (
+            QuoteCondition.CLOSED,
+            QuoteCondition.OPEN,
+            QuoteCondition.CLOSED,
+        )
+
+    def test_an_unlisted_value_is_unrecognized(self):
+        message = NewOrderSingle(tokenize_body("35=D|276=A Z|"))
+
+        assert message.quote_condition == (QuoteCondition.OPEN, Unrecognized("Z"))
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).quote_condition is None
+
+    def test_a_double_space_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|276=A  B|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.quote_condition
+
+        assert excinfo.value.tag == 276
+
+    def test_the_repr_shows_the_enum(self):
+        expected = "MultipleValues(276, QuoteCondition)"
+
+        assert repr(NewOrderSingle.quote_condition) == expected
+
+    def test_an_int_enum_raises(self):
+        declaration: Any = fields.MultipleValues
+
+        with pytest.raises(TypeError, match="'PartyRole' is not a subclass of StrEnum"):
+            declaration(276, PartyRole)
+
+    def test_the_enum_by_keyword_raises(self):
+        declaration: Any = fields.MultipleValues
+
+        with pytest.raises(TypeError):
+            declaration(276, enum=QuoteCondition)

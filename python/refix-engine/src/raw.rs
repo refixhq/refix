@@ -400,7 +400,7 @@ pub(crate) fn get_month_year<'py>(
         .map(Some)
 }
 
-fn get_multiple_values<'py>(
+pub(crate) fn get_multiple_values<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
