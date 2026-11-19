@@ -10,6 +10,7 @@ from refix._core import (
     Str,
     Time,
     TimeNs,
+    UtcTimestamp,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "Str",
     "Time",
     "TimeNs",
+    "UtcTimestamp",
 ]

@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Any
 
@@ -17,6 +17,7 @@ class NewOrderSingle(fields.Message):
     order_qty = fields.Int(38)
     poss_dup_flag = fields.Bool(43)
     price = fields.Decimal(44)
+    sending_time = fields.UtcTimestamp(52)
     symbol = fields.Str(55)
     text = fields.Str(58)
     trade_date = fields.Date(75)
@@ -393,3 +394,45 @@ class TestTimeNs:
 
         with pytest.raises(TypeError):
             declaration(tag=273)
+
+
+class TestUtcTimestamp:
+    def test_reads_a_timestamp(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030-14:29:51.123|"))
+
+        assert message.sending_time == datetime(
+            2026, 10, 30, 14, 29, 51, 123000, tzinfo=UTC
+        )
+
+    def test_is_in_utc(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030-14:29:51|"))
+
+        assert message.sending_time is not None
+        assert message.sending_time.tzinfo is UTC
+
+    def test_truncates_to_microseconds(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030-14:29:51.123456789|"))
+
+        assert message.sending_time == datetime(
+            2026, 10, 30, 14, 29, 51, 123456, tzinfo=UTC
+        )
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).sending_time is None
+
+    def test_an_invalid_timestamp_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.sending_time
+
+        assert excinfo.value.tag == 52
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.sending_time) == "UtcTimestamp(52)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.UtcTimestamp
+
+        with pytest.raises(TypeError):
+            declaration(tag=52)

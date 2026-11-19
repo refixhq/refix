@@ -306,7 +306,7 @@ pub(crate) fn get_decimal<'py>(
     decimal.call1((value.to_string(),)).map(Some)
 }
 
-fn get_utc_timestamp<'py>(
+pub(crate) fn get_utc_timestamp<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
