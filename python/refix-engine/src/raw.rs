@@ -268,7 +268,11 @@ impl Scope {
     }
 }
 
-fn get<'py>(py: Python<'py>, scope: &CoreScope<'_>, tag: u32) -> Option<Bound<'py, PyBytes>> {
+pub(crate) fn get<'py>(
+    py: Python<'py>,
+    scope: &CoreScope<'_>,
+    tag: u32,
+) -> Option<Bound<'py, PyBytes>> {
     scope.get(Tag(tag)).map(|value| PyBytes::new(py, value))
 }
 

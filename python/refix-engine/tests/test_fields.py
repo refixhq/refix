@@ -18,6 +18,7 @@ class NewOrderSingle(fields.Message):
     price = fields.Decimal(44)
     symbol = fields.Str(55)
     text = fields.Str(58)
+    raw_data = fields.Bytes(96)
 
 
 class Instrument(fields.Component):
@@ -278,3 +279,27 @@ class TestBool:
 
         with pytest.raises(TypeError):
             declaration(tag=43)
+
+
+class TestBytes:
+    def test_reads_bytes(self):
+        message = NewOrderSingle(tokenize_body("35=D|96=abc|"))
+
+        assert message.raw_data == b"abc"
+
+    def test_reads_bytes_that_are_not_text(self):
+        message = NewOrderSingle(tokenize_bytes(b"35=D|96=\xff\xfe|"))
+
+        assert message.raw_data == b"\xff\xfe"
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).raw_data is None
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.raw_data) == "Bytes(96)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Bytes
+
+        with pytest.raises(TypeError):
+            declaration(tag=96)
