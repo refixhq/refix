@@ -1,6 +1,8 @@
 mod field;
 
-pub(crate) use field::{Bool, Bytes, Date, Decimal, Int, Str, Time, TimeNs, UtcTimestamp};
+pub(crate) use field::{
+    Bool, Bytes, Date, Decimal, Int, Str, Time, TimeNs, UtcTimestamp, UtcTimestampNs,
+};
 
 use crate::raw::{RawMessage, Scope};
 use pyo3::exceptions::{PyAttributeError, PyTypeError};

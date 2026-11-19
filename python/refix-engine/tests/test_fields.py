@@ -18,6 +18,7 @@ class NewOrderSingle(fields.Message):
     poss_dup_flag = fields.Bool(43)
     price = fields.Decimal(44)
     sending_time = fields.UtcTimestamp(52)
+    sending_time_ns = fields.UtcTimestampNs(52)
     symbol = fields.Str(55)
     text = fields.Str(58)
     trade_date = fields.Date(75)
@@ -433,6 +434,33 @@ class TestUtcTimestamp:
 
     def test_tag_by_keyword_raises(self):
         declaration: Any = fields.UtcTimestamp
+
+        with pytest.raises(TypeError):
+            declaration(tag=52)
+
+
+class TestUtcTimestampNs:
+    def test_reads_every_digit(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030-14:29:51.123456789|"))
+
+        assert message.sending_time_ns == 1_793_370_591_123_456_789
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).sending_time_ns is None
+
+    def test_an_invalid_timestamp_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.sending_time_ns
+
+        assert excinfo.value.tag == 52
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.sending_time_ns) == "UtcTimestampNs(52)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.UtcTimestampNs
 
         with pytest.raises(TypeError):
             declaration(tag=52)

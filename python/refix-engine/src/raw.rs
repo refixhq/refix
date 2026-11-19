@@ -332,7 +332,7 @@ pub(crate) fn get_utc_timestamp<'py>(
     .map(Some)
 }
 
-fn get_utc_timestamp_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
+pub(crate) fn get_utc_timestamp_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
     let value = scope.get_utc_timestamp(Tag(tag)).map_err(to_py_err)?;
     Ok(value.map(|value| value.unix_nanos()))
 }
