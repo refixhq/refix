@@ -23,6 +23,7 @@ class NewOrderSingle(fields.Message):
     text = fields.Str(58)
     trade_date = fields.Date(75)
     raw_data = fields.Bytes(96)
+    maturity_month_year = fields.MonthYear(200)
     md_entry_time = fields.Time(273)
     md_entry_time_ns = fields.TimeNs(273)
 
@@ -464,3 +465,35 @@ class TestUtcTimestampNs:
 
         with pytest.raises(TypeError):
             declaration(tag=52)
+
+
+class TestMonthYear:
+    def test_reads_a_month(self):
+        message = NewOrderSingle(tokenize_body("35=D|200=202612|"))
+
+        assert message.maturity_month_year == refix.MonthYear(2026, 12)
+
+    def test_reads_a_day(self):
+        message = NewOrderSingle(tokenize_body("35=D|200=20261218|"))
+
+        assert message.maturity_month_year == refix.MonthYear(2026, 12, day=18)
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).maturity_month_year is None
+
+    def test_an_invalid_value_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|200=2026-12|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.maturity_month_year
+
+        assert excinfo.value.tag == 200
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.maturity_month_year) == "MonthYear(200)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.MonthYear
+
+        with pytest.raises(TypeError):
+            declaration(tag=200)

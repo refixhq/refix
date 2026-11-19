@@ -385,7 +385,7 @@ fn clock(nanos_since_midnight: i64) -> (u8, u8, u8, u32) {
     )
 }
 
-fn get_month_year<'py>(
+pub(crate) fn get_month_year<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
