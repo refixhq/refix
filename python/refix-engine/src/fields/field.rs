@@ -266,6 +266,29 @@ impl MonthYear {
     }
 }
 
+/// A field read as a tuple of text values.
+#[pyclass(extends = Field, frozen, module = "refix.fields")]
+pub(crate) struct MultipleValues;
+
+#[pymethods]
+impl MultipleValues {
+    #[new]
+    #[pyo3(signature = (tag, /))]
+    fn new(tag: u32) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Field::get(slf.as_super(), obj, |py, scope, tag| {
+            raw::get_multiple_values(py, scope, tag)?.into_bound_py_any(py)
+        })
+    }
+}
+
 // The base class for every field type.
 #[pyclass(subclass, frozen, name = "_Field", module = "refix._core")]
 pub(crate) struct Field {

@@ -36,6 +36,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<fields::UtcTimestamp>()?;
     m.add_class::<fields::UtcTimestampNs>()?;
     m.add_class::<fields::MonthYear>()?;
+    m.add_class::<fields::MultipleValues>()?;
     m.add_class::<log::LogReader>()?;
     m.add_class::<stream::Garble>()?;
     m.add_class::<stream::MessageStream>()?;

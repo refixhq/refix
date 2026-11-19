@@ -14,6 +14,7 @@ KNOWN = refix.KnownTags((35, 55, 448, 452, 453))
 
 
 class NewOrderSingle(fields.Message):
+    exec_inst = fields.MultipleValues(18)
     order_qty = fields.Int(38)
     poss_dup_flag = fields.Bool(43)
     price = fields.Decimal(44)
@@ -497,3 +498,35 @@ class TestMonthYear:
 
         with pytest.raises(TypeError):
             declaration(tag=200)
+
+
+class TestMultipleValues:
+    def test_reads_values_in_wire_order(self):
+        message = NewOrderSingle(tokenize_body("35=D|18=1 6 1|"))
+
+        assert message.exec_inst == ("1", "6", "1")
+
+    def test_reads_a_single_value(self):
+        message = NewOrderSingle(tokenize_body("35=D|18=G|"))
+
+        assert message.exec_inst == ("G",)
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).exec_inst is None
+
+    def test_a_double_space_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|18=1  6|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.exec_inst
+
+        assert excinfo.value.tag == 18
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.exec_inst) == "MultipleValues(18)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.MultipleValues
+
+        with pytest.raises(TypeError):
+            declaration(tag=18)
