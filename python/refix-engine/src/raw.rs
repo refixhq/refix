@@ -289,7 +289,7 @@ fn get_bool(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<bool>> {
     scope.get_bool(Tag(tag)).map_err(to_py_err)
 }
 
-fn get_decimal<'py>(
+pub(crate) fn get_decimal<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,

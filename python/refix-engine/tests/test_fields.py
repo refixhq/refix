@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -13,6 +14,7 @@ KNOWN = refix.KnownTags((35, 55, 448, 452, 453))
 
 class NewOrderSingle(fields.Message):
     order_qty = fields.Int(38)
+    price = fields.Decimal(44)
     symbol = fields.Str(55)
     text = fields.Str(58)
 
@@ -211,3 +213,35 @@ class TestInt:
 
         with pytest.raises(TypeError):
             declaration(tag=38)
+
+
+class TestDecimal:
+    def test_reads_a_decimal(self):
+        message = NewOrderSingle(tokenize_body("35=D|44=101.25|"))
+
+        assert message.price == Decimal("101.25")
+
+    def test_keeps_the_scale(self):
+        message = NewOrderSingle(tokenize_body("35=D|44=1.50|"))
+
+        assert str(message.price) == "1.50"
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).price is None
+
+    def test_a_non_decimal_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|44=1e5|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.price
+
+        assert excinfo.value.tag == 44
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.price) == "Decimal(44)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Decimal
+
+        with pytest.raises(TypeError):
+            declaration(tag=44)
