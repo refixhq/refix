@@ -2,7 +2,7 @@ import builtins
 from collections.abc import Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Self
+from typing import Never, Self, overload
 
 from refix.errors import GarbledReason
 from refix.values import MonthYear
@@ -83,6 +83,14 @@ class GroupInstance:
     def from_raw(cls, raw: Scope, /) -> Self: ...
     @property
     def raw(self) -> Scope: ...
+
+class Str:
+    def __init__(self, tag: int, /) -> None: ...
+    @overload
+    def __get__(self, obj: None, owner: type, /) -> Self: ...
+    @overload
+    def __get__(self, obj: object, owner: type, /) -> str | None: ...
+    def __set__(self, obj: object, value: Never, /) -> None: ...
 
 class Garble:
     @property

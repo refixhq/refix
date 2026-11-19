@@ -27,6 +27,10 @@ impl RawMessage {
     pub(crate) fn new(inner: CoreRawMessage) -> Self {
         Self(inner)
     }
+
+    pub(crate) fn scope(&self) -> CoreScope<'_> {
+        self.0.scope()
+    }
 }
 
 #[pymethods]
@@ -156,7 +160,7 @@ pub(crate) struct Scope {
 }
 
 impl Scope {
-    fn scope(&self) -> CoreScope<'_> {
+    pub(crate) fn scope(&self) -> CoreScope<'_> {
         self.message
             .get()
             .0
@@ -268,7 +272,7 @@ fn get<'py>(py: Python<'py>, scope: &CoreScope<'_>, tag: u32) -> Option<Bound<'p
     scope.get(Tag(tag)).map(|value| PyBytes::new(py, value))
 }
 
-fn get_str<'py>(
+pub(crate) fn get_str<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
