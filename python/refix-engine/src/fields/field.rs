@@ -124,6 +124,148 @@ impl Bytes {
     }
 }
 
+/// A field read as a `date`.
+#[pyclass(extends = Field, frozen, module = "refix.fields")]
+pub(crate) struct Date;
+
+#[pymethods]
+impl Date {
+    #[new]
+    #[pyo3(signature = (tag, /))]
+    fn new(tag: u32) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Field::get(slf.as_super(), obj, |py, scope, tag| {
+            raw::get_date(py, scope, tag)?.into_bound_py_any(py)
+        })
+    }
+}
+
+/// A field read as a naive `time`.
+///
+/// Truncates to the microsecond.
+#[pyclass(extends = Field, frozen, module = "refix.fields")]
+pub(crate) struct Time;
+
+#[pymethods]
+impl Time {
+    #[new]
+    #[pyo3(signature = (tag, /))]
+    fn new(tag: u32) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Field::get(slf.as_super(), obj, |py, scope, tag| {
+            raw::get_time(py, scope, tag)?.into_bound_py_any(py)
+        })
+    }
+}
+
+/// A field read as nanoseconds since midnight.
+#[pyclass(extends = Field, frozen, module = "refix.fields")]
+pub(crate) struct TimeNs;
+
+#[pymethods]
+impl TimeNs {
+    #[new]
+    #[pyo3(signature = (tag, /))]
+    fn new(tag: u32) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Field::get(slf.as_super(), obj, |py, scope, tag| {
+            raw::get_time_ns(scope, tag)?.into_bound_py_any(py)
+        })
+    }
+}
+
+/// A field read as a UTC `datetime`.
+///
+/// Truncates to the microsecond.
+#[pyclass(extends = Field, frozen, module = "refix.fields")]
+pub(crate) struct UtcTimestamp;
+
+#[pymethods]
+impl UtcTimestamp {
+    #[new]
+    #[pyo3(signature = (tag, /))]
+    fn new(tag: u32) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Field::get(slf.as_super(), obj, |py, scope, tag| {
+            raw::get_utc_timestamp(py, scope, tag)?.into_bound_py_any(py)
+        })
+    }
+}
+
+/// A field read as nanoseconds since the Unix epoch.
+#[pyclass(extends = Field, frozen, module = "refix.fields")]
+pub(crate) struct UtcTimestampNs;
+
+#[pymethods]
+impl UtcTimestampNs {
+    #[new]
+    #[pyo3(signature = (tag, /))]
+    fn new(tag: u32) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Field::get(slf.as_super(), obj, |py, scope, tag| {
+            raw::get_utc_timestamp_ns(scope, tag)?.into_bound_py_any(py)
+        })
+    }
+}
+
+/// A field read as a `MonthYear`.
+#[pyclass(extends = Field, frozen, module = "refix.fields")]
+pub(crate) struct MonthYear;
+
+#[pymethods]
+impl MonthYear {
+    #[new]
+    #[pyo3(signature = (tag, /))]
+    fn new(tag: u32) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Field::get(slf.as_super(), obj, |py, scope, tag| {
+            raw::get_month_year(py, scope, tag)?.into_bound_py_any(py)
+        })
+    }
+}
+
 // The base class for every field type.
 #[pyclass(subclass, frozen, name = "_Field", module = "refix._core")]
 pub(crate) struct Field {

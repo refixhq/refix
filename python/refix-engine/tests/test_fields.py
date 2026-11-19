@@ -1,3 +1,4 @@
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Any
 
@@ -16,9 +17,15 @@ class NewOrderSingle(fields.Message):
     order_qty = fields.Int(38)
     poss_dup_flag = fields.Bool(43)
     price = fields.Decimal(44)
+    sending_time = fields.UtcTimestamp(52)
+    sending_time_ns = fields.UtcTimestampNs(52)
     symbol = fields.Str(55)
     text = fields.Str(58)
+    trade_date = fields.Date(75)
     raw_data = fields.Bytes(96)
+    maturity_month_year = fields.MonthYear(200)
+    md_entry_time = fields.Time(273)
+    md_entry_time_ns = fields.TimeNs(273)
 
 
 class Instrument(fields.Component):
@@ -303,3 +310,190 @@ class TestBytes:
 
         with pytest.raises(TypeError):
             declaration(tag=96)
+
+
+class TestDate:
+    def test_reads_a_date(self):
+        message = NewOrderSingle(tokenize_body("35=D|75=20261030|"))
+
+        assert message.trade_date == date(2026, 10, 30)
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).trade_date is None
+
+    def test_an_invalid_date_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|75=2026-10-30|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.trade_date
+
+        assert excinfo.value.tag == 75
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.trade_date) == "Date(75)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Date
+
+        with pytest.raises(TypeError):
+            declaration(tag=75)
+
+
+class TestTime:
+    def test_reads_a_time(self):
+        message = NewOrderSingle(tokenize_body("35=D|273=14:29:51.123|"))
+
+        assert message.md_entry_time == time(14, 29, 51, 123000)
+
+    def test_truncates_to_microseconds(self):
+        message = NewOrderSingle(tokenize_body("35=D|273=14:29:51.123456789|"))
+
+        assert message.md_entry_time == time(14, 29, 51, 123456)
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).md_entry_time is None
+
+    def test_an_invalid_time_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|273=24:00:00|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.md_entry_time
+
+        assert excinfo.value.tag == 273
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.md_entry_time) == "Time(273)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Time
+
+        with pytest.raises(TypeError):
+            declaration(tag=273)
+
+
+class TestTimeNs:
+    def test_reads_every_digit(self):
+        message = NewOrderSingle(tokenize_body("35=D|273=14:29:51.123456789|"))
+
+        assert message.md_entry_time_ns == 52_191_123_456_789
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).md_entry_time_ns is None
+
+    def test_an_invalid_time_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|273=24:00:00|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.md_entry_time_ns
+
+        assert excinfo.value.tag == 273
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.md_entry_time_ns) == "TimeNs(273)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.TimeNs
+
+        with pytest.raises(TypeError):
+            declaration(tag=273)
+
+
+class TestUtcTimestamp:
+    def test_reads_a_timestamp(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030-14:29:51.123|"))
+
+        assert message.sending_time == datetime(
+            2026, 10, 30, 14, 29, 51, 123000, tzinfo=UTC
+        )
+
+    def test_is_in_utc(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030-14:29:51|"))
+
+        assert message.sending_time is not None
+        assert message.sending_time.tzinfo is UTC
+
+    def test_truncates_to_microseconds(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030-14:29:51.123456789|"))
+
+        assert message.sending_time == datetime(
+            2026, 10, 30, 14, 29, 51, 123456, tzinfo=UTC
+        )
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).sending_time is None
+
+    def test_an_invalid_timestamp_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.sending_time
+
+        assert excinfo.value.tag == 52
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.sending_time) == "UtcTimestamp(52)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.UtcTimestamp
+
+        with pytest.raises(TypeError):
+            declaration(tag=52)
+
+
+class TestUtcTimestampNs:
+    def test_reads_every_digit(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030-14:29:51.123456789|"))
+
+        assert message.sending_time_ns == 1_793_370_591_123_456_789
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).sending_time_ns is None
+
+    def test_an_invalid_timestamp_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|52=20261030|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.sending_time_ns
+
+        assert excinfo.value.tag == 52
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.sending_time_ns) == "UtcTimestampNs(52)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.UtcTimestampNs
+
+        with pytest.raises(TypeError):
+            declaration(tag=52)
+
+
+class TestMonthYear:
+    def test_reads_a_month(self):
+        message = NewOrderSingle(tokenize_body("35=D|200=202612|"))
+
+        assert message.maturity_month_year == refix.MonthYear(2026, 12)
+
+    def test_reads_a_day(self):
+        message = NewOrderSingle(tokenize_body("35=D|200=20261218|"))
+
+        assert message.maturity_month_year == refix.MonthYear(2026, 12, day=18)
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).maturity_month_year is None
+
+    def test_an_invalid_value_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|200=2026-12|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.maturity_month_year
+
+        assert excinfo.value.tag == 200
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.maturity_month_year) == "MonthYear(200)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.MonthYear
+
+        with pytest.raises(TypeError):
+            declaration(tag=200)

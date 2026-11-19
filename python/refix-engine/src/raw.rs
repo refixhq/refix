@@ -306,7 +306,7 @@ pub(crate) fn get_decimal<'py>(
     decimal.call1((value.to_string(),)).map(Some)
 }
 
-fn get_utc_timestamp<'py>(
+pub(crate) fn get_utc_timestamp<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
@@ -332,12 +332,12 @@ fn get_utc_timestamp<'py>(
     .map(Some)
 }
 
-fn get_utc_timestamp_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
+pub(crate) fn get_utc_timestamp_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
     let value = scope.get_utc_timestamp(Tag(tag)).map_err(to_py_err)?;
     Ok(value.map(|value| value.unix_nanos()))
 }
 
-fn get_date<'py>(
+pub(crate) fn get_date<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
@@ -353,7 +353,7 @@ fn get_date<'py>(
     PyDate::new(py, i32::from(value.year()), value.month(), value.day()).map(Some)
 }
 
-fn get_time<'py>(
+pub(crate) fn get_time<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
@@ -368,7 +368,7 @@ fn get_time<'py>(
     PyTime::new(py, hour, minute, second, microsecond, None).map(Some)
 }
 
-fn get_time_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
+pub(crate) fn get_time_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
     let value = scope.get_time(Tag(tag)).map_err(to_py_err)?;
     Ok(value.map(|value| value.nanos_since_midnight()))
 }
@@ -385,7 +385,7 @@ fn clock(nanos_since_midnight: i64) -> (u8, u8, u8, u32) {
     )
 }
 
-fn get_month_year<'py>(
+pub(crate) fn get_month_year<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
