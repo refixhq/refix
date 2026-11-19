@@ -1,5 +1,5 @@
 use crate::message::{RawMessage, Scope};
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyAttributeError, PyTypeError};
 use pyo3::types::{PyAnyMethods, PyType, PyTypeMethods};
 use pyo3::{Bound, Py, PyAny, PyClassInitializer, PyErr, PyResult, Python, pyclass, pymethods};
 
@@ -72,11 +72,26 @@ impl Fields {
         cls.call1((raw,))
     }
 
+    fn __setattr__(slf: &Bound<'_, Self>, name: &str, _value: &Bound<'_, PyAny>) -> PyResult<()> {
+        immutable(slf, name)
+    }
+
+    fn __delattr__(slf: &Bound<'_, Self>, name: &str) -> PyResult<()> {
+        immutable(slf, name)
+    }
+
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
         let name = slf.get_type().qualname()?;
         let raw = slf.get().raw(slf.py());
         Ok(format!("{name}({})", raw.bind(slf.py()).str()?))
     }
+}
+
+fn immutable(object: &Bound<'_, Fields>, name: &str) -> PyResult<()> {
+    let class = object.get_type().qualname()?;
+    Err(PyAttributeError::new_err(format!(
+        "cannot change '{name}': '{class}' objects are immutable"
+    )))
 }
 
 enum Source {
