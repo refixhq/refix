@@ -2,7 +2,7 @@ mod dialect;
 mod fields;
 mod group;
 mod log;
-mod message;
+mod raw;
 mod stream;
 mod tokenizer;
 
@@ -18,8 +18,8 @@ fn version() -> &'static str {
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_class::<dialect::Dialect>()?;
-    m.add_class::<message::RawMessage>()?;
-    m.add_class::<message::Scope>()?;
+    m.add_class::<raw::RawMessage>()?;
+    m.add_class::<raw::Scope>()?;
     m.add_class::<group::GroupTable>()?;
     m.add_class::<group::KnownTags>()?;
     m.add_class::<fields::Message>()?;

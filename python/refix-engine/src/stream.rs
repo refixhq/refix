@@ -31,7 +31,7 @@ impl MessageStream {
     fn next_message(&mut self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
         match self.0.next_message() {
             Outcome::Message(message) => {
-                let message = crate::message::RawMessage::new(message);
+                let message = crate::raw::RawMessage::new(message);
                 Ok(Some(Py::new(py, message)?.into_any()))
             }
             Outcome::Garbled { reason, bytes } => {

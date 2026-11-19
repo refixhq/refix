@@ -27,10 +27,10 @@ impl Tokenizer {
     /// Return the message in `data`, which must hold exactly one frame.
     ///
     /// Raises a `TokenizeError` otherwise.
-    fn tokenize(&self, data: &[u8]) -> PyResult<crate::message::RawMessage> {
+    fn tokenize(&self, data: &[u8]) -> PyResult<crate::raw::RawMessage> {
         self.0
             .tokenize(Bytes::copy_from_slice(data))
-            .map(crate::message::RawMessage::new)
+            .map(crate::raw::RawMessage::new)
             .map_err(to_py_err)
     }
 }

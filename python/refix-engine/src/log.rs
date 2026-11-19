@@ -1,5 +1,5 @@
 use crate::dialect::Dialect;
-use crate::message::RawMessage;
+use crate::raw::RawMessage;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::PyBytes;
 use pyo3::{Bound, PyResult, Python, pyclass, pymethods};
