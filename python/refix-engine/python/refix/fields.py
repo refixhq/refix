@@ -8,6 +8,7 @@ from refix._core import (
     Int,
     Message,
     Str,
+    Time,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "Int",
     "Message",
     "Str",
+    "Time",
 ]

@@ -353,7 +353,7 @@ pub(crate) fn get_date<'py>(
     PyDate::new(py, i32::from(value.year()), value.month(), value.day()).map(Some)
 }
 
-fn get_time<'py>(
+pub(crate) fn get_time<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
