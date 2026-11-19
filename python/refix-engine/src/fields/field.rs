@@ -3,7 +3,11 @@ use crate::raw;
 use pyo3::exceptions::PyTypeError;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyString, PyTypeMethods};
-use pyo3::{Bound, Py, PyAny, PyClassInitializer, PyResult, intern, pyclass, pymethods};
+use pyo3::{
+    Bound, IntoPyObjectExt, Py, PyAny, PyClassInitializer, PyResult, Python, intern, pyclass,
+    pymethods,
+};
+use refix_message::Scope as CoreScope;
 
 /// A field read as text.
 #[pyclass(extends = Field, frozen, module = "refix.fields")]
@@ -15,6 +19,39 @@ impl Str {
     #[pyo3(signature = (tag, /))]
     fn new(tag: u32) -> PyClassInitializer<Self> {
         PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Field::get(slf.as_super(), obj, |py, scope, tag| {
+            raw::get_str(py, scope, tag)?.into_bound_py_any(py)
+        })
+    }
+}
+
+/// A field read as an integer.
+#[pyclass(extends = Field, frozen, module = "refix.fields")]
+pub(crate) struct Int;
+
+#[pymethods]
+impl Int {
+    #[new]
+    #[pyo3(signature = (tag, /))]
+    fn new(tag: u32) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    }
+
+    fn __get__<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        _owner: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Field::get(slf.as_super(), obj, |py, scope, tag| {
+            raw::get_int(scope, tag)?.into_bound_py_any(py)
+        })
     }
 }
 
@@ -33,18 +70,12 @@ impl Field {
             name: PyOnceLock::new(),
         }
     }
-}
 
-#[pymethods]
-impl Field {
-    fn __set_name__(&self, _owner: &Bound<'_, PyAny>, name: Bound<'_, PyString>) {
-        let _ = self.name.set(name.py(), name.unbind());
-    }
-
-    fn __get__<'py>(
+    // Reads the field with `read` and caches the value on the instance.
+    fn get<'py>(
         slf: &Bound<'py, Self>,
         obj: Option<&Bound<'py, PyAny>>,
-        _owner: &Bound<'_, PyAny>,
+        read: impl FnOnce(Python<'py>, &CoreScope<'_>, u32) -> PyResult<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let Some(obj) = obj else {
             return Ok(slf.clone().into_any());
@@ -58,8 +89,7 @@ impl Field {
             )));
         };
 
-        let value = raw::get_str(py, &fields.get().scope(), field.tag)?
-            .map_or_else(|| py.None().into_bound(py), Bound::into_any);
+        let value = read(py, &fields.get().scope(), field.tag)?;
         if let Some(name) = field.name.get(py) {
             let dict = obj
                 .getattr(intern!(py, "__dict__"))?
@@ -68,6 +98,13 @@ impl Field {
         }
 
         Ok(value)
+    }
+}
+
+#[pymethods]
+impl Field {
+    fn __set_name__(&self, _owner: &Bound<'_, PyAny>, name: Bound<'_, PyString>) {
+        let _ = self.name.set(name.py(), name.unbind());
     }
 
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {

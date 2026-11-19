@@ -12,6 +12,7 @@ KNOWN = refix.KnownTags((35, 55, 448, 452, 453))
 
 
 class NewOrderSingle(fields.Message):
+    order_qty = fields.Int(38)
     symbol = fields.Str(55)
     text = fields.Str(58)
 
@@ -183,3 +184,30 @@ class TestStr:
     def test_a_class_without_a_base_raises(self):
         with pytest.raises(TypeError, match="'Plain' is not a Message"):
             _ = Plain().symbol
+
+
+class TestInt:
+    def test_reads_an_integer(self):
+        message = NewOrderSingle(tokenize_body("35=D|38=200|"))
+
+        assert message.order_qty == 200
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).order_qty is None
+
+    def test_a_non_integer_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|38=1.5|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.order_qty
+
+        assert excinfo.value.tag == 38
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.order_qty) == "Int(38)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Int
+
+        with pytest.raises(TypeError):
+            declaration(tag=38)

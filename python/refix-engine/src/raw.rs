@@ -281,7 +281,7 @@ pub(crate) fn get_str<'py>(
     Ok(value.map(|value| PyString::new(py, value)))
 }
 
-fn get_int(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
+pub(crate) fn get_int(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> {
     scope.get_int(Tag(tag)).map_err(to_py_err)
 }
 
