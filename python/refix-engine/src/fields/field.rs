@@ -3,7 +3,9 @@ use super::coded::Coded;
 use crate::raw;
 use pyo3::exceptions::PyTypeError;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyString, PyType, PyTypeMethods};
+use pyo3::types::{
+    PyAnyMethods, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods, PyType, PyTypeMethods,
+};
 use pyo3::{
     Bound, IntoPyObjectExt, Py, PyAny, PyClassInitializer, PyResult, Python, intern, pyclass,
     pymethods,
@@ -289,16 +291,19 @@ impl MonthYear {
     }
 }
 
-/// A field read as a tuple of text values.
+/// A field read as a tuple of text values, or of members of an enum.
 #[pyclass(extends = Field, frozen, module = "refix.fields")]
-pub(crate) struct MultipleValues;
+pub(crate) struct MultipleValues {
+    coded: Option<Coded>,
+}
 
 #[pymethods]
 impl MultipleValues {
     #[new]
-    #[pyo3(signature = (tag, /))]
-    fn new(tag: u32) -> PyClassInitializer<Self> {
-        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    #[pyo3(signature = (tag, r#enum = None, /))]
+    fn new(tag: u32, r#enum: Option<Bound<'_, PyType>>) -> PyResult<PyClassInitializer<Self>> {
+        let coded = r#enum.map(Coded::text).transpose()?;
+        Ok(PyClassInitializer::from(Field::new(tag)).add_subclass(Self { coded }))
     }
 
     fn __get__<'py>(
@@ -306,9 +311,23 @@ impl MultipleValues {
         obj: Option<&Bound<'py, PyAny>>,
         _owner: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let coded = slf.get().coded.as_ref();
         Field::get(slf.as_super(), obj, |py, scope, tag| {
-            raw::get_multiple_values(py, scope, tag)?.into_bound_py_any(py)
+            match (raw::get_multiple_values(py, scope, tag)?, coded) {
+                (Some(values), Some(coded)) => {
+                    let members: Vec<_> = values
+                        .iter()
+                        .map(|value| coded.member(value))
+                        .collect::<PyResult<_>>()?;
+                    PyTuple::new(py, members).map(Bound::into_any)
+                }
+                (values, _) => values.into_bound_py_any(py),
+            }
         })
+    }
+
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        Field::repr(slf.as_super(), slf.get().coded.as_ref())
     }
 }
 

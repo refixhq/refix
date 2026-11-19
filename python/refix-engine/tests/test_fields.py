@@ -25,6 +25,11 @@ class PartyRole(enum.IntEnum):
     CLIENT_ID = 3
 
 
+class QuoteCondition(enum.StrEnum):
+    OPEN = "A"
+    CLOSED = "B"
+
+
 class NewOrderSingle(fields.Message):
     exec_inst = fields.MultipleValues(18)
     order_qty = fields.Int(38)
@@ -40,6 +45,7 @@ class NewOrderSingle(fields.Message):
     maturity_month_year = fields.MonthYear(200)
     md_entry_time = fields.Time(273)
     md_entry_time_ns = fields.TimeNs(273)
+    quote_condition = fields.MultipleValues(276, QuoteCondition)
     party_role = fields.Int(452, PartyRole)
 
 
@@ -642,3 +648,47 @@ class TestCodedInt:
 
         with pytest.raises(TypeError):
             declaration(452, enum=PartyRole)
+
+
+class TestCodedMultipleValues:
+    def test_reads_members_in_wire_order(self):
+        message = NewOrderSingle(tokenize_body("35=D|276=B A B|"))
+
+        assert message.quote_condition == (
+            QuoteCondition.CLOSED,
+            QuoteCondition.OPEN,
+            QuoteCondition.CLOSED,
+        )
+
+    def test_an_unlisted_value_is_unrecognized(self):
+        message = NewOrderSingle(tokenize_body("35=D|276=A Z|"))
+
+        assert message.quote_condition == (QuoteCondition.OPEN, Unrecognized("Z"))
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).quote_condition is None
+
+    def test_a_double_space_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|276=A  B|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.quote_condition
+
+        assert excinfo.value.tag == 276
+
+    def test_the_repr_shows_the_enum(self):
+        expected = "MultipleValues(276, QuoteCondition)"
+
+        assert repr(NewOrderSingle.quote_condition) == expected
+
+    def test_an_int_enum_raises(self):
+        declaration: Any = fields.MultipleValues
+
+        with pytest.raises(TypeError, match="'PartyRole' is not a subclass of StrEnum"):
+            declaration(276, PartyRole)
+
+    def test_the_enum_by_keyword_raises(self):
+        declaration: Any = fields.MultipleValues
+
+        with pytest.raises(TypeError):
+            declaration(276, enum=QuoteCondition)
