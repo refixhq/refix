@@ -40,6 +40,7 @@ class NewOrderSingle(fields.Message):
     maturity_month_year = fields.MonthYear(200)
     md_entry_time = fields.Time(273)
     md_entry_time_ns = fields.TimeNs(273)
+    party_role = fields.Int(452, PartyRole)
 
 
 class Instrument(fields.Component):
@@ -603,3 +604,41 @@ class TestCodedStr:
 
         with pytest.raises(TypeError):
             declaration(54, enum=Side)
+
+
+class TestCodedInt:
+    def test_reads_a_member(self):
+        message = NewOrderSingle(tokenize_body("35=D|452=3|"))
+
+        assert message.party_role is PartyRole.CLIENT_ID
+
+    def test_an_unlisted_value_is_unrecognized(self):
+        message = NewOrderSingle(tokenize_body("35=D|452=99|"))
+
+        assert message.party_role == Unrecognized(99)
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(tokenize_body("35=D|")).party_role is None
+
+    def test_a_non_integer_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|452=A|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.party_role
+
+        assert excinfo.value.tag == 452
+
+    def test_the_repr_shows_the_enum(self):
+        assert repr(NewOrderSingle.party_role) == "Int(452, PartyRole)"
+
+    def test_a_str_enum_raises(self):
+        declaration: Any = fields.Int
+
+        with pytest.raises(TypeError, match="'Side' is not a subclass of IntEnum"):
+            declaration(452, Side)
+
+    def test_the_enum_by_keyword_raises(self):
+        declaration: Any = fields.Int
+
+        with pytest.raises(TypeError):
+            declaration(452, enum=PartyRole)

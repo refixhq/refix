@@ -6,6 +6,9 @@ use pyo3::{Bound, Py, PyAny, PyResult, Python, intern};
 /// Python's `enum.StrEnum`, imported on first use.
 static STR_ENUM: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
+/// Python's `enum.IntEnum`, imported on first use.
+static INT_ENUM: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+
 /// `refix.enums.Unrecognized`, imported on first use.
 static UNRECOGNIZED: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
@@ -20,6 +23,12 @@ impl Coded {
     // Takes the enum of a field read as text.
     pub(super) fn text(class: Bound<'_, PyType>) -> PyResult<Self> {
         let base = STR_ENUM.import(class.py(), "enum", "StrEnum")?;
+        Self::new(class, base)
+    }
+
+    // Takes the enum of a field read as an integer.
+    pub(super) fn integer(class: Bound<'_, PyType>) -> PyResult<Self> {
+        let base = INT_ENUM.import(class.py(), "enum", "IntEnum")?;
         Self::new(class, base)
     }
 

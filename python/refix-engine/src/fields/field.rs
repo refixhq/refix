@@ -44,16 +44,19 @@ impl Str {
     }
 }
 
-/// A field read as an integer.
+/// A field read as an integer, or as a member of an enum.
 #[pyclass(extends = Field, frozen, module = "refix.fields")]
-pub(crate) struct Int;
+pub(crate) struct Int {
+    coded: Option<Coded>,
+}
 
 #[pymethods]
 impl Int {
     #[new]
-    #[pyo3(signature = (tag, /))]
-    fn new(tag: u32) -> PyClassInitializer<Self> {
-        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    #[pyo3(signature = (tag, r#enum = None, /))]
+    fn new(tag: u32, r#enum: Option<Bound<'_, PyType>>) -> PyResult<PyClassInitializer<Self>> {
+        let coded = r#enum.map(Coded::integer).transpose()?;
+        Ok(PyClassInitializer::from(Field::new(tag)).add_subclass(Self { coded }))
     }
 
     fn __get__<'py>(
@@ -61,9 +64,17 @@ impl Int {
         obj: Option<&Bound<'py, PyAny>>,
         _owner: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let coded = slf.get().coded.as_ref();
         Field::get(slf.as_super(), obj, |py, scope, tag| {
-            raw::get_int(scope, tag)?.into_bound_py_any(py)
+            match (raw::get_int(scope, tag)?, coded) {
+                (Some(value), Some(coded)) => coded.member(value.into_bound_py_any(py)?),
+                (value, _) => value.into_bound_py_any(py),
+            }
         })
+    }
+
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        Field::repr(slf.as_super(), slf.get().coded.as_ref())
     }
 }
 
