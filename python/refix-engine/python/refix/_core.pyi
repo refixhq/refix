@@ -1,10 +1,12 @@
 import builtins
 import decimal
+import enum
 from collections.abc import Sequence
 from datetime import date, datetime, time
 from typing import Never, Self, overload
 
 from refix import values
+from refix.enums import Unrecognized
 from refix.errors import GarbledReason
 
 class RawMessage:
@@ -84,7 +86,14 @@ class GroupInstance:
     @property
     def raw(self) -> Scope: ...
 
-class Str(_Field[str]): ...
+class Str[T](_Field[T]):
+    @overload
+    def __init__(self: Str[str], tag: int, /) -> None: ...
+    @overload
+    def __init__[E: enum.StrEnum](
+        self: Str[E | Unrecognized[str]], tag: int, enum: type[E], /
+    ) -> None: ...
+
 class Int(_Field[int]): ...
 class Decimal(_Field[decimal.Decimal]): ...
 class Bool(_Field[bool]): ...

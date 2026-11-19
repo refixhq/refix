@@ -1,3 +1,4 @@
+mod coded;
 mod field;
 
 pub(crate) use field::{

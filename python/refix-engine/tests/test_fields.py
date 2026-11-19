@@ -1,3 +1,4 @@
+import enum
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Any
@@ -5,6 +6,7 @@ from typing import Any
 import pytest
 import refix
 from refix import fields
+from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
 from test_raw_message import tokenize_bytes
 from test_tokenizer import tokenize_body
@@ -13,12 +15,23 @@ PARTIES = refix.GroupTable(453, 448, (448, 452), ())
 KNOWN = refix.KnownTags((35, 55, 448, 452, 453))
 
 
+class Side(enum.StrEnum):
+    BUY = "1"
+    SELL = "2"
+
+
+class PartyRole(enum.IntEnum):
+    EXECUTING_FIRM = 1
+    CLIENT_ID = 3
+
+
 class NewOrderSingle(fields.Message):
     exec_inst = fields.MultipleValues(18)
     order_qty = fields.Int(38)
     poss_dup_flag = fields.Bool(43)
     price = fields.Decimal(44)
     sending_time = fields.UtcTimestamp(52)
+    side = fields.Str(54, Side)
     sending_time_ns = fields.UtcTimestampNs(52)
     symbol = fields.Str(55)
     text = fields.Str(58)
@@ -530,3 +543,63 @@ class TestMultipleValues:
 
         with pytest.raises(TypeError):
             declaration(tag=18)
+
+
+class TestCodedStr:
+    def test_reads_a_member(self):
+        message = NewOrderSingle(tokenize_body("35=D|54=1|"))
+
+        assert message.side is Side.BUY
+
+    def test_an_unlisted_value_is_unrecognized(self):
+        message = NewOrderSingle(tokenize_body("35=D|54=X|"))
+
+        assert message.side == Unrecognized("X")
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).side is None
+
+    def test_the_missing_hook_of_the_enum_is_not_used(self):
+        class Lenient(enum.StrEnum):
+            BUY = "B"
+
+            @classmethod
+            def _missing_(cls, value: object) -> "Lenient":
+                return cls.BUY
+
+        class Order(fields.Message):
+            side = fields.Str(54, Lenient)
+
+        message = Order(tokenize_body("35=D|54=b|"))
+
+        assert message.side == Unrecognized("b")
+
+    def test_the_repr_shows_the_enum(self):
+        assert repr(NewOrderSingle.side) == "Str(54, Side)"
+
+    def test_an_int_enum_raises(self):
+        declaration: Any = fields.Str
+
+        with pytest.raises(TypeError, match="'PartyRole' is not a subclass of StrEnum"):
+            declaration(54, PartyRole)
+
+    def test_a_plain_enum_raises(self):
+        class Plain(enum.Enum):
+            BUY = "1"
+
+        declaration: Any = fields.Str
+
+        with pytest.raises(TypeError, match="is not a subclass of StrEnum"):
+            declaration(54, Plain)
+
+    def test_anything_but_a_class_raises(self):
+        declaration: Any = fields.Str
+
+        with pytest.raises(TypeError):
+            declaration(54, "Side")
+
+    def test_the_enum_by_keyword_raises(self):
+        declaration: Any = fields.Str
+
+        with pytest.raises(TypeError):
+            declaration(54, enum=Side)

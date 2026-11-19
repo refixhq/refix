@@ -1,24 +1,28 @@
 use super::Fields;
+use super::coded::Coded;
 use crate::raw;
 use pyo3::exceptions::PyTypeError;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyString, PyTypeMethods};
+use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyString, PyType, PyTypeMethods};
 use pyo3::{
     Bound, IntoPyObjectExt, Py, PyAny, PyClassInitializer, PyResult, Python, intern, pyclass,
     pymethods,
 };
 use refix_message::Scope as CoreScope;
 
-/// A field read as text.
+/// A field read as text, or as a member of an enum.
 #[pyclass(extends = Field, frozen, module = "refix.fields")]
-pub(crate) struct Str;
+pub(crate) struct Str {
+    coded: Option<Coded>,
+}
 
 #[pymethods]
 impl Str {
     #[new]
-    #[pyo3(signature = (tag, /))]
-    fn new(tag: u32) -> PyClassInitializer<Self> {
-        PyClassInitializer::from(Field::new(tag)).add_subclass(Self)
+    #[pyo3(signature = (tag, r#enum = None, /))]
+    fn new(tag: u32, r#enum: Option<Bound<'_, PyType>>) -> PyResult<PyClassInitializer<Self>> {
+        let coded = r#enum.map(Coded::text).transpose()?;
+        Ok(PyClassInitializer::from(Field::new(tag)).add_subclass(Self { coded }))
     }
 
     fn __get__<'py>(
@@ -26,9 +30,17 @@ impl Str {
         obj: Option<&Bound<'py, PyAny>>,
         _owner: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let coded = slf.get().coded.as_ref();
         Field::get(slf.as_super(), obj, |py, scope, tag| {
-            raw::get_str(py, scope, tag)?.into_bound_py_any(py)
+            match (raw::get_str(py, scope, tag)?, coded) {
+                (Some(value), Some(coded)) => coded.member(value.into_any()),
+                (value, _) => value.into_bound_py_any(py),
+            }
         })
+    }
+
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        Field::repr(slf.as_super(), slf.get().coded.as_ref())
     }
 }
 
@@ -333,6 +345,16 @@ impl Field {
 
         Ok(value)
     }
+
+    // Writes the declaration as it is constructed, such as `Str(54, Side)`.
+    fn repr(slf: &Bound<'_, Self>, coded: Option<&Coded>) -> PyResult<String> {
+        let name = slf.get_type().qualname()?;
+        let tag = slf.get().tag;
+        match coded {
+            Some(coded) => Ok(format!("{name}({tag}, {})", coded.name(slf.py())?)),
+            None => Ok(format!("{name}({tag})")),
+        }
+    }
 }
 
 #[pymethods]
@@ -342,7 +364,6 @@ impl Field {
     }
 
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
-        let name = slf.get_type().qualname()?;
-        Ok(format!("{name}({})", slf.get().tag))
+        Self::repr(slf, None)
     }
 }
