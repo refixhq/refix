@@ -1,0 +1,59 @@
+use crate::message::{RawMessage, Scope};
+use pyo3::exceptions::PyTypeError;
+use pyo3::types::{PyAnyMethods, PyType, PyTypeMethods};
+use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
+
+// The base class for messages, components and groups, which all expose fields.
+#[pyclass(subclass, frozen, name = "_Fields", module = "refix._core")]
+pub(crate) struct Fields {
+    source: Source,
+}
+
+#[pymethods]
+impl Fields {
+    /// The message or scope the fields are read from.
+    #[getter]
+    fn raw(&self, py: Python<'_>) -> Py<PyAny> {
+        match &self.source {
+            Source::Message(message) => message.clone_ref(py).into_any(),
+            Source::Scope(scope) => scope.clone_ref(py).into_any(),
+        }
+    }
+
+    /// Wrap a received message or a part of one.
+    #[classmethod]
+    fn from_raw<'py>(
+        cls: &Bound<'py, PyType>,
+        raw: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        cls.call1((raw,))
+    }
+
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        let name = slf.get_type().qualname()?;
+        let raw = slf.get().raw(slf.py());
+        Ok(format!("{name}({})", raw.bind(slf.py()).str()?))
+    }
+}
+
+enum Source {
+    Message(Py<RawMessage>),
+    Scope(Py<Scope>),
+}
+
+impl TryFrom<&Bound<'_, PyAny>> for Source {
+    type Error = PyErr;
+
+    fn try_from(raw: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(message) = raw.cast::<RawMessage>() {
+            Ok(Self::Message(message.clone().unbind()))
+        } else if let Ok(scope) = raw.cast::<Scope>() {
+            Ok(Self::Scope(scope.clone().unbind()))
+        } else {
+            let name = raw.get_type().qualname()?;
+            Err(PyTypeError::new_err(format!(
+                "'{name}' object is not a RawMessage or a Scope"
+            )))
+        }
+    }
+}

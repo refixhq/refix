@@ -1,4 +1,5 @@
 mod dialect;
+mod fields;
 mod group;
 mod log;
 mod message;
