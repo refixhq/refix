@@ -28,6 +28,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<fields::Str>()?;
     m.add_class::<fields::Int>()?;
     m.add_class::<fields::Decimal>()?;
+    m.add_class::<fields::Bool>()?;
     m.add_class::<log::LogReader>()?;
     m.add_class::<stream::Garble>()?;
     m.add_class::<stream::MessageStream>()?;

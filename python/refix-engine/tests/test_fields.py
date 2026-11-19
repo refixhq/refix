@@ -14,6 +14,7 @@ KNOWN = refix.KnownTags((35, 55, 448, 452, 453))
 
 class NewOrderSingle(fields.Message):
     order_qty = fields.Int(38)
+    poss_dup_flag = fields.Bool(43)
     price = fields.Decimal(44)
     symbol = fields.Str(55)
     text = fields.Str(58)
@@ -245,3 +246,35 @@ class TestDecimal:
 
         with pytest.raises(TypeError):
             declaration(tag=44)
+
+
+class TestBool:
+    def test_reads_y_as_true(self):
+        message = NewOrderSingle(tokenize_body("35=D|43=Y|"))
+
+        assert message.poss_dup_flag is True
+
+    def test_reads_n_as_false(self):
+        message = NewOrderSingle(tokenize_body("35=D|43=N|"))
+
+        assert message.poss_dup_flag is False
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).poss_dup_flag is None
+
+    def test_anything_but_y_or_n_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|43=true|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.poss_dup_flag
+
+        assert excinfo.value.tag == 43
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.poss_dup_flag) == "Bool(43)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Bool
+
+        with pytest.raises(TypeError):
+            declaration(tag=43)

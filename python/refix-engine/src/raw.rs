@@ -285,7 +285,7 @@ pub(crate) fn get_int(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>> 
     scope.get_int(Tag(tag)).map_err(to_py_err)
 }
 
-fn get_bool(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<bool>> {
+pub(crate) fn get_bool(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<bool>> {
     scope.get_bool(Tag(tag)).map_err(to_py_err)
 }
 

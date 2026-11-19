@@ -1,6 +1,6 @@
 mod field;
 
-pub(crate) use field::{Decimal, Int, Str};
+pub(crate) use field::{Bool, Decimal, Int, Str};
 
 use crate::raw::{RawMessage, Scope};
 use pyo3::exceptions::{PyAttributeError, PyTypeError};
