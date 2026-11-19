@@ -10,6 +10,7 @@ pub(crate) struct Message;
 #[pymethods]
 impl Message {
     #[new]
+    #[pyo3(signature = (raw, /))]
     fn new(raw: Bound<'_, RawMessage>) -> PyClassInitializer<Self> {
         let source = Source::Message(raw.unbind());
         PyClassInitializer::from(Fields { source }).add_subclass(Self)
@@ -23,6 +24,7 @@ pub(crate) struct Component;
 #[pymethods]
 impl Component {
     #[new]
+    #[pyo3(signature = (raw, /))]
     fn new(raw: &Bound<'_, PyAny>) -> PyResult<PyClassInitializer<Self>> {
         let source = Source::try_from(raw)?;
         Ok(PyClassInitializer::from(Fields { source }).add_subclass(Self))
@@ -36,8 +38,9 @@ pub(crate) struct GroupInstance;
 #[pymethods]
 impl GroupInstance {
     #[new]
-    fn new(scope: Bound<'_, Scope>) -> PyClassInitializer<Self> {
-        let source = Source::Scope(scope.unbind());
+    #[pyo3(signature = (raw, /))]
+    fn new(raw: Bound<'_, Scope>) -> PyClassInitializer<Self> {
+        let source = Source::Scope(raw.unbind());
         PyClassInitializer::from(Fields { source }).add_subclass(Self)
     }
 }
@@ -61,6 +64,7 @@ impl Fields {
 
     /// Wrap a received message or a part of one.
     #[classmethod]
+    #[pyo3(signature = (raw, /))]
     fn from_raw<'py>(
         cls: &Bound<'py, PyType>,
         raw: &Bound<'py, PyAny>,
