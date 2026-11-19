@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -18,6 +19,7 @@ class NewOrderSingle(fields.Message):
     price = fields.Decimal(44)
     symbol = fields.Str(55)
     text = fields.Str(58)
+    trade_date = fields.Date(75)
     raw_data = fields.Bytes(96)
 
 
@@ -303,3 +305,30 @@ class TestBytes:
 
         with pytest.raises(TypeError):
             declaration(tag=96)
+
+
+class TestDate:
+    def test_reads_a_date(self):
+        message = NewOrderSingle(tokenize_body("35=D|75=20261030|"))
+
+        assert message.trade_date == date(2026, 10, 30)
+
+    def test_absent_field_is_none(self):
+        assert NewOrderSingle(order()).trade_date is None
+
+    def test_an_invalid_date_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|75=2026-10-30|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.trade_date
+
+        assert excinfo.value.tag == 75
+
+    def test_the_repr_shows_the_tag(self):
+        assert repr(NewOrderSingle.trade_date) == "Date(75)"
+
+    def test_tag_by_keyword_raises(self):
+        declaration: Any = fields.Date
+
+        with pytest.raises(TypeError):
+            declaration(tag=75)

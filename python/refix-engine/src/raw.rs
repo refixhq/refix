@@ -337,7 +337,7 @@ fn get_utc_timestamp_ns(scope: &CoreScope<'_>, tag: u32) -> PyResult<Option<i64>
     Ok(value.map(|value| value.unix_nanos()))
 }
 
-fn get_date<'py>(
+pub(crate) fn get_date<'py>(
     py: Python<'py>,
     scope: &CoreScope<'_>,
     tag: u32,
