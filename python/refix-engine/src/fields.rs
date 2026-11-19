@@ -1,7 +1,46 @@
 use crate::message::{RawMessage, Scope};
 use pyo3::exceptions::PyTypeError;
 use pyo3::types::{PyAnyMethods, PyType, PyTypeMethods};
-use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, pyclass, pymethods};
+use pyo3::{Bound, Py, PyAny, PyClassInitializer, PyErr, PyResult, Python, pyclass, pymethods};
+
+/// The base class of a generated message.
+#[pyclass(extends = Fields, subclass, frozen, module = "refix.fields")]
+pub(crate) struct Message;
+
+#[pymethods]
+impl Message {
+    #[new]
+    fn new(raw: Bound<'_, RawMessage>) -> PyClassInitializer<Self> {
+        let source = Source::Message(raw.unbind());
+        PyClassInitializer::from(Fields { source }).add_subclass(Self)
+    }
+}
+
+/// The base class of a generated component.
+#[pyclass(extends = Fields, subclass, frozen, module = "refix.fields")]
+pub(crate) struct Component;
+
+#[pymethods]
+impl Component {
+    #[new]
+    fn new(raw: &Bound<'_, PyAny>) -> PyResult<PyClassInitializer<Self>> {
+        let source = Source::try_from(raw)?;
+        Ok(PyClassInitializer::from(Fields { source }).add_subclass(Self))
+    }
+}
+
+/// The base class of a generated group instance.
+#[pyclass(extends = Fields, subclass, frozen, module = "refix.fields")]
+pub(crate) struct GroupInstance;
+
+#[pymethods]
+impl GroupInstance {
+    #[new]
+    fn new(scope: Bound<'_, Scope>) -> PyClassInitializer<Self> {
+        let source = Source::Scope(scope.unbind());
+        PyClassInitializer::from(Fields { source }).add_subclass(Self)
+    }
+}
 
 // The base class for messages, components and groups, which all expose fields.
 #[pyclass(subclass, frozen, name = "_Fields", module = "refix._core")]
