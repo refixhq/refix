@@ -177,7 +177,7 @@ impl<'a> KnownTags<'a> {
         Self(tags)
     }
 
-    fn contains(&self, tag: Tag) -> bool {
+    pub(crate) fn contains(&self, tag: Tag) -> bool {
         self.0.binary_search(&tag).is_ok()
     }
 }

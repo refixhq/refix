@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use crate::{Date, Decimal, InvalidValue, MonthYear, Tag, Time, UtcTimestamp};
+use crate::{Date, Decimal, InvalidValue, KnownTags, MonthYear, Tag, Time, UtcTimestamp};
 use bytes::Bytes;
 
 /// A field's position in a message's index.
@@ -287,14 +287,26 @@ impl<'a> Scope<'a> {
     pub(crate) fn value_at(&self, slot: Slot) -> &'a [u8] {
         self.message.value(slot)
     }
-}
 
-impl fmt::Display for Scope<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    /// Displays the fields whose tags are in `known`, as sent.
+    pub fn display_known<'k>(&self, known: &KnownTags<'k>) -> impl fmt::Display + use<'a, 'k> {
+        DisplayKnown {
+            scope: *self,
+            known: *known,
+        }
+    }
+
+    // Writes the fields `keep` accepts, joined by pipes.
+    fn write_fields(&self, f: &mut fmt::Formatter<'_>, keep: impl Fn(Tag) -> bool) -> fmt::Result {
+        let mut first = true;
         for index in self.start.index()..self.end.index() {
-            if index > self.start.index() {
+            if !keep(self.message.fields[index].tag) {
+                continue;
+            }
+            if !first {
                 f.write_char('|')?;
             }
+            first = false;
             for &byte in self.message.field_text(index) {
                 match byte {
                     b'\\' => f.write_str("\\\\")?,
@@ -304,6 +316,23 @@ impl fmt::Display for Scope<'_> {
             }
         }
         Ok(())
+    }
+}
+
+impl fmt::Display for Scope<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.write_fields(f, |_| true)
+    }
+}
+
+struct DisplayKnown<'a, 'k> {
+    scope: Scope<'a>,
+    known: KnownTags<'k>,
+}
+
+impl fmt::Display for DisplayKnown<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.scope.write_fields(f, |tag| self.known.contains(tag))
     }
 }
 
@@ -657,6 +686,54 @@ mod tests {
         fn an_empty_scope_prints_nothing() {
             let message = message_of(&[(35, "D")]);
             assert_eq!(scope_of(&message, 1, 1).to_string(), "");
+        }
+
+        #[test]
+        fn display_known_prints_the_fields_with_a_known_tag_as_sent() {
+            let message = message_of(&[(8, "FIX.4.4"), (35, "D"), (55, "ACME"), (49, "AL")]);
+            let known = KnownTags::new(&[Tag(8), Tag(35), Tag(49)]);
+
+            let printed = message.scope().display_known(&known).to_string();
+
+            assert_eq!(printed, "8=FIX.4.4|35=D|49=AL");
+        }
+
+        #[test]
+        fn display_known_prints_every_field_with_a_repeated_tag() {
+            let message = message_of(&[(627, "2"), (628, "A"), (11, "ORD"), (628, "B")]);
+            let known = KnownTags::new(&[Tag(627), Tag(628)]);
+
+            let printed = message.scope().display_known(&known).to_string();
+
+            assert_eq!(printed, "627=2|628=A|628=B");
+        }
+
+        #[test]
+        fn display_known_stays_within_the_scope() {
+            let message = message_of(&[(453, "2"), (448, "AL"), (452, "3"), (448, "BOB")]);
+            let known = KnownTags::new(&[Tag(448)]);
+
+            let printed = scope_of(&message, 1, 3).display_known(&known).to_string();
+
+            assert_eq!(printed, "448=AL");
+        }
+
+        #[test]
+        fn display_known_prints_nothing_when_no_tag_is_known() {
+            let message = message_of(&[(35, "D"), (55, "ACME")]);
+            let known = KnownTags::new(&[Tag(49)]);
+
+            assert_eq!(message.scope().display_known(&known).to_string(), "");
+        }
+
+        #[test]
+        fn display_known_escapes_as_a_scope_does() {
+            let message = message_of(&[(58, b"caf\xE9".as_slice()), (96, b"a\\b".as_slice())]);
+            let known = KnownTags::new(&[Tag(58), Tag(96)]);
+
+            let printed = message.scope().display_known(&known).to_string();
+
+            assert_eq!(printed, r"58=caf\xe9|96=a\\b");
         }
 
         #[test]
