@@ -11,6 +11,12 @@ pub(crate) struct View {
     attribute: Attribute,
 }
 
+impl View {
+    pub(super) fn component(&self) -> &Py<PyType> {
+        &self.component
+    }
+}
+
 #[pymethods]
 impl View {
     #[new]

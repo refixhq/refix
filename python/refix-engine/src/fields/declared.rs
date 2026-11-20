@@ -1,5 +1,6 @@
 use super::field::Field;
 use super::group::Group;
+use super::view::View;
 use pyo3::types::{PyAnyMethods, PyTupleMethods, PyType, PyTypeMethods};
 use pyo3::{Bound, PyResult, intern, pyclass};
 use refix_message::{KnownTags, Tag};
@@ -58,6 +59,7 @@ impl DeclaredTags {
 }
 
 // Returns the fields `class` declares, maintaining the declaration order.
+// A view stands for the fields of its component.
 pub(super) fn declared<'py>(class: &Bound<'py, PyType>) -> PyResult<Vec<Bound<'py, Field>>> {
     let py = class.py();
     let mut fields = Vec::new();
@@ -66,8 +68,11 @@ pub(super) fn declared<'py>(class: &Bound<'py, PyType>) -> PyResult<Vec<Bound<'p
     for base in class.mro().iter().rev() {
         let namespace = base.getattr(intern!(py, "__dict__"))?;
         for value in namespace.call_method0(intern!(py, "values"))?.try_iter()? {
-            if let Ok(field) = value?.cast_into::<Field>() {
-                fields.push(field);
+            let value = value?;
+            if let Ok(field) = value.cast::<Field>() {
+                fields.push(field.clone());
+            } else if let Ok(view) = value.cast::<View>() {
+                fields.extend(declared(view.get().component().bind(py))?);
             }
         }
     }
