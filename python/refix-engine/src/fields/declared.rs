@@ -1,16 +1,38 @@
 use super::field::Field;
 use super::group::Group;
 use pyo3::types::{PyAnyMethods, PyTupleMethods, PyType, PyTypeMethods};
-use pyo3::{Bound, PyResult, intern};
+use pyo3::{Bound, PyResult, intern, pyclass};
 use refix_message::{KnownTags, Tag};
 
 // The tags an object of a class can contain, at any depth.
+//
+// Built on first use and kept on the class.
+#[pyclass(frozen, name = "_DeclaredTags", module = "refix._core")]
 pub(super) struct DeclaredTags {
+    // The address of the class the tags were built for.
+    // A subclass finds its parent's tags first and needs its own.
+    class: usize,
     tags: Vec<Tag>,
 }
 
 impl DeclaredTags {
-    pub(super) fn of(class: &Bound<'_, PyType>) -> PyResult<Self> {
+    // Returns the tags of `class`, building them on first use.
+    pub(super) fn of<'py>(class: &Bound<'py, PyType>) -> PyResult<Bound<'py, Self>> {
+        let py = class.py();
+        let name = intern!(py, "_refix_tags");
+        if let Some(found) = class.getattr_opt(name)?
+            && let Ok(tags) = found.cast_into::<Self>()
+            && tags.get().class == class.as_ptr() as usize
+        {
+            return Ok(tags);
+        }
+
+        let tags = Bound::new(py, Self::build(class)?)?;
+        class.setattr(name, &tags)?;
+        Ok(tags)
+    }
+
+    fn build(class: &Bound<'_, PyType>) -> PyResult<Self> {
         let mut tags = Vec::new();
         for field in declared(class)? {
             tags.push(Tag(field.get().tag()));
@@ -18,13 +40,16 @@ impl DeclaredTags {
             // A group brings the tags of its instances.
             if let Ok(group) = field.cast::<Group>() {
                 let instance = group.get().instance().bind(class.py());
-                tags.extend_from_slice(&Self::of(instance)?.tags);
+                tags.extend_from_slice(&Self::of(instance)?.get().tags);
             }
         }
         tags.sort_unstable();
         tags.dedup();
 
-        Ok(Self { tags })
+        Ok(Self {
+            class: class.as_ptr() as usize,
+            tags,
+        })
     }
 
     pub(super) fn known(&self) -> KnownTags<'_> {

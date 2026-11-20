@@ -72,7 +72,7 @@ impl Group {
             let owner = DeclaredTags::of(&fields.get_type())?;
             let message = fields.get().message(py);
             let scope = fields.get().scope();
-            let scopes = raw::group_scopes(py, &message, &scope, &table, &owner.known())?;
+            let scopes = raw::group_scopes(py, &message, &scope, &table, &owner.get().known())?;
 
             let class = slf.get().instance.bind(py);
             let instances = scopes
