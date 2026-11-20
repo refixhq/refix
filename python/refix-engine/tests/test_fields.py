@@ -1,3 +1,4 @@
+import copy
 import enum
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
@@ -225,6 +226,37 @@ class TestGroupInstance:
 
         with pytest.raises(TypeError):
             instance(raw=parties()[0])
+
+
+class TestCopy:
+    def test_a_copy_of_a_message_is_the_message(self):
+        message = NewOrderSingle(order())
+
+        assert copy.copy(message) is message
+
+    def test_a_deep_copy_of_a_message_is_the_message(self):
+        message = NewOrderSingle(order())
+
+        assert copy.deepcopy(message) is message
+
+    def test_a_copy_of_a_component_is_the_component(self):
+        component = Instrument(order())
+
+        assert copy.copy(component) is component
+        assert copy.deepcopy(component) is component
+
+    def test_a_copy_of_a_group_instance_is_the_instance(self):
+        instance = Parties.Instance(parties()[0])
+
+        assert copy.copy(instance) is instance
+        assert copy.deepcopy(instance) is instance
+
+    def test_a_deep_copy_of_a_list_keeps_its_messages(self):
+        message = NewOrderSingle(order())
+
+        (copied,) = copy.deepcopy([message])
+
+        assert copied is message
 
 
 class TestStr:
