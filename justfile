@@ -84,9 +84,10 @@ fmt:
 # Check formatting and lints without modifying anything
 lint:
     cargo fmt --all -- --check
-    cargo clippy --all-targets --all-features
+    cargo clippy --all-targets --all-features -- -D warnings
+    cargo clippy -p refix-engine --all-targets --all-features -- -D warnings
     cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check
-    cargo clippy --manifest-path fuzz/Cargo.toml --all-targets
+    cargo clippy --manifest-path fuzz/Cargo.toml --all-targets -- -D warnings
     uv run --project {{ py }} ruff format --check
     uv run --project {{ py }} ruff check
 
