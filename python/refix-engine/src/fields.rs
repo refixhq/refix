@@ -1,10 +1,13 @@
 mod coded;
+mod declared;
 mod field;
+mod group;
 
 pub(crate) use field::{
     Bool, Bytes, Date, Decimal, Int, MonthYear, MultipleValues, Str, Time, TimeNs, UtcTimestamp,
     UtcTimestampNs,
 };
+pub(crate) use group::Group;
 
 use crate::raw::{RawMessage, Scope};
 use pyo3::exceptions::{PyAttributeError, PyTypeError};
@@ -65,6 +68,14 @@ impl Fields {
         match &self.source {
             Source::Message(message) => message.get().scope(),
             Source::Scope(scope) => scope.get().scope(),
+        }
+    }
+
+    // The message the fields are part of.
+    fn message(&self, py: Python<'_>) -> Py<RawMessage> {
+        match &self.source {
+            Source::Message(message) => message.clone_ref(py),
+            Source::Scope(scope) => scope.get().message(py),
         }
     }
 }

@@ -340,7 +340,7 @@ pub(crate) struct Field {
 }
 
 impl Field {
-    fn new(tag: u32) -> Self {
+    pub(super) fn new(tag: u32) -> Self {
         Self {
             tag,
             name: PyOnceLock::new(),
@@ -352,6 +352,21 @@ impl Field {
         slf: &Bound<'py, Self>,
         obj: Option<&Bound<'py, PyAny>>,
         read: impl FnOnce(Python<'py>, &CoreScope<'_>, u32) -> PyResult<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        Self::get_from(slf, obj, |fields, tag| {
+            read(fields.py(), &fields.get().scope(), tag)
+        })
+    }
+
+    pub(super) fn tag(&self) -> u32 {
+        self.tag
+    }
+
+    // Reads from the object with `read` and caches the value on it.
+    pub(super) fn get_from<'py>(
+        slf: &Bound<'py, Self>,
+        obj: Option<&Bound<'py, PyAny>>,
+        read: impl FnOnce(&Bound<'py, Fields>, u32) -> PyResult<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let Some(obj) = obj else {
             return Ok(slf.clone().into_any());
@@ -365,7 +380,7 @@ impl Field {
             )));
         };
 
-        let value = read(py, &fields.get().scope(), field.tag)?;
+        let value = read(fields, field.tag)?;
         if let Some(name) = field.name.get(py) {
             let dict = obj
                 .getattr(intern!(py, "__dict__"))?

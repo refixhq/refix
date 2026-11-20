@@ -30,6 +30,18 @@ class QuoteCondition(enum.StrEnum):
     CLOSED = "B"
 
 
+class PtysSubGrp:
+    class Instance(fields.GroupInstance):
+        party_sub_id = fields.Str(523)
+
+
+class Parties:
+    class Instance(fields.GroupInstance):
+        party_id = fields.Str(448)
+        party_role = fields.Int(452, PartyRole)
+        party_sub_ids = fields.Group(802, PtysSubGrp.Instance)
+
+
 class NewOrderSingle(fields.Message):
     exec_inst = fields.MultipleValues(18)
     order_qty = fields.Int(38)
@@ -47,19 +59,28 @@ class NewOrderSingle(fields.Message):
     md_entry_time_ns = fields.TimeNs(273)
     quote_condition = fields.MultipleValues(276, QuoteCondition)
     party_role = fields.Int(452, PartyRole)
+    party_ids = fields.Group(453, Parties.Instance)
+
+
+class CustomOrder(NewOrderSingle):
+    desk = fields.Str(9001)
 
 
 class Instrument(fields.Component):
     symbol = fields.Str(55)
 
 
-class Parties:
-    class Instance(fields.GroupInstance):
-        party_id = fields.Str(448)
+class Empty(fields.GroupInstance):
+    pass
+
+
+class EmptyHolder(fields.Message):
+    empties = fields.Group(453, Empty)
 
 
 class Plain:
     symbol = fields.Str(55)
+    party_ids = fields.Group(453, Parties.Instance)
 
 
 def order() -> refix.RawMessage:
@@ -692,3 +713,91 @@ class TestCodedMultipleValues:
 
         with pytest.raises(TypeError):
             declaration(276, enum=QuoteCondition)
+
+
+class TestGroup:
+    def test_reads_each_instance(self):
+        parties = NewOrderSingle(order()).party_ids
+
+        assert [type(party) for party in parties] == [Parties.Instance] * 2
+        assert [party.party_id for party in parties] == ["AL", "BOB"]
+
+    def test_absent_group_is_empty(self):
+        assert NewOrderSingle(tokenize_body("35=D|55=ACME|")).party_ids == ()
+
+    def test_a_count_of_zero_is_empty(self):
+        assert NewOrderSingle(tokenize_body("35=D|453=0|55=ACME|")).party_ids == ()
+
+    def test_reads_a_group_in_a_group(self):
+        raw = tokenize_body(
+            "35=D|453=2|448=AL|802=2|523=desk|523=floor|448=BOB|55=ACME|"
+        )
+
+        first, second = NewOrderSingle(raw).party_ids
+
+        assert [sub.party_sub_id for sub in first.party_sub_ids] == ["desk", "floor"]
+        assert second.party_sub_ids == ()
+
+    def test_ends_at_a_field_of_the_message(self):
+        raw = tokenize_body("35=D|453=1|448=AL|55=ACME|")
+
+        (party,) = NewOrderSingle(raw).party_ids
+
+        assert str(party.raw) == "448=AL"
+
+    def test_an_undeclared_tag_stays_in_the_instance(self):
+        raw = tokenize_body("35=D|453=1|448=AL|9001=x|55=ACME|")
+
+        (party,) = NewOrderSingle(raw).party_ids
+
+        assert str(party.raw) == "448=AL|9001=x"
+
+    def test_ends_at_a_field_a_subclass_declares(self):
+        raw = tokenize_body("35=D|453=1|448=AL|9001=x|55=ACME|")
+
+        (party,) = CustomOrder(raw).party_ids
+
+        assert str(party.raw) == "448=AL"
+
+    def test_a_wrong_count_raises(self):
+        message = NewOrderSingle(tokenize_body("35=D|453=3|448=AL|448=BOB|55=ACME|"))
+
+        with pytest.raises(InvalidValueError) as excinfo:
+            _ = message.party_ids
+
+        assert excinfo.value.tag == 453
+
+    def test_a_second_read_returns_the_same_object(self):
+        message = NewOrderSingle(order())
+
+        assert message.party_ids is message.party_ids
+
+    def test_class_access_returns_the_declaration(self):
+        assert isinstance(NewOrderSingle.party_ids, fields.Group)
+
+    def test_the_repr_shows_the_tag_and_the_instance_class(self):
+        assert repr(NewOrderSingle.party_ids) == "Group(453, Parties.Instance)"
+
+    def test_a_class_that_is_not_a_group_instance_raises(self):
+        declaration: Any = fields.Group
+
+        with pytest.raises(
+            TypeError, match="'Instrument' is not a subclass of GroupInstance"
+        ):
+            declaration(453, Instrument)
+
+    def test_an_instance_class_without_fields_raises(self):
+        message = EmptyHolder(order())
+
+        with pytest.raises(TypeError, match="'Empty' declares no fields"):
+            _ = message.empties
+
+    def test_the_instance_class_by_keyword_raises(self):
+        declaration: Any = fields.Group
+
+        with pytest.raises(TypeError):
+            declaration(453, instance=Parties.Instance)
+
+    def test_a_class_without_a_base_raises(self):
+        with pytest.raises(TypeError, match="'Plain' is not a Message"):
+            _ = Plain().party_ids
