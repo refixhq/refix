@@ -171,8 +171,21 @@ class TestComponent:
     def test_from_raw_returns_the_subclass(self):
         assert type(Instrument.from_raw(order())) is Instrument
 
-    def test_the_repr_shows_the_scope(self):
-        assert repr(Instrument(parties()[1])) == "Instrument(448=BOB)"
+    def test_the_repr_shows_only_the_fields_it_declares(self):
+        assert repr(Instrument(order())) == "Instrument(55=ACME)"
+
+    def test_the_repr_shows_the_fields_of_its_groups(self):
+        raw = tokenize_body("35=D|49=AL|627=1|628=HOP|55=ACME|")
+
+        assert repr(Header(raw)) == "Header(49=AL|627=1|628=HOP)"
+
+    def test_the_repr_of_a_view_shows_the_same_fields(self):
+        raw = tokenize_body("35=D|49=AL|627=1|628=HOP|55=ACME|")
+
+        assert repr(NewOrderSingle(raw).header) == "Header(49=AL|627=1|628=HOP)"
+
+    def test_the_repr_stays_within_a_scope(self):
+        assert repr(Instrument(parties()[1])) == "Instrument()"
 
     def test_any_other_object_raises(self):
         tag: Any = 55
