@@ -1,4 +1,5 @@
 mod coded;
+mod declared;
 mod field;
 mod group;
 
@@ -67,6 +68,14 @@ impl Fields {
         match &self.source {
             Source::Message(message) => message.get().scope(),
             Source::Scope(scope) => scope.get().scope(),
+        }
+    }
+
+    // The message the fields are part of.
+    fn message(&self, py: Python<'_>) -> Py<RawMessage> {
+        match &self.source {
+            Source::Message(message) => message.clone_ref(py),
+            Source::Scope(scope) => scope.get().message(py),
         }
     }
 }

@@ -363,7 +363,7 @@ impl Field {
     }
 
     // Reads from the object with `read` and caches the value on it.
-    fn get_from<'py>(
+    pub(super) fn get_from<'py>(
         slf: &Bound<'py, Self>,
         obj: Option<&Bound<'py, PyAny>>,
         read: impl FnOnce(&Bound<'py, Fields>, u32) -> PyResult<Bound<'py, PyAny>>,

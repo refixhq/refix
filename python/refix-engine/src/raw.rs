@@ -161,6 +161,10 @@ pub(crate) struct Scope {
 }
 
 impl Scope {
+    pub(crate) fn message(&self, py: Python<'_>) -> Py<RawMessage> {
+        self.message.clone_ref(py)
+    }
+
     pub(crate) fn scope(&self) -> CoreScope<'_> {
         self.message
             .get()
@@ -437,7 +441,7 @@ fn get_group<'py>(
 
 /// One [`Scope`] per instance of the group `table` describes, each holding
 /// `message`.
-fn group_scopes(
+pub(super) fn group_scopes(
     py: Python<'_>,
     message: &Py<RawMessage>,
     scope: &CoreScope<'_>,
