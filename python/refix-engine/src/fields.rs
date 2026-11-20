@@ -3,12 +3,14 @@ mod coded;
 mod declared;
 mod field;
 mod group;
+mod view;
 
 pub(crate) use field::{
     Bool, Bytes, Date, Decimal, Int, MonthYear, MultipleValues, Str, Time, TimeNs, UtcTimestamp,
     UtcTimestampNs,
 };
 pub(crate) use group::Group;
+pub(crate) use view::View;
 
 use crate::raw::{RawMessage, Scope};
 use pyo3::exceptions::{PyAttributeError, PyTypeError};

@@ -15,6 +15,7 @@ from refix._core import (
     TimeNs,
     UtcTimestamp,
     UtcTimestampNs,
+    View,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "TimeNs",
     "UtcTimestamp",
     "UtcTimestampNs",
+    "View",
 ]
