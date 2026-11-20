@@ -149,6 +149,15 @@ impl Fields {
         immutable(slf, name)
     }
 
+    // Fields is immutable so the copy is just self.
+    fn __copy__(slf: Bound<'_, Self>) -> Bound<'_, Self> {
+        slf
+    }
+
+    fn __deepcopy__<'py>(slf: Bound<'py, Self>, _memo: &Bound<'py, PyAny>) -> Bound<'py, Self> {
+        slf
+    }
+
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
         let name = slf.get_type().qualname()?;
         let raw = slf.get().raw(slf.py());
