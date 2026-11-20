@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn reads_any_single_byte_separator() {
-        for separator in [b'|', b';', b' ', b'^'] {
+        for separator in *b"|; ^" {
             let message = message("35=0|58=hi|", separator);
 
             let records = read(&message);
