@@ -4,7 +4,8 @@ use pyo3::types::{
 };
 use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python, import_exception, pyclass, pymethods};
 use refix_message::{
-    Group, InvalidValue, RawMessage as CoreRawMessage, Scope as CoreScope, Slot, Tag,
+    Group, InvalidValue, OwnedGroupTable, RawMessage as CoreRawMessage, Scope as CoreScope, Slot,
+    Tag,
 };
 
 use crate::group::{GroupTable, KnownTags};
@@ -424,13 +425,30 @@ fn get_group<'py>(
     table: &Bound<'py, GroupTable>,
     known: &Bound<'py, KnownTags>,
 ) -> PyResult<Option<Bound<'py, PyTuple>>> {
-    let group: Option<Group<'_>> = scope
-        .get_group(table.get().table(), &known.get().known())
-        .map_err(to_py_err)?;
+    let scopes = group_scopes(
+        py,
+        message,
+        scope,
+        table.get().table(),
+        &known.get().known(),
+    )?;
+    scopes.map(|scopes| PyTuple::new(py, scopes)).transpose()
+}
+
+/// One [`Scope`] per instance of the group `table` describes, each holding
+/// `message`.
+fn group_scopes(
+    py: Python<'_>,
+    message: &Py<RawMessage>,
+    scope: &CoreScope<'_>,
+    table: &OwnedGroupTable,
+    known: &refix_message::KnownTags<'_>,
+) -> PyResult<Option<Vec<Py<Scope>>>> {
+    let group: Option<Group<'_>> = scope.get_group(table, known).map_err(to_py_err)?;
     let Some(group) = group else {
         return Ok(None);
     };
-    let instances = group
+    group
         .iter()
         .map(|instance| {
             Py::new(
@@ -442,8 +460,8 @@ fn get_group<'py>(
                 },
             )
         })
-        .collect::<PyResult<Vec<_>>>()?;
-    PyTuple::new(py, instances).map(Some)
+        .collect::<PyResult<Vec<_>>>()
+        .map(Some)
 }
 
 fn to_py_err(error: InvalidValue) -> PyErr {
