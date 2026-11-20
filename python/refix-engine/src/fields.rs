@@ -1,3 +1,4 @@
+mod attribute;
 mod coded;
 mod declared;
 mod field;

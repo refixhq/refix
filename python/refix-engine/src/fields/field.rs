@@ -1,14 +1,10 @@
 use super::Fields;
+use super::attribute::Attribute;
 use super::coded::Coded;
 use crate::raw;
-use pyo3::exceptions::PyTypeError;
-use pyo3::sync::PyOnceLock;
-use pyo3::types::{
-    PyAnyMethods, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods, PyType, PyTypeMethods,
-};
+use pyo3::types::{PyAnyMethods, PyString, PyTuple, PyTupleMethods, PyType, PyTypeMethods};
 use pyo3::{
-    Bound, IntoPyObjectExt, Py, PyAny, PyClassInitializer, PyResult, Python, intern, pyclass,
-    pymethods,
+    Bound, IntoPyObjectExt, PyAny, PyClassInitializer, PyResult, Python, pyclass, pymethods,
 };
 use refix_message::Scope as CoreScope;
 
@@ -335,15 +331,14 @@ impl MultipleValues {
 #[pyclass(subclass, frozen, name = "_Field", module = "refix._core")]
 pub(crate) struct Field {
     tag: u32,
-    // The attribute the declaration is assigned to, which is where it caches.
-    name: PyOnceLock<Py<PyString>>,
+    attribute: Attribute,
 }
 
 impl Field {
     pub(super) fn new(tag: u32) -> Self {
         Self {
             tag,
-            name: PyOnceLock::new(),
+            attribute: Attribute::new(),
         }
     }
 
@@ -368,27 +363,10 @@ impl Field {
         obj: Option<&Bound<'py, PyAny>>,
         read: impl FnOnce(&Bound<'py, Fields>, u32) -> PyResult<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let Some(obj) = obj else {
-            return Ok(slf.clone().into_any());
-        };
-        let py = slf.py();
         let field = slf.get();
-        let Ok(fields) = obj.cast::<Fields>() else {
-            let class = obj.get_type().qualname()?;
-            return Err(PyTypeError::new_err(format!(
-                "'{class}' is not a Message, Component or GroupInstance"
-            )));
-        };
-
-        let value = read(fields, field.tag)?;
-        if let Some(name) = field.name.get(py) {
-            let dict = obj
-                .getattr(intern!(py, "__dict__"))?
-                .cast_into::<PyDict>()?;
-            dict.set_item(name, &value)?;
-        }
-
-        Ok(value)
+        field
+            .attribute
+            .get(slf.as_any(), obj, |fields| read(fields, field.tag))
     }
 
     // Writes the declaration as it is constructed, such as `Str(54, Side)`.
@@ -405,7 +383,7 @@ impl Field {
 #[pymethods]
 impl Field {
     fn __set_name__(&self, _owner: &Bound<'_, PyAny>, name: Bound<'_, PyString>) {
-        let _ = self.name.set(name.py(), name.unbind());
+        self.attribute.set_name(name);
     }
 
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
