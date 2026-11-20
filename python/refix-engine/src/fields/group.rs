@@ -3,6 +3,7 @@ use super::declared::{DeclaredTags, declared};
 use super::field::Field;
 use crate::raw;
 use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyAnyMethods, PyTuple, PyType, PyTypeMethods};
 use pyo3::{Bound, Py, PyAny, PyClassInitializer, PyResult, pyclass, pymethods};
 use refix_message::{OwnedGroupTable, Tag};
@@ -11,6 +12,7 @@ use refix_message::{OwnedGroupTable, Tag};
 #[pyclass(extends = Field, frozen, module = "refix.fields")]
 pub(crate) struct Group {
     instance: Py<PyType>,
+    table: PyOnceLock<OwnedGroupTable>,
 }
 
 impl Group {
@@ -18,29 +20,32 @@ impl Group {
         &self.instance
     }
 
-    // Returns the table of the group, built from the fields of the instance class.
-    fn table(slf: &Bound<'_, Self>) -> PyResult<OwnedGroupTable> {
-        let class = slf.get().instance.bind(slf.py());
-        let fields = declared(class)?;
-        let Some(first) = fields.first() else {
-            let name = class.qualname()?;
-            return Err(PyTypeError::new_err(format!("'{name}' declares no fields")));
-        };
+    // Returns the table of the group, built from the fields of the instance class on first use.
+    fn table<'a>(slf: &'a Bound<'_, Self>) -> PyResult<&'a OwnedGroupTable> {
+        let py = slf.py();
+        slf.get().table.get_or_try_init(py, || {
+            let class = slf.get().instance.bind(py);
+            let fields = declared(class)?;
+            let Some(first) = fields.first() else {
+                let name = class.qualname()?;
+                return Err(PyTypeError::new_err(format!("'{name}' declares no fields")));
+            };
 
-        let count_tag = Tag(slf.as_super().get().tag());
-        let delimiter = Tag(first.get().tag());
-        let mut members: Vec<_> = fields.iter().map(|field| Tag(field.get().tag())).collect();
-        members.sort_unstable();
-        members.dedup();
-        let mut nested = Vec::new();
-        for field in &fields {
-            if let Ok(group) = field.cast::<Self>() {
-                nested.push(Self::table(group)?);
+            let count_tag = Tag(slf.as_super().get().tag());
+            let delimiter = Tag(first.get().tag());
+            let mut members: Vec<_> = fields.iter().map(|field| Tag(field.get().tag())).collect();
+            members.sort_unstable();
+            members.dedup();
+            let mut nested = Vec::new();
+            for field in &fields {
+                if let Ok(group) = field.cast::<Self>() {
+                    nested.push(Self::table(group)?.clone());
+                }
             }
-        }
 
-        OwnedGroupTable::new(count_tag, delimiter, members, nested)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            OwnedGroupTable::new(count_tag, delimiter, members, nested)
+                .map_err(|error| PyValueError::new_err(error.to_string()))
+        })
     }
 }
 
@@ -57,6 +62,7 @@ impl Group {
         }
         let group = Self {
             instance: instance.unbind(),
+            table: PyOnceLock::new(),
         };
         Ok(PyClassInitializer::from(Field::new(tag)).add_subclass(group))
     }
@@ -72,7 +78,7 @@ impl Group {
             let owner = DeclaredTags::of(&fields.get_type())?;
             let message = fields.get().message(py);
             let scope = fields.get().scope();
-            let scopes = raw::group_scopes(py, &message, &scope, &table, &owner.get().known())?;
+            let scopes = raw::group_scopes(py, &message, &scope, table, &owner.get().known())?;
 
             let class = slf.get().instance.bind(py);
             let instances = scopes
