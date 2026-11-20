@@ -1,6 +1,6 @@
-use super::GroupInstance;
-use super::declared::{DeclaredTags, declared};
+use super::declared::declared;
 use super::field::Field;
+use super::{Fields, GroupInstance};
 use crate::raw;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::sync::PyOnceLock;
@@ -75,10 +75,10 @@ impl Group {
         Field::get_from(slf.as_super(), obj, |fields, _tag| {
             let py = fields.py();
             let table = Self::table(slf)?;
-            let owner = DeclaredTags::of(&fields.get_type())?;
+            let known = Fields::known_tags(fields)?;
             let message = fields.get().message(py);
             let scope = fields.get().scope();
-            let scopes = raw::group_scopes(py, &message, &scope, table, &owner.get().known())?;
+            let scopes = raw::group_scopes(py, &message, &scope, table, &known.get().known())?;
 
             let class = slf.get().instance.bind(py);
             let instances = scopes

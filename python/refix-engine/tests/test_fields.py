@@ -42,7 +42,30 @@ class Parties:
         party_sub_ids = fields.Group(802, PtysSubGrp.Instance)
 
 
+class Hop(fields.GroupInstance):
+    hop_comp_id = fields.Str(628)
+
+
+class Header(fields.Component):
+    sender_comp_id = fields.Str(49)
+    hops = fields.Group(627, Hop)
+
+
+class Trailer(fields.Component):
+    signature_length = fields.Int(93)
+
+
+class UnderlyingInstrument(fields.Component):
+    underlying_symbol = fields.Str(311)
+    underlying_security_id = fields.Str(309)
+
+
+class UndInstrmtGrp(fields.GroupInstance):
+    underlying_instrument = fields.View(UnderlyingInstrument)
+
+
 class NewOrderSingle(fields.Message):
+    header = fields.View(Header)
     exec_inst = fields.MultipleValues(18)
     order_qty = fields.Int(38)
     poss_dup_flag = fields.Bool(43)
@@ -60,6 +83,8 @@ class NewOrderSingle(fields.Message):
     quote_condition = fields.MultipleValues(276, QuoteCondition)
     party_role = fields.Int(452, PartyRole)
     party_ids = fields.Group(453, Parties.Instance)
+    underlyings = fields.Group(711, UndInstrmtGrp)
+    trailer = fields.View(Trailer)
 
 
 class CustomOrder(NewOrderSingle):
@@ -81,6 +106,7 @@ class EmptyHolder(fields.Message):
 class Plain:
     symbol = fields.Str(55)
     party_ids = fields.Group(453, Parties.Instance)
+    header = fields.View(Header)
 
 
 def order() -> refix.RawMessage:
@@ -801,3 +827,95 @@ class TestGroup:
     def test_a_class_without_a_base_raises(self):
         with pytest.raises(TypeError, match="'Plain' is not a Message"):
             _ = Plain().party_ids
+
+
+class TestView:
+    def test_reads_a_field_of_its_owner(self):
+        message = NewOrderSingle(tokenize_body("35=D|49=AL|55=ACME|"))
+
+        assert message.header.sender_comp_id == "AL"
+
+    def test_is_an_object_of_the_component_class(self):
+        assert type(NewOrderSingle(order()).header) is Header
+
+    def test_reads_from_what_its_owner_reads_from(self):
+        message = NewOrderSingle(order())
+
+        assert message.header.raw is message.raw
+
+    def test_a_second_read_returns_the_same_object(self):
+        message = NewOrderSingle(order())
+
+        assert message.header is message.header
+
+    def test_a_group_in_a_view_ends_at_a_field_of_the_owner(self):
+        raw = tokenize_body("35=D|627=1|628=HOP|55=ACME|")
+
+        (hop,) = NewOrderSingle(raw).header.hops
+
+        assert str(hop.raw) == "628=HOP"
+
+    def test_a_group_in_a_view_of_a_view_ends_at_a_field_of_the_owner(self):
+        class Routing(fields.Component):
+            header = fields.View(Header)
+
+        class Routed(fields.Message):
+            routing = fields.View(Routing)
+            symbol = fields.Str(55)
+
+        raw = tokenize_body("35=D|627=1|628=HOP|55=ACME|")
+
+        (hop,) = Routed(raw).routing.header.hops
+
+        assert str(hop.raw) == "628=HOP"
+
+    def test_a_group_in_a_component_made_directly_ends_at_its_own_fields(self):
+        raw = tokenize_body("35=D|627=1|628=HOP|55=ACME|49=AL|")
+
+        (hop,) = Header(raw).hops
+
+        assert str(hop.raw) == "628=HOP|55=ACME"
+
+    def test_a_group_ends_at_a_field_of_a_view(self):
+        raw = tokenize_body("35=D|453=1|448=AL|93=3|89=abc|")
+
+        (party,) = NewOrderSingle(raw).party_ids
+
+        assert str(party.raw) == "448=AL"
+
+    def test_a_group_instance_starts_at_the_first_field_of_its_view(self):
+        raw = tokenize_body("35=D|711=2|311=ACME|309=XS1|311=INIT|55=ACME|")
+
+        underlyings = NewOrderSingle(raw).underlyings
+
+        symbols = [
+            underlying.underlying_instrument.underlying_symbol
+            for underlying in underlyings
+        ]
+        assert symbols == ["ACME", "INIT"]
+        assert [str(underlying.raw) for underlying in underlyings] == [
+            "311=ACME|309=XS1",
+            "311=INIT",
+        ]
+
+    def test_class_access_returns_the_declaration(self):
+        assert isinstance(NewOrderSingle.header, fields.View)
+
+    def test_the_repr_shows_the_component_class(self):
+        assert repr(NewOrderSingle.header) == "View(Header)"
+
+    def test_a_class_that_is_not_a_component_raises(self):
+        declaration: Any = fields.View
+
+        with pytest.raises(TypeError, match="'Empty' is not a subclass of Component"):
+            declaration(Empty)
+
+    def test_the_component_class_by_keyword_raises(self):
+        declaration: Any = fields.View
+
+        with pytest.raises(TypeError):
+            declaration(component=Header)
+
+    def test_a_class_without_a_base_raises(self):
+        with pytest.raises(TypeError, match="'Plain' is not a Message"):
+            _ = Plain().header

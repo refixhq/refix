@@ -1,16 +1,21 @@
+mod attribute;
 mod coded;
 mod declared;
 mod field;
 mod group;
+mod view;
 
 pub(crate) use field::{
     Bool, Bytes, Date, Decimal, Int, MonthYear, MultipleValues, Str, Time, TimeNs, UtcTimestamp,
     UtcTimestampNs,
 };
 pub(crate) use group::Group;
+pub(crate) use view::View;
 
 use crate::raw::{RawMessage, Scope};
+use declared::DeclaredTags;
 use pyo3::exceptions::{PyAttributeError, PyTypeError};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyAnyMethods, PyType, PyTypeMethods};
 use pyo3::{Bound, Py, PyAny, PyClassInitializer, PyErr, PyResult, Python, pyclass, pymethods};
 use refix_message::Scope as CoreScope;
@@ -31,7 +36,17 @@ impl Message {
 
 /// The base class of a generated component.
 #[pyclass(extends = Fields, subclass, frozen, module = "refix.fields")]
-pub(crate) struct Component;
+pub(crate) struct Component {
+    // The tags of the owner, when the component is a view.
+    owner_tags: PyOnceLock<Py<DeclaredTags>>,
+}
+
+impl Component {
+    // Makes the component end its groups at the tags of its owner.
+    fn set_owner_tags(&self, py: Python<'_>, tags: Py<DeclaredTags>) {
+        let _ = self.owner_tags.set(py, tags);
+    }
+}
 
 #[pymethods]
 impl Component {
@@ -39,7 +54,10 @@ impl Component {
     #[pyo3(signature = (raw, /))]
     fn new(raw: &Bound<'_, PyAny>) -> PyResult<PyClassInitializer<Self>> {
         let source = Source::try_from(raw)?;
-        Ok(PyClassInitializer::from(Fields { source }).add_subclass(Self))
+        let component = Self {
+            owner_tags: PyOnceLock::new(),
+        };
+        Ok(PyClassInitializer::from(Fields { source }).add_subclass(component))
     }
 }
 
@@ -77,6 +95,18 @@ impl Fields {
             Source::Message(message) => message.clone_ref(py),
             Source::Scope(scope) => scope.get().message(py),
         }
+    }
+
+    // Returns the tags that end a group read from these fields. A view
+    // reads the fields of its owner, so it uses the owner's.
+    fn known_tags<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, DeclaredTags>> {
+        let py = slf.py();
+        if let Ok(component) = slf.cast::<Component>()
+            && let Some(tags) = component.get().owner_tags.get(py)
+        {
+            return Ok(tags.bind(py).clone());
+        }
+        DeclaredTags::of(&slf.get_type())
     }
 }
 
