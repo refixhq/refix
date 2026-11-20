@@ -1,5 +1,5 @@
-use super::Component;
 use super::attribute::Attribute;
+use super::{Component, Fields};
 use pyo3::exceptions::PyTypeError;
 use pyo3::types::{PyAnyMethods, PyString, PyType, PyTypeMethods};
 use pyo3::{Bound, Py, PyAny, PyResult, Python, pyclass, pymethods};
@@ -47,7 +47,14 @@ impl View {
         view.attribute.get(slf.as_any(), obj, |fields| {
             let py = fields.py();
             let raw = fields.get().raw(py);
-            view.component.bind(py).call1((raw,))
+            let component = view.component.bind(py).call1((raw,))?;
+
+            let tags = Fields::known_tags(fields)?.unbind();
+            component
+                .cast::<Component>()?
+                .get()
+                .set_owner_tags(py, tags);
+            Ok(component)
         })
     }
 
