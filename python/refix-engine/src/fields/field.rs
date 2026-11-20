@@ -340,7 +340,7 @@ pub(crate) struct Field {
 }
 
 impl Field {
-    fn new(tag: u32) -> Self {
+    pub(super) fn new(tag: u32) -> Self {
         Self {
             tag,
             name: PyOnceLock::new(),
@@ -356,6 +356,10 @@ impl Field {
         Self::get_from(slf, obj, |fields, tag| {
             read(fields.py(), &fields.get().scope(), tag)
         })
+    }
+
+    pub(super) fn tag(&self) -> u32 {
+        self.tag
     }
 
     // Reads from the object with `read` and caches the value on it.

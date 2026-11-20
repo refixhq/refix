@@ -1,10 +1,12 @@
 mod coded;
 mod field;
+mod group;
 
 pub(crate) use field::{
     Bool, Bytes, Date, Decimal, Int, MonthYear, MultipleValues, Str, Time, TimeNs, UtcTimestamp,
     UtcTimestampNs,
 };
+pub(crate) use group::Group;
 
 use crate::raw::{RawMessage, Scope};
 use pyo3::exceptions::{PyAttributeError, PyTypeError};
