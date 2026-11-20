@@ -1,9 +1,10 @@
 use super::field::Field;
+use super::group::Group;
 use pyo3::types::{PyAnyMethods, PyTupleMethods, PyType, PyTypeMethods};
 use pyo3::{Bound, PyResult, intern};
 use refix_message::{KnownTags, Tag};
 
-// The tags an object of a class can contain.
+// The tags an object of a class can contain, at any depth.
 pub(super) struct DeclaredTags {
     tags: Vec<Tag>,
 }
@@ -13,6 +14,12 @@ impl DeclaredTags {
         let mut tags = Vec::new();
         for field in declared(class)? {
             tags.push(Tag(field.get().tag()));
+
+            // A group brings the tags of its instances.
+            if let Ok(group) = field.cast::<Group>() {
+                let instance = group.get().instance().bind(class.py());
+                tags.extend_from_slice(&Self::of(instance)?.tags);
+            }
         }
         tags.sort_unstable();
         tags.dedup();

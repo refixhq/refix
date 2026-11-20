@@ -14,6 +14,10 @@ pub(crate) struct Group {
 }
 
 impl Group {
+    pub(super) fn instance(&self) -> &Py<PyType> {
+        &self.instance
+    }
+
     // Returns the table of the group, built from the fields of the instance class.
     fn table(slf: &Bound<'_, Self>) -> PyResult<OwnedGroupTable> {
         let class = slf.get().instance.bind(slf.py());
@@ -28,8 +32,14 @@ impl Group {
         let mut members: Vec<_> = fields.iter().map(|field| Tag(field.get().tag())).collect();
         members.sort_unstable();
         members.dedup();
+        let mut nested = Vec::new();
+        for field in &fields {
+            if let Ok(group) = field.cast::<Self>() {
+                nested.push(Self::table(group)?);
+            }
+        }
 
-        OwnedGroupTable::new(count_tag, delimiter, members, Vec::new())
+        OwnedGroupTable::new(count_tag, delimiter, members, nested)
             .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 }
