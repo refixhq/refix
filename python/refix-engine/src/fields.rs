@@ -59,6 +59,16 @@ impl Component {
         };
         Ok(PyClassInitializer::from(Fields { source }).add_subclass(component))
     }
+
+    // Shows the fields the class declares.
+    fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
+        let class = slf.get_type();
+        let name = class.qualname()?;
+        let tags = DeclaredTags::of(&class)?;
+        let scope = slf.as_super().get().scope();
+        let fields = scope.display_known(&tags.get().known());
+        Ok(format!("{name}({fields})"))
+    }
 }
 
 /// The base class of a generated group instance.
