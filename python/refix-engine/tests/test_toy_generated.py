@@ -1,9 +1,12 @@
+import runpy
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
 from typing import assert_never
 
 import pytest
+import refix
 from refix import MonthYear, RawMessage, decode_log
 from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
@@ -21,9 +24,35 @@ from toy_generated import (
     from_raw,
 )
 
+TOY = str(Path(__file__).with_name("toy_generated.py"))
+
 
 def order(body: str) -> NewOrderSingle:
     return NewOrderSingle(tokenize_body(body))
+
+
+class TestRuntimeVersion:
+    @pytest.mark.parametrize("version", ["0.7.9", "0.1.0"])
+    def test_an_older_runtime_is_refused(
+        self, monkeypatch: pytest.MonkeyPatch, version: str
+    ):
+        monkeypatch.setattr(refix, "__version__", version)
+
+        with pytest.raises(
+            ImportError,
+            match=f"toy needs refix 0.8 or newer, but refix {version} is installed",
+        ):
+            runpy.run_path(TOY, run_name="toy")
+
+    @pytest.mark.parametrize("version", ["0.8.0", "0.10.0", "1.0.0"])
+    def test_the_minimum_and_newer_runtimes_are_accepted(
+        self, monkeypatch: pytest.MonkeyPatch, version: str
+    ):
+        monkeypatch.setattr(refix, "__version__", version)
+
+        module = runpy.run_path(TOY, run_name="toy")
+
+        assert "NewOrderSingle" in module
 
 
 class TestReads:
