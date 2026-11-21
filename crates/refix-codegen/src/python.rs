@@ -261,9 +261,9 @@ from typing import ClassVar
 
 import refix
 
-if tuple(map(int, refix.__version__.split(".")[:2])) < (0, 8):
+if tuple(map(int, refix.__version__.split(".")[:2])) < (0, 10):
     raise ImportError(
-        f"{__name__} needs refix 0.8 or newer, but refix {refix.__version__} is installed"
+        f"{__name__} needs refix 0.10 or newer, but refix {refix.__version__} is installed"
     )
 
 from refix import Codec, Dialect, KnownTags, RawMessage
@@ -629,9 +629,9 @@ from typing import ClassVar
 
 import refix
 
-if tuple(map(int, refix.__version__.split(".")[:2])) < (0, 8):
+if tuple(map(int, refix.__version__.split(".")[:2])) < (0, 10):
     raise ImportError(
-        f"{__name__} needs refix 0.8 or newer, but refix {refix.__version__} is installed"
+        f"{__name__} needs refix 0.10 or newer, but refix {refix.__version__} is installed"
     )
 
 from refix import Codec, Dialect, KnownTags, RawMessage"#
@@ -647,9 +647,9 @@ from typing import ClassVar
 
 import refix
 
-if tuple(map(int, refix.__version__.split(".")[:2])) < (0, 8):
+if tuple(map(int, refix.__version__.split(".")[:2])) < (0, 10):
     raise ImportError(
-        f"{__name__} needs refix 0.8 or newer, but refix {refix.__version__} is installed"
+        f"{__name__} needs refix 0.10 or newer, but refix {refix.__version__} is installed"
     )
 
 from refix import Codec, Dialect, KnownTags, RawMessage"#
@@ -723,9 +723,9 @@ from typing import ClassVar
 
 import refix
 
-if tuple(map(int, refix.__version__.split(".")[:2])) < (0, 8):
+if tuple(map(int, refix.__version__.split(".")[:2])) < (0, 10):
     raise ImportError(
-        f"{__name__} needs refix 0.8 or newer, but refix {refix.__version__} is installed"
+        f"{__name__} needs refix 0.10 or newer, but refix {refix.__version__} is installed"
     )
 
 from refix import Codec, Dialect, GroupTable, KnownTags, RawMessage
