@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/refixhq/refix/compare/refix-codegen-v0.6.2...refix-codegen-v0.7.0) - 2026-11-21
+
+### Added
+
+- *(codegen)* [**breaking**] generate Python accessors as declarations ([#183](https://github.com/refixhq/refix/pull/183))
+
 ## [0.6.2](https://github.com/refixhq/refix/compare/refix-codegen-v0.6.1...refix-codegen-v0.6.2) - 2026-11-20
 
 ### Added
