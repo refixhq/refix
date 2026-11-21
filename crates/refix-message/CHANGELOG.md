@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6](https://github.com/refixhq/refix/compare/refix-message-v0.4.5...refix-message-v0.4.6) - 2026-11-20
+
+### Added
+
+- display the known fields of a scope ([#178](https://github.com/refixhq/refix/pull/178))
+- *(python)* add group declarations ([#176](https://github.com/refixhq/refix/pull/176))
+
 ## [0.4.5](https://github.com/refixhq/refix/compare/refix-message-v0.4.4...refix-message-v0.4.5) - 2026-11-16
 
 ### Other

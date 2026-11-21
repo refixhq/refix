@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/refixhq/refix/compare/python-v0.9.0...python-v0.10.0) - 2026-11-20
+
+### Added
+
+- *(codegen)* check the runtime version in generated Python ([#181](https://github.com/refixhq/refix/pull/181))
+- *(python)* support copying messages ([#180](https://github.com/refixhq/refix/pull/180))
+- *(python)* show only its own fields in the repr of a component ([#179](https://github.com/refixhq/refix/pull/179))
+- *(python)* add view declarations ([#177](https://github.com/refixhq/refix/pull/177))
+- *(python)* add group declarations ([#176](https://github.com/refixhq/refix/pull/176))
+- *(python)* add field declarations for coded values ([#175](https://github.com/refixhq/refix/pull/175))
+- *(python)* add field declarations for dates and times ([#174](https://github.com/refixhq/refix/pull/174))
+- *(python)* add field declarations for text and numbers ([#173](https://github.com/refixhq/refix/pull/173))
+- *(python)* add a base class for generated messages ([#171](https://github.com/refixhq/refix/pull/171))
+
 ## [0.9.0](https://github.com/refixhq/refix/compare/python-v0.8.3...python-v0.9.0) - 2026-11-17
 
 ### Added
