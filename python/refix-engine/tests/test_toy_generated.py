@@ -32,7 +32,7 @@ def order(body: str) -> NewOrderSingle:
 
 
 class TestRuntimeVersion:
-    @pytest.mark.parametrize("version", ["0.7.9", "0.1.0"])
+    @pytest.mark.parametrize("version", ["0.9.0", "0.1.0"])
     def test_an_older_runtime_is_refused(
         self, monkeypatch: pytest.MonkeyPatch, version: str
     ):
@@ -40,11 +40,11 @@ class TestRuntimeVersion:
 
         with pytest.raises(
             ImportError,
-            match=f"toy needs refix 0.8 or newer, but refix {version} is installed",
+            match=f"toy needs refix 0.10 or newer, but refix {version} is installed",
         ):
             runpy.run_path(TOY, run_name="toy")
 
-    @pytest.mark.parametrize("version", ["0.8.0", "0.10.0", "1.0.0"])
+    @pytest.mark.parametrize("version", ["0.10.0", "0.11.2", "1.0.0"])
     def test_the_minimum_and_newer_runtimes_are_accepted(
         self, monkeypatch: pytest.MonkeyPatch, version: str
     ):

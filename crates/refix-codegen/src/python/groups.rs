@@ -1,14 +1,13 @@
-use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
+use refix_dictionary::{Dictionary, MemberContext, dictionary};
 
-use super::layout::{MAX_WIDTH, indent, tuple, tuple_lines};
-use super::messages::emit_property;
+use super::declarations::emit_declarations;
+use super::layout::indent;
 use super::names::Names;
-use crate::groups::{known_tags, member_tags};
 
 /// The groups declared in components, each once, innermost first, from the
 /// header, messages and trailer.
 ///
-/// A class is defined after the classes its table names. Every other
+/// A class is defined after the classes its declarations name. Every other
 /// group's class sits where the group is declared.
 pub(super) fn shared_groups(dictionary: &Dictionary) -> Vec<dictionary::Group<'_>> {
     let mut groups = Vec::new();
@@ -42,36 +41,22 @@ fn collect_groups<'a>(
     }
 }
 
-/// A group's class, indented `depth` levels where it is emitted.
+/// A group's class, which holds the class of its instances.
 ///
-/// The classes of the groups declared directly in its instances come first
-/// in it, as its table names them.
-pub(super) fn emit_group_class(
-    group: dictionary::Group<'_>,
-    depth: usize,
-    names: &Names,
-) -> String {
-    let width = MAX_WIDTH - 4 * (depth + 1);
-    let path = names.group_path(group);
-    let mut items: Vec<String> = group
-        .members()
-        .filter_map(|member| match member {
-            dictionary::Member::Group(nested) if is_declared_in_a_group(nested) => {
-                Some(emit_group_class(nested, depth + 1, names))
-            }
-            _ => None,
+/// A group declared directly in its instances has its class in the instance
+/// class, where the declaration reading it can name it. The group's class
+/// names it too, so its path stays `Outer.Nested`.
+pub(super) fn emit_group_class(group: dictionary::Group<'_>, names: &Names) -> String {
+    let mut items = vec![emit_instance_class(group, names)];
+    let aliases: String = nested_groups(group)
+        .map(|nested| {
+            let class = names.group_class(nested);
+            format!("{class} = Instance.{class}\n")
         })
         .collect();
-    items.extend([
-        emit_table(group, width, names),
-        tuple_lines(
-            "KNOWN_TAGS: ClassVar[KnownTags] = KnownTags(",
-            &tags(&known_tags(group.members())),
-            ")",
-            width,
-        ),
-        emit_instance_class(group, &path, names),
-    ]);
+    if !aliases.is_empty() {
+        items.push(aliases);
+    }
     format!(
         "class {}:\n{}",
         names.group_class(group),
@@ -79,109 +64,29 @@ pub(super) fn emit_group_class(
     )
 }
 
-fn emit_instance_class(group: dictionary::Group<'_>, path: &str, names: &Names) -> String {
-    let mut members = vec![
-        "    def __init__(self, scope: refix.Scope) -> None:\n        self._scope = scope\n"
-            .to_owned(),
-        format!(
-            "    def __repr__(self) -> str:\n        return f\"{path}.Instance({{self._scope}})\"\n"
-        ),
-        "    @property\n    def raw(self) -> refix.Scope:\n        return self._scope\n".to_owned(),
-    ];
-    let known_tags = format!("{path}.KNOWN_TAGS");
-    for member in group.members() {
-        match member {
-            dictionary::Member::Field { field, .. } => {
-                members.push(emit_property(field, names, "self._scope"));
-            }
-            dictionary::Member::Group(nested) => {
-                members.push(emit_group_property(
-                    nested,
-                    names,
-                    "self._scope",
-                    &known_tags,
-                ));
-            }
-        }
-    }
-    format!("class Instance:\n{}", members.join("\n"))
-}
-
-/// The property reading a group's instances from `receiver`, walking with
-/// `known_tags`.
-pub(super) fn emit_group_property(
-    group: dictionary::Group<'_>,
-    names: &Names,
-    receiver: &str,
-    known_tags: &str,
-) -> String {
-    let name = names.group_property(group);
-    let path = names.group_path(group);
-    let count_field = group.count_field();
-    let (count_name, count_tag) = (&count_field.name, count_field.tag);
-    format!(
-        "    @cached_property\n    def {name}(self) -> tuple[{path}.Instance, ...]:\n        \"\"\"The instances of the {count_name} ({count_tag}) group.\"\"\"\n        scopes = {receiver}.get_group({path}.TABLE, {known_tags})\n        return () if scopes is None else tuple({path}.Instance(scope) for scope in scopes)\n"
-    )
-}
-
-fn emit_table(group: dictionary::Group<'_>, width: usize, names: &Names) -> String {
-    let (count_tag, delimiter, members, nested) = table_arguments(group, names);
-    let head = "TABLE: ClassVar[GroupTable] = GroupTable(";
-    let one_line = format!(
-        "{head}{count_tag}, {delimiter}, {}, {})",
-        tuple(&members),
-        tuple(&nested)
-    );
-    if one_line.len() <= width {
-        return format!("{one_line}\n");
-    }
-    let arguments = [
-        format!("{count_tag},\n"),
-        format!("{delimiter},\n"),
-        tuple_lines("", &members, ",", width - 4),
-        tuple_lines("", &nested, ",", width - 4),
-    ];
-    format!("{head}\n{})\n", indent(&arguments.concat(), 1))
-}
-
-/// The arguments of a group's `GroupTable`.
-///
-/// These are its count tag, its delimiter, its member tags and the tables of
-/// its nested groups.
-fn table_arguments(
-    group: dictionary::Group<'_>,
-    names: &Names,
-) -> (Tag, Tag, Vec<String>, Vec<String>) {
-    let nested = group
-        .members()
-        .filter_map(|member| match member {
-            dictionary::Member::Group(child) => Some(table_reference(child, names)),
-            dictionary::Member::Field { .. } => None,
-        })
-        .collect();
-    (
-        group.count_field().tag,
-        group.delimiter().tag,
-        tags(&member_tags(group)),
-        nested,
-    )
-}
-
-/// A nested group's `TABLE`.
-///
-/// A group declared directly in the instances is named without a path, as
-/// its class is defined in the body the table is written in.
-fn table_reference(group: dictionary::Group<'_>, names: &Names) -> String {
+fn emit_instance_class(group: dictionary::Group<'_>, names: &Names) -> String {
+    let mut items = Vec::new();
+    // Python would name the class after where it is defined.
     if is_declared_in_a_group(group) {
-        return format!("{}.TABLE", names.group_class(group));
+        let path = names.group_path(group);
+        items.push(format!("    __qualname__ = \"{path}.Instance\"\n"));
     }
-    format!("{}.TABLE", names.group_path(group))
+    items.extend(nested_groups(group).map(|nested| indent(&emit_group_class(nested, names), 1)));
+    items.push(emit_declarations(group.members(), names));
+    format!(
+        "class Instance(fields.GroupInstance):\n{}",
+        items.join("\n")
+    )
+}
+
+/// The groups declared directly in the instances of `group`.
+fn nested_groups<'a>(group: dictionary::Group<'a>) -> impl Iterator<Item = dictionary::Group<'a>> {
+    group.members().filter_map(|member| match member {
+        dictionary::Member::Group(nested) if is_declared_in_a_group(nested) => Some(nested),
+        _ => None,
+    })
 }
 
 fn is_declared_in_a_group(group: dictionary::Group<'_>) -> bool {
     matches!(group.declared_in(), MemberContext::Group { .. })
-}
-
-pub(super) fn tags(tags: &[Tag]) -> Vec<String> {
-    tags.iter().map(ToString::to_string).collect()
 }

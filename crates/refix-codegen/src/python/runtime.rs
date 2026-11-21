@@ -1,7 +1,7 @@
 //! The check that the installed `refix` is new enough for the module.
 
 /// The oldest `refix` that generated modules run on, as major and minor.
-pub(super) const MINIMUM: (u32, u32) = (0, 8);
+pub(super) const MINIMUM: (u32, u32) = (0, 10);
 
 /// The lines that refuse an older `refix` with an error naming both versions.
 ///
@@ -31,7 +31,7 @@ mod tests {
         let check = emit_runtime_check();
 
         assert!(check.starts_with(
-            "if tuple(map(int, refix.__version__.split(\".\")[:2])) < (0, 8):\n    raise ImportError(\n"
+            "if tuple(map(int, refix.__version__.split(\".\")[:2])) < (0, 10):\n    raise ImportError(\n"
         ));
     }
 
@@ -40,7 +40,7 @@ mod tests {
         let check = emit_runtime_check();
 
         assert!(check.contains(
-            "f\"{__name__} needs refix 0.8 or newer, but refix {refix.__version__} is installed\"\n"
+            "f\"{__name__} needs refix 0.10 or newer, but refix {refix.__version__} is installed\"\n"
         ));
     }
 

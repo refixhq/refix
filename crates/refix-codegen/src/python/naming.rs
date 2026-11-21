@@ -9,12 +9,12 @@ pub(super) fn property_name(field: &Field) -> String {
     identifier(field_base_name(field))
 }
 
-/// The getter of a field's exact nanoseconds, for a value Python holds only to
-/// the microsecond.
-pub(super) fn nanos_getter(field: &Field) -> Option<&'static str> {
+/// The declaration of a field's exact nanoseconds, for a value Python holds
+/// only to the microsecond.
+pub(super) fn nanos_declaration(field: &Field) -> Option<&'static str> {
     match Conversion::of(field) {
-        Conversion::Time => Some("get_time_ns"),
-        Conversion::UtcTimestamp => Some("get_utc_timestamp_ns"),
+        Conversion::Time => Some("TimeNs"),
+        Conversion::UtcTimestamp => Some("UtcTimestampNs"),
         _ => None,
     }
 }

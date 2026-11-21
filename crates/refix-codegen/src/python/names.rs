@@ -5,7 +5,7 @@ use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
 use super::Error;
 use super::naming::{
-    group_property_name, member_name, nanos_getter, nanos_property_name, numbered_member,
+    group_property_name, member_name, nanos_declaration, nanos_property_name, numbered_member,
     property_name,
 };
 use crate::Warning;
@@ -21,80 +21,38 @@ const MODULE: &[&str] = &[
     "ClassVar",
     "Codec",
     "DIALECT",
-    "Decimal",
     "Dialect",
-    "GroupTable",
     "Header",
-    "KnownTags",
     "Message",
-    "MonthYear",
     "RawMessage",
     "Trailer",
-    "Unrecognized",
     "_MESSAGES",
-    "annotations",
-    "bool",
     "bytes",
-    "cached_property",
-    "date",
-    "datetime",
     "dict",
     "enum",
+    "fields",
     "from_raw",
-    "from_value",
-    "int",
-    "property",
     "refix",
-    "str",
-    "time",
-    "tuple",
     "type",
 ];
 
-/// The members every message class defines, and the decorators its body
-/// looks up.
+/// The members every message class defines or inherits, and `fields`, which
+/// its body looks up.
 ///
-/// A property named like a decorator would replace it for the properties
-/// after it. Annotations are not looked up in the class body, as the module
-/// defers them.
-const MESSAGE: &[&str] = &[
-    "KNOWN_TAGS",
-    "MSG_TYPE",
-    "__init__",
-    "__repr__",
-    "_raw",
-    "cached_property",
-    "header",
-    "property",
-    "raw",
-    "trailer",
-];
+/// An accessor named `fields` would replace the module for the declarations
+/// after it.
+const MESSAGE: &[&str] = &["MSG_TYPE", "fields", "from_raw", "header", "raw", "trailer"];
 
-/// The members every header or trailer view defines, and the decorators its
-/// body looks up.
-const VIEW: &[&str] = &[
-    "KNOWN_TAGS",
-    "__init__",
-    "_known_tags",
-    "_raw",
-    "cached_property",
-    "property",
-    "raw",
-];
+/// The members every header or trailer class inherits, and `fields`, which
+/// its body looks up.
+const VIEW: &[&str] = &["fields", "from_raw", "raw"];
 
-/// The members every group instance class defines, and the decorators its
+/// The members every group instance class inherits, and `fields`, which its
 /// body looks up.
-const INSTANCE: &[&str] = &[
-    "__init__",
-    "__repr__",
-    "_scope",
-    "cached_property",
-    "property",
-    "raw",
-];
+const INSTANCE: &[&str] = &["fields", "from_raw", "raw"];
 
 /// The members every group class defines.
-const GROUP: &[&str] = &["Instance", "KNOWN_TAGS", "TABLE"];
+const GROUP: &[&str] = &["Instance"];
 
 /// Every name the generated Python uses, settled before anything is emitted.
 pub(super) struct Names {
@@ -138,14 +96,14 @@ impl Names {
                 module.claim(&class, Owner::Group(instance_context(group)))?;
             }
         }
-        for group in declared_groups(dictionary) {
-            names.claim_nested_classes(group, &module)?;
-        }
         for field in dictionary.fields() {
             if Conversion::of(field).is_enum() {
                 let class = module.claim_enum(&field.name, warnings)?;
                 names.name_enum(field, class, warnings)?;
             }
+        }
+        for group in declared_groups(dictionary) {
+            names.claim_nested_classes(group, &module)?;
         }
         for message in dictionary.messages() {
             let mut members = Namespace::with_generated(MESSAGE);
@@ -153,69 +111,65 @@ impl Names {
                 if let dictionary::Member::Group(group) = member
                     && matches!(group.declared_in(), MemberContext::Message(_))
                 {
-                    members.claim(
-                        names.group_class(group),
-                        Owner::Group(instance_context(group)),
-                    )?;
+                    let class = names.group_class(group);
+                    let owner = Owner::Group(instance_context(group));
+                    hides_no_module_name(&module, class, &owner)?;
+                    members.claim(class, owner)?;
                 }
             }
             names.name_properties(message.members(), members)?;
         }
         for section in [Section::Header, Section::Trailer] {
-            names.name_section(section, dictionary)?;
+            names.name_section(section, dictionary, &module)?;
         }
         for group in declared_groups(dictionary) {
-            names.name_properties(group.members(), Namespace::with_generated(INSTANCE))?;
+            let mut members = Namespace::with_generated(INSTANCE);
+            for nested in nested_groups(group) {
+                members.claim(
+                    names.group_class(nested),
+                    Owner::Group(instance_context(nested)),
+                )?;
+            }
+            names.name_properties(group.members(), members)?;
         }
         Ok(names)
     }
 
     /// Takes the classes of the groups declared directly in a group's
-    /// instances, which nest in the group's own class.
-    ///
-    /// The group's table names such a class without a path, where it would
-    /// hide a module name, so it must not be one.
+    /// instances, which the group's own class names too.
     fn claim_nested_classes(
         &self,
         group: dictionary::Group<'_>,
         module: &Namespace,
     ) -> Result<(), Error> {
         let mut classes = Namespace::with_generated(GROUP);
-        for member in group.members() {
-            let dictionary::Member::Group(nested) = member else {
-                continue;
-            };
-            if !matches!(nested.declared_in(), MemberContext::Group { .. }) {
-                continue;
-            }
+        for nested in nested_groups(group) {
             let class = self.group_class(nested);
             let owner = Owner::Group(instance_context(nested));
-            if let Some(first) = module.owner(class) {
-                return Err(Box::new(NameClash {
-                    name: class.to_owned(),
-                    first: first.clone(),
-                    second: owner,
-                })
-                .into());
-            }
+            hides_no_module_name(module, class, &owner)?;
             classes.claim(class, owner)?;
         }
         Ok(())
     }
 
-    /// Names a section view's properties beside the classes of the groups the
+    /// Names a section's accessors beside the classes of the groups the
     /// section declares itself.
-    fn name_section(&mut self, section: Section, dictionary: &Dictionary) -> Result<(), Error> {
+    fn name_section(
+        &mut self,
+        section: Section,
+        dictionary: &Dictionary,
+        module: &Namespace,
+    ) -> Result<(), Error> {
         let members = section.members(dictionary);
         let mut namespace = Namespace::with_generated(VIEW);
         for member in &members {
             if let dictionary::Member::Group(group) = member
                 && *group.declared_in() == section.context()
             {
-                namespace.claim(
-                    self.group_class(*group),
-                    Owner::Group(instance_context(*group)),
-                )?;
+                let class = self.group_class(*group);
+                let owner = Owner::Group(instance_context(*group));
+                hides_no_module_name(module, class, &owner)?;
+                namespace.claim(class, owner)?;
             }
         }
         self.name_properties(members.into_iter(), namespace)
@@ -277,7 +231,7 @@ impl Names {
                     let name = property_name(field);
                     namespace.claim(&name, Owner::Field(field.name.clone()))?;
                     self.properties.insert(field.tag, name);
-                    if nanos_getter(field).is_some() {
+                    if nanos_declaration(field).is_some() {
                         let name = nanos_property_name(field);
                         namespace.claim(&name, Owner::Nanos(field.name.clone()))?;
                         self.nanos_properties.insert(field.tag, name);
@@ -345,6 +299,34 @@ impl Names {
             }
         }
     }
+}
+
+/// Fails if `class`, defined in the body of another class, is a module name.
+///
+/// The declarations in that body name the module's enums and group classes
+/// without a path, and the class would hide the one of its name.
+fn hides_no_module_name(module: &Namespace, class: &str, owner: &Owner) -> Result<(), Error> {
+    match module.owner(class) {
+        Some(first) => Err(Box::new(NameClash {
+            name: class.to_owned(),
+            first: first.clone(),
+            second: owner.clone(),
+        })
+        .into()),
+        None => Ok(()),
+    }
+}
+
+/// The groups declared directly in the instances of `group`.
+fn nested_groups<'a>(group: dictionary::Group<'a>) -> impl Iterator<Item = dictionary::Group<'a>> {
+    group.members().filter_map(|member| match member {
+        dictionary::Member::Group(nested)
+            if matches!(nested.declared_in(), MemberContext::Group { .. }) =>
+        {
+            Some(nested)
+        }
+        _ => None,
+    })
 }
 
 #[cfg(test)]
@@ -590,6 +572,65 @@ mod tests {
     }
 
     #[test]
+    fn a_nested_group_class_named_like_an_enum_clashes() {
+        let dictionary = dictionary(
+            vec![message(
+                "Logon",
+                "A",
+                vec![group(
+                    384,
+                    vec![field_ref(372), group(9001, vec![field_ref(9002)])],
+                )],
+            )],
+            vec![
+                field("NoMsgTypes", 384, DataType::NumInGroup),
+                field("RefMsgType", 372, DataType::String),
+                field("NoSubTypes", 9001, DataType::NumInGroup),
+                field("MsgSubType", 9002, DataType::String),
+                with_values(field("SubTypes", 9003, DataType::Char), &[("1", "FIRST")]),
+            ],
+            vec![],
+        );
+
+        assert_eq!(
+            clash_in(&dictionary),
+            NameClash {
+                name: "SubTypes".to_owned(),
+                first: Owner::Enum("SubTypes".to_owned()),
+                second: nested_group("NoSubTypes"),
+            }
+        );
+    }
+
+    #[test]
+    fn a_message_group_class_named_like_an_enum_clashes() {
+        let dictionary = dictionary(
+            vec![message(
+                "Logon",
+                "A",
+                vec![group(384, vec![field_ref(372)])],
+            )],
+            vec![
+                field("NoMsgTypes", 384, DataType::NumInGroup),
+                field("RefMsgType", 372, DataType::String),
+                with_values(field("MsgTypes", 9000, DataType::Char), &[("1", "FIRST")]),
+            ],
+            vec![],
+        );
+
+        assert_eq!(
+            clash_in(&dictionary),
+            NameClash {
+                name: "MsgTypes".to_owned(),
+                first: Owner::Enum("MsgTypes".to_owned()),
+                second: Owner::Group(
+                    MemberContext::Message("Logon".to_owned()).group("NoMsgTypes")
+                ),
+            }
+        );
+    }
+
+    #[test]
     fn a_nested_group_class_named_like_a_group_member_clashes() {
         assert_eq!(
             clash_in(&with_a_group_in_a_group("NoInstance")),
@@ -705,13 +746,13 @@ mod tests {
     }
 
     #[test]
-    fn a_property_named_like_a_decorator_clashes() {
+    fn a_property_named_like_the_fields_module_clashes() {
         assert_eq!(
-            clash(vec![field("CachedProperty", 9000, DataType::String)]),
+            clash(vec![field("Fields", 9000, DataType::String)]),
             NameClash {
-                name: "cached_property".to_owned(),
+                name: "fields".to_owned(),
                 first: Owner::Generated,
-                second: Owner::Field("CachedProperty".to_owned()),
+                second: Owner::Field("Fields".to_owned()),
             }
         );
     }
