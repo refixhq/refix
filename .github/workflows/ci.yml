@@ -122,6 +122,22 @@ jobs:
       - name: Build on the minimum Rust version
         run: cargo check --workspace --exclude refix-engine --all-features --locked
 
+  minimum-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+      - name: Install just
+        uses: taiki-e/install-action@just
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
+      - name: Check generated Python on the minimum refix version
+        run: just check-minimum-runtime
+
   cli-package:
     runs-on: ubuntu-latest
     steps:

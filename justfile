@@ -1,4 +1,5 @@
 py := "python/refix-engine"
+minimum_python := justfile_directory() / "target/minimum/venv/bin/python"
 
 # List available recipes
 default:
@@ -55,6 +56,18 @@ _check-stock version: (_generate-stock version)
     uv pip install -q --python {{ py }}/.venv --no-deps \
         target/stock/{{ version }}/refix_fix{{ version }}-*.whl
     cd python/refix-fix{{ version }} && uv run --project ../refix-engine python -m doctest README.md
+
+# Check generated Python on the oldest refix the stock packages allow
+check-minimum-runtime: generate-stock
+    rm -rf target/minimum
+    uv build --wheel python/refix-fix42 -o target/minimum
+    uv build --wheel python/refix-fix44 -o target/minimum
+    uv venv target/minimum/venv
+    uv pip install --python target/minimum/venv --resolution lowest target/minimum/*.whl
+    uv pip install --python target/minimum/venv pytest
+    cd python/refix-fix42 && {{ minimum_python }} -m doctest README.md
+    cd python/refix-fix44 && {{ minimum_python }} -m doctest README.md
+    cd {{ py }} && {{ minimum_python }} -m pytest tests/test_toy_generated.py
 
 # Check the CLI as published, through a wheel built from its sdist
 check-cli:
