@@ -11,6 +11,7 @@ use super::naming::{
 use crate::Warning;
 use crate::conversion::Conversion;
 use crate::envelope::Section;
+use crate::flat;
 use crate::groups::{declared_groups, instance_context};
 use crate::namespace::{NameClash, Namespace, Owner};
 
@@ -121,10 +122,16 @@ impl Names {
             }
         }
         for message in dictionary.messages() {
-            names.name_accessors(message.members(), Namespace::with_generated(MESSAGE))?;
+            names.name_accessors(
+                flat::members(message.members()),
+                Namespace::with_generated(MESSAGE),
+            )?;
         }
         for group in declared_groups(dictionary) {
-            names.name_accessors(group.members(), Namespace::with_generated(INSTANCE))?;
+            names.name_accessors(
+                flat::members(group.members()),
+                Namespace::with_generated(INSTANCE),
+            )?;
         }
         Ok(names)
     }
@@ -136,10 +143,9 @@ impl Names {
         message: dictionary::Message<'_>,
         root: &mut Namespace,
     ) -> Result<(), Error> {
-        let groups: Vec<dictionary::Group<'_>> = message
-            .members()
+        let groups: Vec<dictionary::Group<'_>> = flat::members(message.members())
             .filter_map(|member| match member {
-                dictionary::Member::Group(group)
+                flat::Member::Group(group)
                     if matches!(group.declared_in(), MemberContext::Message(_)) =>
                 {
                     Some(group)
@@ -174,8 +180,8 @@ impl Names {
         root: &Namespace,
     ) -> Result<(), Error> {
         let mut modules = Namespace::default();
-        for member in group.members() {
-            let dictionary::Member::Group(nested) = member else {
+        for member in flat::members(group.members()) {
+            let flat::Member::Group(nested) = member else {
                 continue;
             };
             if !matches!(nested.declared_in(), MemberContext::Group { .. }) {
@@ -203,7 +209,7 @@ impl Names {
         let members = section.members(dictionary);
         let mut modules = Namespace::default();
         for member in &members {
-            if let dictionary::Member::Group(group) = member
+            if let flat::Member::Group(group) = member
                 && *group.declared_in() == section.context()
             {
                 let name = group_module_name(*group)?;
@@ -247,17 +253,17 @@ impl Names {
     /// Names the accessors of a message or group instance.
     fn name_accessors<'a>(
         &mut self,
-        members: impl Iterator<Item = dictionary::Member<'a>>,
+        members: impl Iterator<Item = flat::Member<'a>>,
         mut namespace: Namespace,
     ) -> Result<(), Error> {
         for member in members {
             match member {
-                dictionary::Member::Field { field, .. } => {
+                flat::Member::Field { field, .. } => {
                     let name = method_name(field)?;
                     namespace.claim(&name, Owner::Field(field.name.clone()))?;
                     self.accessors.insert(field.tag, name);
                 }
-                dictionary::Member::Group(group) => {
+                flat::Member::Group(group) => {
                     let name = group_accessor_name(group)?;
                     namespace.claim(&name, Owner::Group(instance_context(group)))?;
                     self.group_accessors.insert(instance_context(group), name);

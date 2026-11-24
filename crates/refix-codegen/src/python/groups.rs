@@ -3,6 +3,7 @@ use refix_dictionary::{Dictionary, MemberContext, dictionary};
 use super::declarations::emit_declarations;
 use super::layout::indent;
 use super::names::Names;
+use crate::flat;
 
 /// The groups declared in components, each once, innermost first, from the
 /// header, messages and trailer.
@@ -12,21 +13,21 @@ use super::names::Names;
 pub(super) fn shared_groups(dictionary: &Dictionary) -> Vec<dictionary::Group<'_>> {
     let mut groups = Vec::new();
     let mut seen = Vec::new();
-    collect_groups(dictionary.header(), &mut groups, &mut seen);
+    collect_groups(flat::members(dictionary.header()), &mut groups, &mut seen);
     for message in dictionary.messages() {
-        collect_groups(message.members(), &mut groups, &mut seen);
+        collect_groups(flat::members(message.members()), &mut groups, &mut seen);
     }
-    collect_groups(dictionary.trailer(), &mut groups, &mut seen);
+    collect_groups(flat::members(dictionary.trailer()), &mut groups, &mut seen);
     groups
 }
 
 fn collect_groups<'a>(
-    members: impl Iterator<Item = dictionary::Member<'a>>,
+    members: impl Iterator<Item = flat::Member<'a>>,
     groups: &mut Vec<dictionary::Group<'a>>,
     seen: &mut Vec<MemberContext>,
 ) {
     for member in members {
-        let dictionary::Member::Group(group) = member else {
+        let flat::Member::Group(group) = member else {
             continue;
         };
         let context = group.declared_in().group(&group.count_field().name);
@@ -34,7 +35,7 @@ fn collect_groups<'a>(
             continue;
         }
         seen.push(context);
-        collect_groups(group.members(), groups, seen);
+        collect_groups(flat::members(group.members()), groups, seen);
         if matches!(group.declared_in(), MemberContext::Component(_)) {
             groups.push(group);
         }
@@ -72,7 +73,7 @@ fn emit_instance_class(group: dictionary::Group<'_>, names: &Names) -> String {
         items.push(format!("    __qualname__ = \"{path}.Instance\"\n"));
     }
     items.extend(nested_groups(group).map(|nested| indent(&emit_group_class(nested, names), 1)));
-    items.push(emit_declarations(group.members(), names));
+    items.push(emit_declarations(flat::members(group.members()), names));
     format!(
         "class Instance(fields.GroupInstance):\n{}",
         items.join("\n")
@@ -81,8 +82,8 @@ fn emit_instance_class(group: dictionary::Group<'_>, names: &Names) -> String {
 
 /// The groups declared directly in the instances of `group`.
 fn nested_groups<'a>(group: dictionary::Group<'a>) -> impl Iterator<Item = dictionary::Group<'a>> {
-    group.members().filter_map(|member| match member {
-        dictionary::Member::Group(nested) if is_declared_in_a_group(nested) => Some(nested),
+    flat::members(group.members()).filter_map(|member| match member {
+        flat::Member::Group(nested) if is_declared_in_a_group(nested) => Some(nested),
         _ => None,
     })
 }

@@ -4,18 +4,19 @@ use refix_dictionary::spec::Field;
 use super::names::Names;
 use super::naming::nanos_declaration;
 use crate::conversion::Conversion;
+use crate::flat;
 
 /// The declarations of a message, component or group instance.
 ///
 /// The first one in a group instance is the field its instances start with.
 pub(super) fn emit_declarations<'a>(
-    members: impl Iterator<Item = dictionary::Member<'a>>,
+    members: impl Iterator<Item = flat::Member<'a>>,
     names: &Names,
 ) -> String {
     members
         .map(|member| match member {
-            dictionary::Member::Field { field, .. } => emit_field(field, names),
-            dictionary::Member::Group(group) => emit_group(group, names),
+            flat::Member::Field { field, .. } => emit_field(field, names),
+            flat::Member::Group(group) => emit_group(group, names),
         })
         .collect()
 }

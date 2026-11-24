@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::flat;
 use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
 /// The context of a group's instances, which identifies its declaration.
@@ -12,25 +13,25 @@ pub(crate) fn instance_context(group: dictionary::Group<'_>) -> MemberContext {
 pub(crate) fn declared_groups(dictionary: &Dictionary) -> Vec<dictionary::Group<'_>> {
     let mut groups = Vec::new();
     let mut seen = HashSet::new();
-    collect_declared(dictionary.header(), &mut groups, &mut seen);
+    collect_declared(flat::members(dictionary.header()), &mut groups, &mut seen);
     for message in dictionary.messages() {
-        collect_declared(message.members(), &mut groups, &mut seen);
+        collect_declared(flat::members(message.members()), &mut groups, &mut seen);
     }
-    collect_declared(dictionary.trailer(), &mut groups, &mut seen);
+    collect_declared(flat::members(dictionary.trailer()), &mut groups, &mut seen);
     groups
 }
 
 fn collect_declared<'a>(
-    members: impl Iterator<Item = dictionary::Member<'a>>,
+    members: impl Iterator<Item = flat::Member<'a>>,
     groups: &mut Vec<dictionary::Group<'a>>,
     seen: &mut HashSet<MemberContext>,
 ) {
     for member in members {
-        if let dictionary::Member::Group(group) = member
+        if let flat::Member::Group(group) = member
             && seen.insert(instance_context(group))
         {
             groups.push(group);
-            collect_declared(group.members(), groups, seen);
+            collect_declared(flat::members(group.members()), groups, seen);
         }
     }
 }
@@ -39,11 +40,10 @@ fn collect_declared<'a>(
 ///
 /// These are the instance's fields and the count tags of its nested groups.
 pub(crate) fn member_tags(group: dictionary::Group<'_>) -> Vec<Tag> {
-    let mut tags: Vec<Tag> = group
-        .members()
+    let mut tags: Vec<Tag> = flat::members(group.members())
         .map(|member| match member {
-            dictionary::Member::Field { field, .. } => field.tag,
-            dictionary::Member::Group(nested) => nested.count_field().tag,
+            flat::Member::Field { field, .. } => field.tag,
+            flat::Member::Group(nested) => nested.count_field().tag,
         })
         .collect();
     tags.sort();
@@ -51,7 +51,7 @@ pub(crate) fn member_tags(group: dictionary::Group<'_>) -> Vec<Tag> {
 }
 
 /// Every tag in `members` at any depth, group count tags included, sorted.
-pub(crate) fn known_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a>>) -> Vec<Tag> {
+pub(crate) fn known_tags<'a>(members: impl Iterator<Item = flat::Member<'a>>) -> Vec<Tag> {
     let mut tags = Vec::new();
     collect_tags(members, &mut tags);
     tags.sort();
@@ -61,18 +61,18 @@ pub(crate) fn known_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a
 /// Every tag a message can contain, its envelope's included, sorted.
 pub(crate) fn message_known_tags(message: dictionary::Message<'_>, envelope: &[Tag]) -> Vec<Tag> {
     let mut tags = envelope.to_vec();
-    collect_tags(message.members(), &mut tags);
+    collect_tags(flat::members(message.members()), &mut tags);
     tags.sort();
     tags
 }
 
-fn collect_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a>>, tags: &mut Vec<Tag>) {
+fn collect_tags<'a>(members: impl Iterator<Item = flat::Member<'a>>, tags: &mut Vec<Tag>) {
     for member in members {
         match member {
-            dictionary::Member::Field { field, .. } => tags.push(field.tag),
-            dictionary::Member::Group(group) => {
+            flat::Member::Field { field, .. } => tags.push(field.tag),
+            flat::Member::Group(group) => {
                 tags.push(group.count_field().tag);
-                collect_tags(group.members(), tags);
+                collect_tags(flat::members(group.members()), tags);
             }
         }
     }
@@ -81,6 +81,7 @@ fn collect_tags<'a>(members: impl Iterator<Item = dictionary::Member<'a>>, tags:
 #[cfg(test)]
 mod tests {
     use super::{declared_groups, instance_context, known_tags, member_tags, message_known_tags};
+    use crate::flat;
     use refix_dictionary::spec::{
         Category, DataType, Field, FieldRef, Group, Member, Message, Protocol, Spec, Version,
     };
@@ -147,13 +148,11 @@ mod tests {
         .dictionary
     }
 
-    fn groups<'a>(
-        members: impl Iterator<Item = dictionary::Member<'a>>,
-    ) -> Vec<dictionary::Group<'a>> {
+    fn groups<'a>(members: impl Iterator<Item = flat::Member<'a>>) -> Vec<dictionary::Group<'a>> {
         members
             .filter_map(|member| match member {
-                dictionary::Member::Group(group) => Some(group),
-                dictionary::Member::Field { .. } => None,
+                flat::Member::Group(group) => Some(group),
+                flat::Member::Field { .. } => None,
             })
             .collect()
     }
@@ -162,7 +161,7 @@ mod tests {
     fn member_tags_are_the_direct_tags_sorted() {
         let dictionary = dictionary();
         let message = dictionary.messages().next().unwrap();
-        let parties = groups(message.members())[0];
+        let parties = groups(flat::members(message.members()))[0];
 
         assert_eq!(member_tags(parties), [Tag(448), Tag(452), Tag(802)]);
     }
@@ -173,7 +172,7 @@ mod tests {
         let message = dictionary.messages().next().unwrap();
 
         assert_eq!(
-            known_tags(message.members()),
+            known_tags(flat::members(message.members())),
             [Tag(448), Tag(452), Tag(453), Tag(523), Tag(802)]
         );
     }
