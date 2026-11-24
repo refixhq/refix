@@ -15,6 +15,7 @@
     <message name="NewOrderSingle" msgtype="D" msgcat="app">
       <field name="ClOrdID" required="Y"/>
       <component name="Parties" required="N"/>
+      <component name="Instrument" required="N"/>
       <component name="OrderQtyData" required="N"/>
       <field name="Price" required="N"/>
       <field name="SettlDate" required="N"/>
@@ -36,6 +37,7 @@
         <field name="QuoteSetID" required="N"/>
         <group name="NoQuoteEntries" required="N">
           <field name="QuoteEntryID" required="N"/>
+          <component name="Instrument" required="N"/>
         </group>
       </group>
     </message>
@@ -58,6 +60,19 @@
         <field name="PartySubID" required="N"/>
       </group>
     </component>
+    <component name="Instrument">
+      <field name="Symbol" required="N"/>
+      <component name="SecAltIDGrp" required="N"/>
+      <component name="SecurityXML" required="N"/>
+    </component>
+    <component name="SecAltIDGrp">
+      <group name="NoSecurityAltID" required="N">
+        <field name="SecurityAltID" required="N"/>
+      </group>
+    </component>
+    <component name="SecurityXML">
+      <field name="SecurityXMLSchema" required="N"/>
+    </component>
     <component name="OrderQtyData">
       <field name="OrderQty" required="N"/>
     </component>
@@ -76,6 +91,10 @@
     <field number="89" name="Signature" type="DATA"/>
     <field number="10" name="CheckSum" type="STRING"/>
     <field number="11" name="ClOrdID" type="STRING"/>
+    <field number="55" name="Symbol" type="STRING"/>
+    <field number="454" name="NoSecurityAltID" type="NUMINGROUP"/>
+    <field number="455" name="SecurityAltID" type="STRING"/>
+    <field number="1186" name="SecurityXMLSchema" type="STRING"/>
     <field number="38" name="OrderQty" type="INT"/>
     <field number="44" name="Price" type="PRICE"/>
     <field number="64" name="SettlDate" type="LOCALMKTDATE"/>
