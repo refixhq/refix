@@ -1,5 +1,6 @@
 use refix_dictionary::{MemberContext, dictionary};
 
+use super::constructors::emit_constructor;
 use super::declarations::emit_declarations;
 use super::enums::{bytes_literal, docstring};
 use super::groups::emit_group_class;
@@ -44,5 +45,6 @@ pub(super) fn emit_message(
     if !declarations.is_empty() {
         items.push(declarations);
     }
+    items.push(emit_constructor());
     format!("class {name}(fields.Message):\n{}", items.join("\n"))
 }

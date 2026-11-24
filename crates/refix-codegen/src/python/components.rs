@@ -1,14 +1,16 @@
 use refix_dictionary::dictionary;
 
+use super::constructors::emit_constructor;
 use super::declarations::emit_declarations;
 use super::names::Names;
 
 /// A component's class, read as a view of whatever includes the component.
 pub(super) fn emit_component(component: dictionary::Component<'_>, names: &Names) -> String {
     format!(
-        "class {}(fields.Component):\n{}",
+        "class {}(fields.Component):\n{}\n{}",
         component.name(),
-        emit_declarations(component.members(), names)
+        emit_declarations(component.members(), names),
+        emit_constructor()
     )
 }
 
@@ -31,6 +33,9 @@ mod tests {
     symbol = fields.Str(55)
     security_alt_id = fields.Group(454, SecAltIDGrp)
     security_xml = fields.View(SecurityXML)
+
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
 "#
         );
     }

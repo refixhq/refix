@@ -2,7 +2,7 @@
 # fmt: off
 
 import enum
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import refix
 
@@ -34,19 +34,31 @@ class PartyRole(enum.IntEnum):
 class PtysSubGrp(fields.GroupInstance):
     party_sub_id = fields.Str(523)
 
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
+
 
 class Parties(fields.GroupInstance):
     party_id = fields.Str(448)
     party_role = fields.Int(452, PartyRole)
     party_sub_ids = fields.Group(802, PtysSubGrp)
 
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
+
 
 class SecAltIDGrp(fields.GroupInstance):
     security_alt_id = fields.Str(455)
 
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
+
 
 class SecurityXML(fields.Component):
     security_xml_schema = fields.Str(1186)
+
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
 
 
 class Instrument(fields.Component):
@@ -54,14 +66,23 @@ class Instrument(fields.Component):
     security_alt_id = fields.Group(454, SecAltIDGrp)
     security_xml = fields.View(SecurityXML)
 
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
+
 
 class OrderQtyData(fields.Component):
     order_qty = fields.Int(38)
+
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
 
 
 class Header(fields.Component):
     class Hops(fields.GroupInstance):
         hop_comp_id = fields.Str(628)
+
+        if TYPE_CHECKING:
+            def __init__(self) -> None: ...
 
     begin_string = fields.Str(8)
     body_length = fields.Int(9)
@@ -73,11 +94,17 @@ class Header(fields.Component):
     sending_time_ns = fields.UtcTimestampNs(52)
     hops = fields.Group(627, Hops)
 
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
+
 
 class Trailer(fields.Component):
     signature_length = fields.Int(93)
     signature = fields.Bytes(89)
     check_sum = fields.Str(10)
+
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
 
 
 class NewOrderSingle(fields.Message):
@@ -101,6 +128,9 @@ class NewOrderSingle(fields.Message):
     exec_inst = fields.MultipleValues(18, ExecInst)
     desk_order_handling_inst = fields.MultipleValues(1035)
 
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
+
 
 class Logon(fields.Message):
     """The Logon (35=A) message."""
@@ -110,9 +140,15 @@ class Logon(fields.Message):
     class MsgTypes(fields.GroupInstance):
         ref_msg_type = fields.Str(372)
 
+        if TYPE_CHECKING:
+            def __init__(self) -> None: ...
+
     header = fields.View(Header)
     trailer = fields.View(Trailer)
     msg_types = fields.Group(384, MsgTypes)
+
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
 
 
 class MassQuote(fields.Message):
@@ -125,13 +161,22 @@ class MassQuote(fields.Message):
             quote_entry_id = fields.Str(299)
             instrument = fields.View(Instrument)
 
+            if TYPE_CHECKING:
+                def __init__(self) -> None: ...
+
         quote_set_id = fields.Str(302)
         quote_entries = fields.Group(295, QuoteEntries)
+
+        if TYPE_CHECKING:
+            def __init__(self) -> None: ...
 
     header = fields.View(Header)
     trailer = fields.View(Trailer)
     quote_id = fields.Str(117)
     quote_sets = fields.Group(296, QuoteSets)
+
+    if TYPE_CHECKING:
+        def __init__(self) -> None: ...
 
 
 type Message = NewOrderSingle | Logon | MassQuote
@@ -147,7 +192,7 @@ _MESSAGES: dict[bytes, type[Message]] = {
 def from_raw(raw: RawMessage) -> Message | RawMessage:
     msg_type = raw.get(35)
     message = None if msg_type is None else _MESSAGES.get(msg_type)
-    return raw if message is None else message(raw)
+    return raw if message is None else message.from_raw(raw)
 
 
 CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
