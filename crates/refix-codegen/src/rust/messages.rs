@@ -64,7 +64,6 @@ fn emit_message_impl(
         names,
         Lifetime::Receiver,
         "Self::KNOWN_TAGS",
-        true,
     ));
 
     format!("impl {} {{\n{}}}\n", message.name(), members.join("\n"))
@@ -114,43 +113,24 @@ pub(super) enum Lifetime {
 /// The accessors of a message, group instance or view.
 ///
 /// Groups are walked with `known_tags`. A component with fields is reached
-/// through its view. With `inline`, its fields and groups are read by
-/// whatever includes it as well.
+/// through its view.
 pub(super) fn emit_accessors<'a>(
     members: impl Iterator<Item = dictionary::Member<'a>>,
     names: &Names,
     lifetime: Lifetime,
     known_tags: &str,
-    inline: bool,
 ) -> Vec<String> {
-    let mut accessors = Vec::new();
-    for member in members {
-        match member {
-            dictionary::Member::Field { field, .. } => {
-                accessors.push(emit_accessor(field, names, lifetime));
-            }
+    members
+        .map(|member| match member {
+            dictionary::Member::Field { field, .. } => emit_accessor(field, names, lifetime),
             dictionary::Member::Group(group) => {
-                accessors.push(emit_group_accessor(group, names, lifetime, known_tags));
+                emit_group_accessor(group, names, lifetime, known_tags)
             }
             dictionary::Member::Component(component) => {
-                accessors.push(emit_component_accessor(
-                    component, names, lifetime, known_tags,
-                ));
-                if !inline {
-                    continue;
-                }
-                for member in flat::members(component.members()) {
-                    accessors.push(match member {
-                        flat::Member::Field { field } => emit_accessor(field, names, lifetime),
-                        flat::Member::Group(group) => {
-                            emit_group_accessor(group, names, lifetime, known_tags)
-                        }
-                    });
-                }
+                emit_component_accessor(component, names, lifetime, known_tags)
             }
-        }
-    }
-    accessors
+        })
+        .collect()
 }
 
 pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) -> String {

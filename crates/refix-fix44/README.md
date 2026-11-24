@@ -20,7 +20,7 @@ let Message::NewOrderSingle(order) = Message::from_raw(raw) else {
 assert_eq!(order.header().sender_comp_id(), Ok(Some("SENDER")));
 assert_eq!(order.header().msg_seq_num(), Ok(Some(1)));
 assert_eq!(order.cl_ord_id(), Ok(Some("ORDER-1")));
-assert_eq!(order.symbol(), Ok(Some("ACME")));
+assert_eq!(order.instrument().symbol(), Ok(Some("ACME")));
 assert_eq!(order.side(), Ok(Some(Side::Buy)));
 assert_eq!(order.ord_type(), Ok(Some(OrdType::Limit)));
 assert_eq!(order.price(), Ok(Some(Decimal::new(10125, -2))));

@@ -79,7 +79,6 @@ fn emit_instance_impl(group: dictionary::Group<'_>, names: &Names) -> String {
         names,
         Lifetime::Scope,
         "KNOWN_TAGS",
-        true,
     ));
     format!("impl<'a> Instance<'a> {{\n{}}}\n", members.join("\n"))
 }
