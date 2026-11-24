@@ -29,7 +29,7 @@ mod tests {
             emit_component(instrument, &names),
             r#"class Instrument(fields.Component):
     symbol = fields.Str(55)
-    security_alt_id = fields.Group(454, SecAltIDGrp.Instance)
+    security_alt_id = fields.Group(454, SecAltIDGrp)
     security_xml = fields.View(SecurityXML)
 "#
         );

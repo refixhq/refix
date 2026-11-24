@@ -21,6 +21,7 @@ from toy_generated import (
     Message,
     NewOrderSingle,
     OrdType,
+    Parties,
     PartyRole,
     from_raw,
 )
@@ -198,6 +199,12 @@ class TestGroups:
         assert parties[1].party_sub_ids == ()
         assert new_order.order_qty_data.order_qty == 200
 
+    def test_a_group_instance_is_an_object_of_the_groups_class(self):
+        new_order = order("35=D|453=1|448=AL|")
+
+        party: Parties = new_order.party_ids[0]
+        assert type(party) is Parties
+
     def test_an_absent_group_reads_as_empty(self):
         assert order("35=D|11=ORDER-1|").party_ids == ()
 
@@ -326,21 +333,21 @@ class TestPrinting:
         new_order = order("35=D|453=2|448=AL|802=1|523=S1|448=BOB|")
 
         first, second = new_order.party_ids
-        assert repr(first) == "Parties.Instance(448=AL|802=1|523=S1)"
-        assert repr(first.party_sub_ids[0]) == "PtysSubGrp.Instance(523=S1)"
-        assert repr(second) == "Parties.Instance(448=BOB)"
+        assert repr(first) == "Parties(448=AL|802=1|523=S1)"
+        assert repr(first.party_sub_ids[0]) == "PtysSubGrp(523=S1)"
+        assert repr(second) == "Parties(448=BOB)"
 
     def test_a_group_a_message_declares_prints_its_path(self):
         logon = Logon(tokenize_body("35=A|384=1|372=D|"))
 
-        assert repr(logon.msg_types[0]) == "Logon.MsgTypes.Instance(372=D)"
+        assert repr(logon.msg_types[0]) == "Logon.MsgTypes(372=D)"
 
     def test_a_group_in_a_group_instance_prints_its_path(self):
         quote = MassQuote(tokenize_body("35=i|296=1|302=SET-1|295=1|299=E1|"))
 
         entries = quote.quote_sets[0].quote_entries
-        entry: MassQuote.QuoteSets.QuoteEntries.Instance = entries[0]
-        assert repr(entry) == "MassQuote.QuoteSets.QuoteEntries.Instance(299=E1)"
+        entry: MassQuote.QuoteSets.QuoteEntries = entries[0]
+        assert repr(entry) == "MassQuote.QuoteSets.QuoteEntries(299=E1)"
 
 
 class TestHeader:
