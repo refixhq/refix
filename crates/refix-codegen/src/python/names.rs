@@ -328,6 +328,11 @@ impl Names {
         &self.groups[&instance_context(group)].property
     }
 
+    /// The property reading a component as a view.
+    pub(super) fn component_property(&self, component: dictionary::Component<'_>) -> &str {
+        &self.component_properties[component.name()]
+    }
+
     /// The path of a group's class from the module.
     ///
     /// A group's class sits under the class of the message, section or group
@@ -382,6 +387,7 @@ fn nested_groups<'a>(group: dictionary::Group<'a>) -> impl Iterator<Item = dicti
 #[cfg(test)]
 mod tests {
     use super::Names;
+    use crate::components::components;
     use crate::groups::declared_groups;
     use crate::python::Error;
     use crate::test_utils::message_with;
@@ -783,6 +789,16 @@ mod tests {
 
     fn order_with(members: Vec<Member>) -> Vec<Message> {
         vec![message("NewOrderSingle", "D", members)]
+    }
+
+    #[test]
+    fn a_view_property_is_the_component_in_snake_case() {
+        let messages = order_with(vec![component_ref("OrderQtyData")]);
+        let dictionary = with_component("OrderQtyData", messages, vec![]);
+        let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
+        let order_qty_data = components(&dictionary)[0];
+
+        assert_eq!(names.component_property(order_qty_data), "order_qty_data");
     }
 
     #[test]

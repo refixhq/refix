@@ -1,3 +1,4 @@
+mod components;
 mod declarations;
 mod dialect;
 mod dispatch;
@@ -9,6 +10,7 @@ mod messages;
 mod names;
 mod naming;
 mod runtime;
+mod shared;
 mod views;
 
 use refix_dictionary::Dictionary;
@@ -16,14 +18,16 @@ use refix_dictionary::Dictionary;
 use crate::Generated;
 use crate::conversion::{Conversion, unclaimed_types};
 use crate::envelope::Envelope;
+use components::emit_component;
 use dialect::{emit_codec, emit_dialect};
 use dispatch::emit_dispatch;
 use enums::emit_enum;
 pub use error::Error;
-use groups::{emit_group_class, shared_groups};
+use groups::emit_group_class;
 use messages::emit_message;
 use names::Names;
 use runtime::emit_runtime_check;
+use shared::{Shared, shared_classes};
 use views::emit_view;
 
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Error> {
@@ -39,9 +43,12 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .filter(|field| Conversion::of(field).is_enum())
         .map(|field| emit_enum(field, &names))
         .collect();
-    let groups: Vec<String> = shared_groups(dictionary)
+    let shared: Vec<String> = shared_classes(dictionary)
         .into_iter()
-        .map(|group| emit_group_class(group, &names))
+        .map(|class| match class {
+            Shared::Group(group) => emit_group_class(group, &names),
+            Shared::Component(component) => emit_component(component, &names),
+        })
         .collect();
     let views: Vec<String> = envelope
         .sections
@@ -58,7 +65,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     let sections = [preamble]
         .into_iter()
         .chain(enums)
-        .chain(groups)
+        .chain(shared)
         .chain(views)
         .chain(messages)
         .chain(emit_dispatch(dictionary))
