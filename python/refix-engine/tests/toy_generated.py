@@ -31,21 +31,18 @@ class PartyRole(enum.IntEnum):
     CLIENT_ID = 3
 
 
-class PtysSubGrp:
-    class Instance(fields.GroupInstance):
-        party_sub_id = fields.Str(523)
+class PtysSubGrp(fields.GroupInstance):
+    party_sub_id = fields.Str(523)
 
 
-class Parties:
-    class Instance(fields.GroupInstance):
-        party_id = fields.Str(448)
-        party_role = fields.Int(452, PartyRole)
-        party_sub_ids = fields.Group(802, PtysSubGrp.Instance)
+class Parties(fields.GroupInstance):
+    party_id = fields.Str(448)
+    party_role = fields.Int(452, PartyRole)
+    party_sub_ids = fields.Group(802, PtysSubGrp)
 
 
-class SecAltIDGrp:
-    class Instance(fields.GroupInstance):
-        security_alt_id = fields.Str(455)
+class SecAltIDGrp(fields.GroupInstance):
+    security_alt_id = fields.Str(455)
 
 
 class SecurityXML(fields.Component):
@@ -54,7 +51,7 @@ class SecurityXML(fields.Component):
 
 class Instrument(fields.Component):
     symbol = fields.Str(55)
-    security_alt_id = fields.Group(454, SecAltIDGrp.Instance)
+    security_alt_id = fields.Group(454, SecAltIDGrp)
     security_xml = fields.View(SecurityXML)
 
 
@@ -63,9 +60,8 @@ class OrderQtyData(fields.Component):
 
 
 class Header(fields.Component):
-    class Hops:
-        class Instance(fields.GroupInstance):
-            hop_comp_id = fields.Str(628)
+    class Hops(fields.GroupInstance):
+        hop_comp_id = fields.Str(628)
 
     begin_string = fields.Str(8)
     body_length = fields.Int(9)
@@ -75,7 +71,7 @@ class Header(fields.Component):
     msg_seq_num = fields.Int(34)
     sending_time = fields.UtcTimestamp(52)
     sending_time_ns = fields.UtcTimestampNs(52)
-    hops = fields.Group(627, Hops.Instance)
+    hops = fields.Group(627, Hops)
 
 
 class Trailer(fields.Component):
@@ -92,7 +88,7 @@ class NewOrderSingle(fields.Message):
     header = fields.View(Header)
     trailer = fields.View(Trailer)
     cl_ord_id = fields.Str(11)
-    party_ids = fields.Group(453, Parties.Instance)
+    party_ids = fields.Group(453, Parties)
     instrument = fields.View(Instrument)
     order_qty_data = fields.View(OrderQtyData)
     price = fields.Decimal(44)
@@ -111,13 +107,12 @@ class Logon(fields.Message):
 
     MSG_TYPE: ClassVar[bytes] = b"A"
 
-    class MsgTypes:
-        class Instance(fields.GroupInstance):
-            ref_msg_type = fields.Str(372)
+    class MsgTypes(fields.GroupInstance):
+        ref_msg_type = fields.Str(372)
 
     header = fields.View(Header)
     trailer = fields.View(Trailer)
-    msg_types = fields.Group(384, MsgTypes.Instance)
+    msg_types = fields.Group(384, MsgTypes)
 
 
 class MassQuote(fields.Message):
@@ -125,24 +120,18 @@ class MassQuote(fields.Message):
 
     MSG_TYPE: ClassVar[bytes] = b"i"
 
-    class QuoteSets:
-        class Instance(fields.GroupInstance):
-            class QuoteEntries:
-                class Instance(fields.GroupInstance):
-                    __qualname__ = "MassQuote.QuoteSets.QuoteEntries.Instance"
+    class QuoteSets(fields.GroupInstance):
+        class QuoteEntries(fields.GroupInstance):
+            quote_entry_id = fields.Str(299)
+            instrument = fields.View(Instrument)
 
-                    quote_entry_id = fields.Str(299)
-                    instrument = fields.View(Instrument)
-
-            quote_set_id = fields.Str(302)
-            quote_entries = fields.Group(295, QuoteEntries.Instance)
-
-        QuoteEntries = Instance.QuoteEntries
+        quote_set_id = fields.Str(302)
+        quote_entries = fields.Group(295, QuoteEntries)
 
     header = fields.View(Header)
     trailer = fields.View(Trailer)
     quote_id = fields.Str(117)
-    quote_sets = fields.Group(296, QuoteSets.Instance)
+    quote_sets = fields.Group(296, QuoteSets)
 
 
 type Message = NewOrderSingle | Logon | MassQuote

@@ -53,9 +53,6 @@ const VIEW: &[&str] = &["fields", "from_raw", "raw"];
 /// body looks up.
 const INSTANCE: &[&str] = &["fields", "from_raw", "raw"];
 
-/// The members every group class defines.
-const GROUP: &[&str] = &["Instance"];
-
 /// Every name the generated Python uses, settled before anything is emitted.
 pub(super) struct Names {
     enums: HashMap<Tag, EnumNames>,
@@ -113,9 +110,6 @@ impl Names {
                 names.name_enum(field, class, warnings)?;
             }
         }
-        for group in declared_groups(dictionary) {
-            names.claim_nested_classes(group, &module)?;
-        }
         for message in dictionary.messages() {
             let mut members = Namespace::with_generated(MESSAGE);
             for member in flat::members(message.members()) {
@@ -136,10 +130,10 @@ impl Names {
         for group in declared_groups(dictionary) {
             let mut members = Namespace::with_generated(INSTANCE);
             for nested in nested_groups(group) {
-                members.claim(
-                    names.group_class(nested),
-                    Owner::Group(instance_context(nested)),
-                )?;
+                let class = names.group_class(nested);
+                let owner = Owner::Group(instance_context(nested));
+                hides_no_module_name(&module, class, &owner)?;
+                members.claim(class, owner)?;
             }
             names.name_properties(group.members(), members)?;
         }
@@ -148,23 +142,6 @@ impl Names {
             names.name_properties(component.members(), members)?;
         }
         Ok(names)
-    }
-
-    /// Takes the classes of the groups declared directly in a group's
-    /// instances, which the group's own class names too.
-    fn claim_nested_classes(
-        &self,
-        group: dictionary::Group<'_>,
-        module: &Namespace,
-    ) -> Result<(), Error> {
-        let mut classes = Namespace::with_generated(GROUP);
-        for nested in nested_groups(group) {
-            let class = self.group_class(nested);
-            let owner = Owner::Group(instance_context(nested));
-            hides_no_module_name(module, class, &owner)?;
-            classes.claim(class, owner)?;
-        }
-        Ok(())
     }
 
     /// Names a section's accessors beside the classes of the groups the
@@ -301,28 +278,6 @@ impl Names {
     pub(super) fn component_property(&self, component: dictionary::Component<'_>) -> &str {
         &self.component_properties[component.name()]
     }
-
-    /// The path of a group's class from the module.
-    ///
-    /// A group's class sits under the class of the message, section or group
-    /// that declares it. A component's sits in the module.
-    pub(super) fn group_path(&self, group: dictionary::Group<'_>) -> String {
-        self.class_path(group.declared_in(), self.group_class(group))
-    }
-
-    /// The path of the class `class` of a group declared in `context`.
-    fn class_path(&self, context: &MemberContext, class: &str) -> String {
-        match context {
-            MemberContext::Message(message) => format!("{message}.{class}"),
-            MemberContext::Header => format!("{}.{class}", Section::Header.type_name()),
-            MemberContext::Trailer => format!("{}.{class}", Section::Trailer.type_name()),
-            MemberContext::Component(_) => class.to_owned(),
-            MemberContext::Group { parent, .. } => {
-                let outer = self.class_path(parent, &self.groups[context].class);
-                format!("{outer}.{class}")
-            }
-        }
-    }
 }
 
 /// Fails if `class`, defined in the body of another class, is a module name.
@@ -357,7 +312,6 @@ fn nested_groups<'a>(group: dictionary::Group<'a>) -> impl Iterator<Item = dicti
 mod tests {
     use super::Names;
     use crate::components::components;
-    use crate::groups::declared_groups;
     use crate::python::Error;
     use crate::test_utils::message_with;
     use crate::{NameClash, Owner, Warning};
@@ -571,20 +525,6 @@ mod tests {
     }
 
     #[test]
-    fn a_group_in_a_group_instance_sits_in_its_parents_class() {
-        let dictionary = with_a_group_in_a_group("NoMsgSubTypes");
-        let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
-        let groups = declared_groups(&dictionary);
-        let nested = groups
-            .iter()
-            .find(|group| group.count_field().name == "NoMsgSubTypes")
-            .unwrap();
-
-        assert_eq!(names.group_path(*nested), "Logon.MsgTypes.MsgSubTypes");
-        assert_eq!(names.group_property(*nested), "msg_sub_types");
-    }
-
-    #[test]
     fn a_nested_group_class_named_like_a_module_name_clashes() {
         assert_eq!(
             clash_in(&with_a_group_in_a_group("NoLogon")),
@@ -651,18 +591,6 @@ mod tests {
                 second: Owner::Group(
                     MemberContext::Message("Logon".to_owned()).group("NoMsgTypes")
                 ),
-            }
-        );
-    }
-
-    #[test]
-    fn a_nested_group_class_named_like_a_group_member_clashes() {
-        assert_eq!(
-            clash_in(&with_a_group_in_a_group("NoInstance")),
-            NameClash {
-                name: "Instance".to_owned(),
-                first: Owner::Generated,
-                second: nested_group("NoInstance"),
             }
         );
     }

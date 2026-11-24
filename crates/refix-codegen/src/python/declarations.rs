@@ -68,5 +68,5 @@ fn emit_group(group: dictionary::Group<'_>, names: &Names) -> String {
     let name = names.group_property(group);
     let count_tag = group.count_field().tag;
     let class = names.group_class(group);
-    format!("    {name} = fields.Group({count_tag}, {class}.Instance)\n")
+    format!("    {name} = fields.Group({count_tag}, {class})\n")
 }

@@ -5,40 +5,18 @@ use super::layout::indent;
 use super::names::Names;
 use crate::flat;
 
-/// A group's class, which holds the class of its instances.
+/// The class of a group's instances.
 ///
-/// A group declared directly in its instances has its class in the instance
-/// class, where the declaration reading it can name it. The group's class
-/// names it too, so its path stays `Outer.Nested`.
+/// A group declared directly in its instances has its class in the body,
+/// where the declaration reading it can name it.
 pub(super) fn emit_group_class(group: dictionary::Group<'_>, names: &Names) -> String {
-    let mut items = vec![emit_instance_class(group, names)];
-    let aliases: String = nested_groups(group)
-        .map(|nested| {
-            let class = names.group_class(nested);
-            format!("{class} = Instance.{class}\n")
-        })
+    let mut items: Vec<String> = nested_groups(group)
+        .map(|nested| indent(&emit_group_class(nested, names), 1))
         .collect();
-    if !aliases.is_empty() {
-        items.push(aliases);
-    }
-    format!(
-        "class {}:\n{}",
-        names.group_class(group),
-        indent(&items.join("\n"), 1)
-    )
-}
-
-fn emit_instance_class(group: dictionary::Group<'_>, names: &Names) -> String {
-    let mut items = Vec::new();
-    // Python would name the class after where it is defined.
-    if is_declared_in_a_group(group) {
-        let path = names.group_path(group);
-        items.push(format!("    __qualname__ = \"{path}.Instance\"\n"));
-    }
-    items.extend(nested_groups(group).map(|nested| indent(&emit_group_class(nested, names), 1)));
     items.push(emit_declarations(group.members(), names));
     format!(
-        "class Instance(fields.GroupInstance):\n{}",
+        "class {}(fields.GroupInstance):\n{}",
+        names.group_class(group),
         items.join("\n")
     )
 }

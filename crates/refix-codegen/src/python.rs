@@ -614,15 +614,13 @@ from refix import Codec, Dialect, RawMessage, fields
 DIALECT = Dialect()
 
 
-class PtysSubGrp:
-    class Instance(fields.GroupInstance):
-        party_sub_id = fields.Str(523)
+class PtysSubGrp(fields.GroupInstance):
+    party_sub_id = fields.Str(523)
 
 
-class Parties:
-    class Instance(fields.GroupInstance):
-        party_id = fields.Str(448)
-        party_sub_ids = fields.Group(802, PtysSubGrp.Instance)
+class Parties(fields.GroupInstance):
+    party_id = fields.Str(448)
+    party_sub_ids = fields.Group(802, PtysSubGrp)
 
 
 class NewOrderSingle(fields.Message):
@@ -630,7 +628,7 @@ class NewOrderSingle(fields.Message):
 
     MSG_TYPE: ClassVar[bytes] = b"D"
 
-    party_ids = fields.Group(453, Parties.Instance)
+    party_ids = fields.Group(453, Parties)
 
 
 type Message = NewOrderSingle
@@ -664,11 +662,14 @@ CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
             party_components(),
         );
 
-        assert_eq!(generated.code.matches("class Parties:").count(), 1);
+        let classes = generated
+            .code
+            .matches("class Parties(fields.GroupInstance):");
+        assert_eq!(classes.count(), 1);
         assert_eq!(
             generated
                 .code
-                .matches("    party_ids = fields.Group(453, Parties.Instance)\n")
+                .matches("    party_ids = fields.Group(453, Parties)\n")
                 .count(),
             2
         );
@@ -690,7 +691,7 @@ CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
         );
 
         assert!(generated.code.contains(
-            "class Logon(fields.Message):\n    \"\"\"The Logon (35=A) message.\"\"\"\n\n    MSG_TYPE: ClassVar[bytes] = b\"A\"\n\n    class MsgTypes:\n        class Instance(fields.GroupInstance):\n            ref_msg_type = fields.Str(372)\n\n    msg_types = fields.Group(384, MsgTypes.Instance)\n"
+            "class Logon(fields.Message):\n    \"\"\"The Logon (35=A) message.\"\"\"\n\n    MSG_TYPE: ClassVar[bytes] = b\"A\"\n\n    class MsgTypes(fields.GroupInstance):\n        ref_msg_type = fields.Str(372)\n\n    msg_types = fields.Group(384, MsgTypes)\n"
         ));
     }
 
@@ -729,7 +730,7 @@ CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
     }
 
     #[test]
-    fn a_group_in_a_group_instance_gets_a_class_in_the_instance_class() {
+    fn a_group_in_a_group_instance_gets_a_class_in_its_parents() {
         let generated = generated(
             vec![message(
                 "NewOrderSingle",
@@ -747,18 +748,12 @@ CODEC: Codec[Message | RawMessage] = Codec(DIALECT, from_raw)
         );
 
         assert!(generated.code.contains(
-            r#"class Parties:
-    class Instance(fields.GroupInstance):
-        class PartySubIDs:
-            class Instance(fields.GroupInstance):
-                __qualname__ = "Parties.PartySubIDs.Instance"
+            r#"class Parties(fields.GroupInstance):
+    class PartySubIDs(fields.GroupInstance):
+        party_sub_id = fields.Str(523)
 
-                party_sub_id = fields.Str(523)
-
-        party_id = fields.Str(448)
-        party_sub_ids = fields.Group(802, PartySubIDs.Instance)
-
-    PartySubIDs = Instance.PartySubIDs
+    party_id = fields.Str(448)
+    party_sub_ids = fields.Group(802, PartySubIDs)
 "#
         ));
         assert_eq!(generated.warnings, vec![]);
