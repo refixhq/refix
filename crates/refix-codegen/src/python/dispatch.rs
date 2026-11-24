@@ -23,6 +23,6 @@ pub(super) fn emit_dispatch(dictionary: &Dictionary) -> Option<String> {
         .map(|name| format!("    {name}.MSG_TYPE: {name},\n"))
         .collect();
     let messages = format!("_MESSAGES: dict[bytes, type[Message]] = {{\n{entries}}}\n");
-    let from_raw = "def from_raw(raw: RawMessage) -> Message | RawMessage:\n    msg_type = raw.get(35)\n    message = None if msg_type is None else _MESSAGES.get(msg_type)\n    return raw if message is None else message(raw)\n";
+    let from_raw = "def from_raw(raw: RawMessage) -> Message | RawMessage:\n    msg_type = raw.get(35)\n    message = None if msg_type is None else _MESSAGES.get(msg_type)\n    return raw if message is None else message.from_raw(raw)\n";
     Some([alias.as_str(), &messages, from_raw].join("\n\n"))
 }

@@ -1,5 +1,6 @@
 use refix_dictionary::Dictionary;
 
+use super::constructors::emit_constructor;
 use super::declarations::emit_declarations;
 use super::groups::emit_group_class;
 use super::layout::indent;
@@ -22,6 +23,7 @@ pub(super) fn emit_view(section: Section, dictionary: &Dictionary, names: &Names
         .collect();
     let listed = section.listed(dictionary).into_iter();
     items.push(emit_declarations(listed, names));
+    items.push(emit_constructor());
     format!(
         "class {}(fields.Component):\n{}",
         section.type_name(),

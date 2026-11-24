@@ -1,5 +1,6 @@
 use refix_dictionary::{MemberContext, dictionary};
 
+use super::constructors::emit_constructor;
 use super::declarations::emit_declarations;
 use super::layout::indent;
 use super::names::Names;
@@ -14,6 +15,7 @@ pub(super) fn emit_group_class(group: dictionary::Group<'_>, names: &Names) -> S
         .map(|nested| indent(&emit_group_class(nested, names), 1))
         .collect();
     items.push(emit_declarations(group.members(), names));
+    items.push(emit_constructor());
     format!(
         "class {}(fields.GroupInstance):\n{}",
         names.group_class(group),

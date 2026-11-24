@@ -30,7 +30,7 @@ TOY = str(Path(__file__).with_name("toy_generated.py"))
 
 
 def order(body: str) -> NewOrderSingle:
-    return NewOrderSingle(tokenize_body(body))
+    return NewOrderSingle.from_raw(tokenize_body(body))
 
 
 class TestRuntimeVersion:
@@ -228,12 +228,12 @@ class TestGroups:
         assert excinfo.value.tag == 452
 
     def test_reads_a_group_declared_in_its_message(self):
-        logon = Logon(tokenize_body("35=A|384=2|372=D|372=8|"))
+        logon = Logon.from_raw(tokenize_body("35=A|384=2|372=D|372=8|"))
 
         assert [msg_type.ref_msg_type for msg_type in logon.msg_types] == ["D", "8"]
 
     def test_reads_a_group_declared_in_a_group_instance(self):
-        quote = MassQuote(
+        quote = MassQuote.from_raw(
             tokenize_body(
                 "35=i|117=Q1|296=2|302=SET-1|295=2|299=E1|299=E2|302=SET-2|295=1|299=E3|"
             )
@@ -247,12 +247,12 @@ class TestGroups:
         assert entries == [("SET-1", "E1"), ("SET-1", "E2"), ("SET-2", "E3")]
 
     def test_an_absent_group_in_a_group_instance_reads_as_empty(self):
-        quote = MassQuote(tokenize_body("35=i|117=Q1|296=1|302=SET-1|"))
+        quote = MassQuote.from_raw(tokenize_body("35=i|117=Q1|296=1|302=SET-1|"))
 
         assert quote.quote_sets[0].quote_entries == ()
 
     def test_a_header_field_after_a_group_ends_it(self):
-        logon = Logon(tokenize_body("35=A|384=1|372=D|49=SENDER|"))
+        logon = Logon.from_raw(tokenize_body("35=A|384=1|372=D|49=SENDER|"))
 
         assert logon.msg_types[0].raw.get(49) is None
 
@@ -285,7 +285,7 @@ class TestComponents:
         assert new_order.order_qty_data.order_qty == 200
 
     def test_a_group_instance_reaches_a_component_through_its_view(self):
-        quote = MassQuote(
+        quote = MassQuote.from_raw(
             tokenize_body(
                 "35=i|117=Q1|296=1|302=SET-1|295=2|"
                 "299=E1|55=ACME|454=1|455=ALT-1|299=E2|55=INIT|"
@@ -311,7 +311,7 @@ class TestComponents:
         assert repr(new_order.order_qty_data) == "OrderQtyData(38=200)"
 
     def test_a_view_in_a_group_instance_prints_that_instance_alone(self):
-        quote = MassQuote(
+        quote = MassQuote.from_raw(
             tokenize_body(
                 "35=i|117=Q1|296=1|302=SET-1|295=2|299=E1|55=ACME|299=E2|55=INIT|"
             )
@@ -338,12 +338,12 @@ class TestPrinting:
         assert repr(second) == "Parties(448=BOB)"
 
     def test_a_group_a_message_declares_prints_its_path(self):
-        logon = Logon(tokenize_body("35=A|384=1|372=D|"))
+        logon = Logon.from_raw(tokenize_body("35=A|384=1|372=D|"))
 
         assert repr(logon.msg_types[0]) == "Logon.MsgTypes(372=D)"
 
     def test_a_group_in_a_group_instance_prints_its_path(self):
-        quote = MassQuote(tokenize_body("35=i|296=1|302=SET-1|295=1|299=E1|"))
+        quote = MassQuote.from_raw(tokenize_body("35=i|296=1|302=SET-1|295=1|299=E1|"))
 
         entries = quote.quote_sets[0].quote_entries
         entry: MassQuote.QuoteSets.QuoteEntries = entries[0]
@@ -370,18 +370,22 @@ class TestHeader:
         assert new_order.trailer.check_sum is not None
 
     def test_reads_a_header_without_the_message_type(self):
-        header = Header(tokenize_body("35=D|49=SENDER|11=ORDER-1|"))
+        header = Header.from_raw(tokenize_body("35=D|49=SENDER|11=ORDER-1|"))
 
         assert header.sender_comp_id == "SENDER"
 
     def test_a_message_header_ends_its_groups_where_the_body_starts(self):
-        logon = Logon(tokenize_body("35=A|627=2|628=HOP-1|628=HOP-2|384=1|372=D|"))
+        logon = Logon.from_raw(
+            tokenize_body("35=A|627=2|628=HOP-1|628=HOP-2|384=1|372=D|")
+        )
 
         hops = logon.header.hops
         assert [hop.hop_comp_id for hop in hops] == ["HOP-1", "HOP-2"]
         assert hops[1].raw.get(384) is None
 
     def test_a_header_from_raw_keeps_body_fields_in_its_last_group(self):
-        header = Header(tokenize_body("35=A|627=2|628=HOP-1|628=HOP-2|384=1|372=D|"))
+        header = Header.from_raw(
+            tokenize_body("35=A|627=2|628=HOP-1|628=HOP-2|384=1|372=D|")
+        )
 
         assert header.hops[1].raw.get(384) == b"1"

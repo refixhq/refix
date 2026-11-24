@@ -27,6 +27,7 @@ const MODULE: &[&str] = &[
     "Header",
     "Message",
     "RawMessage",
+    "TYPE_CHECKING",
     "Trailer",
     "_MESSAGES",
     "bytes",
