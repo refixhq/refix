@@ -7,7 +7,6 @@ pub enum Error {
     UnrepresentableName { field: String },
     UnrepresentableValue { field: String, description: String },
     UnrepresentableGroupName { context: MemberContext },
-    UnrepresentableMessageName { message: String },
     UnrepresentableComponentName { component: String },
     NameClash(Box<NameClash>),
 }
@@ -32,9 +31,6 @@ impl std::fmt::Display for Error {
             }
             Error::UnrepresentableGroupName { context } => {
                 write!(f, "{context} cannot be a rust name")
-            }
-            Error::UnrepresentableMessageName { message } => {
-                write!(f, "message '{message}' cannot be a rust module name")
             }
             Error::UnrepresentableComponentName { component } => {
                 write!(f, "component '{component}' cannot be a rust method name")

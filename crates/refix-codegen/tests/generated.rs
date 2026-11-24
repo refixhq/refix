@@ -366,16 +366,16 @@ fn an_absent_group_in_a_group_instance_reads_as_empty() {
 }
 
 #[test]
-fn a_group_in_a_group_instance_has_a_type_in_its_parents_module() {
+fn a_group_type_is_named_after_what_declares_it() {
     let raw = Tokenizer::default()
         .tokenize(frame("35=i|117=Q1|296=1|302=SET-1|295=1|299=E1|"))
         .unwrap();
 
     let quote = MassQuote::from_raw(raw);
     let sets = quote.quote_sets().unwrap();
-    let set: toy::mass_quote::quote_sets::Instance<'_> = sets.get(0).unwrap();
+    let set: toy::MassQuoteQuoteSets<'_> = sets.get(0).unwrap();
     let entries = set.quote_entries().unwrap();
-    let entry: toy::mass_quote::quote_sets::quote_entries::Instance<'_> = entries.get(0).unwrap();
+    let entry: toy::MassQuoteQuoteSetsQuoteEntries<'_> = entries.get(0).unwrap();
 
     assert_eq!(entry.quote_entry_id(), Ok(Some("E1")));
 }

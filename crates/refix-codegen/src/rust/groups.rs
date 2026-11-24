@@ -10,7 +10,7 @@ use crate::groups::{known_tags, member_tags};
 /// The groups declared in components, each once, in order of first
 /// appearance across the header, messages and trailer.
 ///
-/// Every other group's module sits where the group is declared.
+/// Every other group's type follows whatever declares the group.
 pub(super) fn shared_groups(dictionary: &Dictionary) -> Vec<dictionary::Group<'_>> {
     let mut groups = Vec::new();
     let mut seen = Vec::new();
@@ -43,44 +43,61 @@ fn collect_groups<'a>(
     }
 }
 
-/// A group's module, with the modules of the groups declared directly in
-/// its instances inside it.
-pub(super) fn emit_group_module(group: dictionary::Group<'_>, names: &Names) -> String {
-    let depth = names.group_path(group).split("::").count();
-    let width = MAX_WIDTH - 4 * depth;
+/// The type of a group's instances.
+///
+/// The types of the groups declared directly in its instances follow it.
+pub(super) fn emit_group(group: dictionary::Group<'_>, names: &Names) -> String {
+    let name = names.group_type(group);
+    let count_field = group.count_field();
     let mut items = vec![
-        format!("use {}*;\n", "super::".repeat(depth)),
-        emit_table(group, names, width),
-        emit_known_tags(&known_tags(flat::members(group.members())), width),
-        "#[derive(Clone, Copy, Debug)]\npub struct Instance<'a>(refix_message::Scope<'a>);\n".to_owned(),
-        "impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {\n    fn from(scope: refix_message::Scope<'a>) -> Self {\n        Self(scope)\n    }\n}\n".to_owned(),
+        format!(
+            "/// An instance of the {} ({}) group.\n#[derive(Clone, Copy, Debug)]\npub struct {name}<'a>(refix_message::Scope<'a>);\n",
+            code(&count_field.name),
+            count_field.tag
+        ),
+        format!(
+            "impl<'a> From<refix_message::Scope<'a>> for {name}<'a> {{\n    fn from(scope: refix_message::Scope<'a>) -> Self {{\n        Self(scope)\n    }}\n}}\n"
+        ),
         emit_instance_impl(group, names),
     ];
     for member in flat::members(group.members()) {
         if let flat::Member::Group(nested) = member
             && matches!(nested.declared_in(), MemberContext::Group { .. })
         {
-            items.push(emit_group_module(nested, names));
+            items.push(emit_group(nested, names));
         }
     }
-    format!(
-        "pub mod {} {{\n{}}}\n",
-        names.group_module(group),
-        indent(&items.join("\n"), 1)
-    )
+    items.join("\n")
 }
 
+/// The table an instance is walked with, then its methods.
+///
+/// An instance that holds a group also lists its known tags.
 fn emit_instance_impl(group: dictionary::Group<'_>, names: &Names) -> String {
-    let mut members = vec![
+    let mut members = vec![indent(&emit_table(group, names), 1)];
+    let holds_group =
+        flat::members(group.members()).any(|member| matches!(member, flat::Member::Group(_)));
+    if holds_group {
+        let tags = known_tags(flat::members(group.members()));
+        members.push(indent(
+            &emit_known_tags("const KNOWN_TAGS", &tags, MAX_WIDTH - 4),
+            1,
+        ));
+    }
+    members.push(
         "    pub fn raw(&self) -> refix_message::Scope<'a> {\n        self.0\n    }\n".to_owned(),
-    ];
+    );
     members.extend(emit_accessors(
         group.members(),
         names,
         Lifetime::Scope,
-        "KNOWN_TAGS",
+        "Self::KNOWN_TAGS",
     ));
-    format!("impl<'a> Instance<'a> {{\n{}}}\n", members.join("\n"))
+    format!(
+        "impl<'a> {}<'a> {{\n{}}}\n",
+        names.group_type(group),
+        members.join("\n")
+    )
 }
 
 /// The accessor reading a group's instances, walking with `known_tags`.
@@ -91,7 +108,7 @@ pub(super) fn emit_group_accessor(
     known_tags: &str,
 ) -> String {
     let name = names.group_accessor(group);
-    let path = names.group_path(group);
+    let type_name = names.group_type(group);
     let count_field = group.count_field();
     let (count_name, count_tag) = (&count_field.name, count_field.tag);
     let lifetime = match lifetime {
@@ -104,13 +121,14 @@ pub(super) fn emit_group_accessor(
     );
     let docs = member_docs(&summary, count_name, name);
     format!(
-        "{docs}    pub fn {name}(&self) -> Result<Instances<{lifetime}, {path}::Instance<{lifetime}>>, InvalidValue> {{\n        self.0.get_group(&{path}::TABLE, &{known_tags}).map(Instances::from)\n    }}\n"
+        "{docs}    pub fn {name}(&self) -> Result<Instances<{lifetime}, {type_name}<{lifetime}>>, InvalidValue> {{\n        self.0.get_group(&{type_name}::TABLE, &{known_tags}).map(Instances::from)\n    }}\n"
     )
 }
 
-fn emit_table(group: dictionary::Group<'_>, names: &Names, width: usize) -> String {
+fn emit_table(group: dictionary::Group<'_>, names: &Names) -> String {
+    let width = MAX_WIDTH - 4;
     let (count_tag, delimiter, members, nested) = table_arguments(group, names);
-    let head = "pub const TABLE: GroupTable<'static> = GroupTable::new(";
+    let head = "const TABLE: GroupTable<'static> = GroupTable::new(";
     let one_line = format!(
         "{head}Tag({count_tag}), Tag({delimiter}), &[{}], &[{}]);",
         members.join(", "),
@@ -138,7 +156,7 @@ fn table_arguments(
 ) -> (Tag, Tag, Vec<String>, Vec<String>) {
     let nested = flat::members(group.members())
         .filter_map(|member| match member {
-            flat::Member::Group(child) => Some(format!("{}::TABLE", names.group_path(child))),
+            flat::Member::Group(child) => Some(format!("{}::TABLE", names.group_type(child))),
             flat::Member::Field { .. } => None,
         })
         .collect();
@@ -154,11 +172,11 @@ fn table_arguments(
     )
 }
 
-/// The `KNOWN_TAGS` constant listing `tags`.
-pub(super) fn emit_known_tags(tags: &[Tag], width: usize) -> String {
+/// A `KnownTags` constant listing `tags`, declared as `declaration`.
+pub(super) fn emit_known_tags(declaration: &str, tags: &[Tag], width: usize) -> String {
     let tags: Vec<String> = tags.iter().map(|tag| format!("Tag({tag})")).collect();
     slice(
-        "pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(",
+        &format!("{declaration}: KnownTags<'static> = KnownTags::new("),
         &tags,
         ");",
         width,

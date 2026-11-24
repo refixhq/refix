@@ -23,12 +23,7 @@ pub(crate) fn group_accessor_base_name(group: dictionary::Group<'_>) -> String {
     snake_case(without_no_prefix(count_field).unwrap_or(count_field))
 }
 
-/// The module name of a group, before escaping.
-pub(crate) fn group_module_base_name(group: dictionary::Group<'_>) -> String {
-    snake_case(group_source_name(group))
-}
-
-/// A group's name as the dictionary gives it, before snake-casing.
+/// A group's name as the dictionary gives it.
 ///
 /// The component it makes up, else its count field's name without the `No` prefix,
 /// else its count field's name.
@@ -48,9 +43,7 @@ fn without_no_prefix(name: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        field_base_name, group_accessor_base_name, group_module_base_name, group_source_name,
-    };
+    use super::{field_base_name, group_accessor_base_name, group_source_name};
     use crate::test_utils::with_group;
     use refix_dictionary::Tag;
     use refix_dictionary::spec::{DataType, EnumValue, Field};
@@ -63,10 +56,6 @@ mod tests {
             length_tag: None,
             values: vec![],
         }
-    }
-
-    fn module_named(component: Option<&str>, count_field: &str) -> String {
-        with_group(component, count_field, group_module_base_name)
     }
 
     fn accessor_named(component: Option<&str>, count_field: &str) -> String {
@@ -127,16 +116,6 @@ mod tests {
     }
 
     #[test]
-    fn a_module_takes_the_name_of_its_component() {
-        assert_eq!(module_named(Some("Parties"), "NoPartyIDs"), "parties");
-    }
-
-    #[test]
-    fn an_inline_module_drops_the_no_prefix() {
-        assert_eq!(module_named(None, "NoMsgTypes"), "msg_types");
-    }
-
-    #[test]
     fn an_accessor_takes_the_count_field_without_the_no_prefix() {
         assert_eq!(accessor_named(Some("Parties"), "NoPartyIDs"), "party_ids");
         assert_eq!(accessor_named(None, "NoMsgTypes"), "msg_types");
@@ -144,13 +123,11 @@ mod tests {
 
     #[test]
     fn a_no_that_does_not_start_a_word_is_kept() {
-        assert_eq!(module_named(None, "Nominees"), "nominees");
         assert_eq!(accessor_named(Some("Parties"), "Nominees"), "nominees");
     }
 
     #[test]
     fn a_count_field_without_the_prefix_is_used_as_is() {
-        assert_eq!(module_named(None, "LegCount"), "leg_count");
         assert_eq!(accessor_named(Some("Parties"), "LegCount"), "leg_count");
     }
 }

@@ -1,7 +1,8 @@
 use refix_dictionary::dictionary;
 use refix_dictionary::spec::{EnumValue, Field};
 
-use crate::naming::{field_base_name, group_accessor_base_name, group_module_base_name};
+use crate::groups::instance_context;
+use crate::naming::{field_base_name, group_accessor_base_name, group_source_name};
 use crate::rust::Error;
 use crate::{pascal_case, snake_case};
 
@@ -11,9 +12,21 @@ pub(super) fn method_name(field: &Field) -> Result<String, Error> {
     })
 }
 
-/// The module name of a group, escaped for Rust.
-pub(super) fn group_module_name(group: dictionary::Group<'_>) -> Result<String, Error> {
-    group_identifier(group_module_base_name(group), group)
+/// The type of a group's instances.
+///
+/// It is the component the group makes up. A group without one takes the
+/// name of `owner`, the type it is declared in, followed by its own.
+pub(super) fn group_type_name(group: dictionary::Group<'_>, owner: &str) -> Result<String, Error> {
+    let name = match group.component() {
+        Some(component) => component.to_owned(),
+        None => format!("{owner}{}", group_source_name(group)),
+    };
+    if name == "Self" {
+        return Err(Error::UnrepresentableGroupName {
+            context: instance_context(group),
+        });
+    }
+    Ok(name)
 }
 
 /// The accessor of a group, escaped for Rust.
@@ -52,13 +65,6 @@ pub(super) fn numbered_variant(name: &str, number: u32) -> String {
     format!("{name}{number}")
 }
 
-/// The name of the module holding a message's own groups.
-pub(super) fn message_module_name(message: &str) -> Result<String, Error> {
-    identifier(snake_case(message)).ok_or_else(|| Error::UnrepresentableMessageName {
-        message: message.to_owned(),
-    })
-}
-
 /// The accessor of a component's view, escaped for Rust.
 pub(super) fn component_accessor_name(component: &str) -> Result<String, Error> {
     identifier(snake_case(component)).ok_or_else(|| Error::UnrepresentableComponentName {
@@ -90,8 +96,7 @@ const RESERVED_WORDS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::{
-        component_accessor_name, group_accessor_name, group_module_name, message_module_name,
-        method_name, variant_name,
+        component_accessor_name, group_accessor_name, group_type_name, method_name, variant_name,
     };
     use crate::rust::Error;
     use crate::test_utils::with_group;
@@ -116,8 +121,10 @@ mod tests {
         variant_name(&field("OrdType", 40, DataType::Char), &value)
     }
 
-    fn module_named(component: Option<&str>, count_field: &str) -> Result<String, Error> {
-        with_group(component, count_field, group_module_name)
+    fn type_named(component: Option<&str>, count_field: &str) -> Result<String, Error> {
+        with_group(component, count_field, |group| {
+            group_type_name(group, "NewOrderSingle")
+        })
     }
 
     fn accessor_named(component: Option<&str>, count_field: &str) -> Result<String, Error> {
@@ -153,9 +160,25 @@ mod tests {
     }
 
     #[test]
-    fn keyword_group_module_names_are_escaped() {
-        let name = module_named(Some("Type"), "NoTypes");
-        assert_eq!(name.unwrap(), "r#type");
+    fn a_group_type_takes_the_name_of_its_component() {
+        let name = type_named(Some("Parties"), "NoPartyIDs");
+        assert_eq!(name.unwrap(), "Parties");
+    }
+
+    #[test]
+    fn a_group_type_without_a_component_follows_its_owner() {
+        let name = type_named(None, "NoMsgTypes");
+        assert_eq!(name.unwrap(), "NewOrderSingleMsgTypes");
+    }
+
+    #[test]
+    fn a_group_type_named_self_is_an_error() {
+        assert_eq!(
+            type_named(Some("Self"), "NoPartyIDs").unwrap_err(),
+            Error::UnrepresentableGroupName {
+                context: MemberContext::Component("Self".to_owned()).group("NoPartyIDs"),
+            }
+        );
     }
 
     #[test]
@@ -165,26 +188,11 @@ mod tests {
     }
 
     #[test]
-    fn an_unescapable_group_name_is_an_error() {
-        let error = Error::UnrepresentableGroupName {
-            context: MemberContext::Message("NewOrderSingle".to_owned()).group("NoSelf"),
-        };
-        assert_eq!(module_named(None, "NoSelf").unwrap_err(), error);
-        assert_eq!(accessor_named(None, "NoSelf").unwrap_err(), error);
-    }
-
-    #[test]
-    fn message_module_names_are_snake_case() {
-        let name = message_module_name("NewOrderSingle");
-        assert_eq!(name.unwrap(), "new_order_single");
-    }
-
-    #[test]
-    fn an_unescapable_message_module_name_is_an_error() {
+    fn an_unescapable_group_accessor_name_is_an_error() {
         assert_eq!(
-            message_module_name("Self").unwrap_err(),
-            Error::UnrepresentableMessageName {
-                message: "Self".to_owned(),
+            accessor_named(None, "NoSelf").unwrap_err(),
+            Error::UnrepresentableGroupName {
+                context: MemberContext::Message("NewOrderSingle".to_owned()).group("NoSelf"),
             }
         );
     }

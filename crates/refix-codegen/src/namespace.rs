@@ -20,9 +20,9 @@ pub enum Owner {
     Nanos(String),
     /// The enum of a field's values.
     Enum(String),
-    /// A message's type or module.
+    /// A message's type.
     Message(String),
-    /// A group's type, module or accessor, by the context of its instances.
+    /// A group's type or accessor, by the context of its instances.
     Group(MemberContext),
     /// A component's view or the accessor that reaches it.
     Component(String),

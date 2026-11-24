@@ -19,8 +19,7 @@ impl Section {
         }
     }
 
-    /// The message member that reaches the view. Rust also names the module
-    /// of the section's groups after it.
+    /// The message member that reaches the view.
     pub(crate) fn member_name(self) -> &'static str {
         match self {
             Section::Header => "header",
