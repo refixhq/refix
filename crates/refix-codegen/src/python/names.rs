@@ -128,7 +128,7 @@ impl Names {
                     members.claim(class, owner)?;
                 }
             }
-            names.name_properties(message.members(), members, true)?;
+            names.name_properties(message.members(), members)?;
         }
         for section in [Section::Header, Section::Trailer] {
             names.name_section(section, dictionary, &module)?;
@@ -141,11 +141,11 @@ impl Names {
                     Owner::Group(instance_context(nested)),
                 )?;
             }
-            names.name_properties(group.members(), members, true)?;
+            names.name_properties(group.members(), members)?;
         }
         for component in components(dictionary) {
             let members = Namespace::with_generated(VIEW);
-            names.name_properties(component.members(), members, false)?;
+            names.name_properties(component.members(), members)?;
         }
         Ok(names)
     }
@@ -187,7 +187,7 @@ impl Names {
                 namespace.claim(class, owner)?;
             }
         }
-        self.name_properties(section.listed(dictionary).into_iter(), namespace, true)
+        self.name_properties(section.listed(dictionary).into_iter(), namespace)
     }
 
     /// Names a group's class and property, returning the class.
@@ -235,66 +235,35 @@ impl Names {
     }
 
     /// Names the properties of a message, group instance or component.
-    ///
-    /// With `inline`, the fields and groups of a component are read by
-    /// whatever includes it as well as through its view.
     fn name_properties<'a>(
         &mut self,
         members: impl Iterator<Item = dictionary::Member<'a>>,
         mut namespace: Namespace,
-        inline: bool,
     ) -> Result<(), Error> {
         for member in members {
             match member {
                 dictionary::Member::Field { field, .. } => {
-                    self.name_property(field, &mut namespace)?;
+                    let name = property_name(field);
+                    namespace.claim(&name, Owner::Field(field.name.clone()))?;
+                    self.properties.insert(field.tag, name);
+                    if nanos_declaration(field).is_some() {
+                        let name = nanos_property_name(field);
+                        namespace.claim(&name, Owner::Nanos(field.name.clone()))?;
+                        self.nanos_properties.insert(field.tag, name);
+                    }
                 }
                 dictionary::Member::Group(group) => {
-                    self.claim_group_property(group, &mut namespace)?;
+                    namespace.claim(
+                        self.group_property(group),
+                        Owner::Group(instance_context(group)),
+                    )?;
                 }
                 dictionary::Member::Component(component) => {
                     let name = &self.component_properties[component.name()];
                     namespace.claim(name, Owner::Component(component.name().to_owned()))?;
-                    if !inline {
-                        continue;
-                    }
-                    for member in flat::members(component.members()) {
-                        match member {
-                            flat::Member::Field { field, .. } => {
-                                self.name_property(field, &mut namespace)?;
-                            }
-                            flat::Member::Group(group) => {
-                                self.claim_group_property(group, &mut namespace)?;
-                            }
-                        }
-                    }
                 }
             }
         }
-        Ok(())
-    }
-
-    fn name_property(&mut self, field: &Field, namespace: &mut Namespace) -> Result<(), Error> {
-        let name = property_name(field);
-        namespace.claim(&name, Owner::Field(field.name.clone()))?;
-        self.properties.insert(field.tag, name);
-        if nanos_declaration(field).is_some() {
-            let name = nanos_property_name(field);
-            namespace.claim(&name, Owner::Nanos(field.name.clone()))?;
-            self.nanos_properties.insert(field.tag, name);
-        }
-        Ok(())
-    }
-
-    fn claim_group_property(
-        &self,
-        group: dictionary::Group<'_>,
-        namespace: &mut Namespace,
-    ) -> Result<(), Error> {
-        namespace.claim(
-            self.group_property(group),
-            Owner::Group(instance_context(group)),
-        )?;
         Ok(())
     }
 
@@ -818,6 +787,17 @@ mod tests {
                 second: Owner::Component("Instrument".to_owned()),
             }
         );
+    }
+
+    #[test]
+    fn a_component_may_hold_a_field_of_its_own_name() {
+        let messages = order_with(vec![component_ref("Symbol")]);
+        let dictionary = with_component("Symbol", messages, vec![]);
+        let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
+        let symbol = components(&dictionary)[0];
+
+        assert_eq!(names.component_property(symbol), "symbol");
+        assert_eq!(names.property(&dictionary.fields()[0]), "symbol");
     }
 
     #[test]

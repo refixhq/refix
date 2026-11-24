@@ -4,42 +4,22 @@ use refix_dictionary::spec::Field;
 use super::names::Names;
 use super::naming::nanos_declaration;
 use crate::conversion::Conversion;
-use crate::flat;
 
 /// The declarations of a message, component or group instance.
 ///
 /// The first one in a group instance is the field its instances start with.
-/// A component with fields is read through a view. With `inline`, its
-/// fields and groups are declared by whatever includes it as well.
+/// A component with fields is read through a view.
 pub(super) fn emit_declarations<'a>(
     members: impl Iterator<Item = dictionary::Member<'a>>,
     names: &Names,
-    inline: bool,
 ) -> String {
-    let mut declarations = String::new();
-    for member in members {
-        match member {
-            dictionary::Member::Field { field, .. } => {
-                declarations.push_str(&emit_field(field, names));
-            }
-            dictionary::Member::Group(group) => {
-                declarations.push_str(&emit_group(group, names));
-            }
-            dictionary::Member::Component(component) => {
-                declarations.push_str(&emit_view(component, names));
-                if !inline {
-                    continue;
-                }
-                for member in flat::members(component.members()) {
-                    declarations.push_str(&match member {
-                        flat::Member::Field { field, .. } => emit_field(field, names),
-                        flat::Member::Group(group) => emit_group(group, names),
-                    });
-                }
-            }
-        }
-    }
-    declarations
+    members
+        .map(|member| match member {
+            dictionary::Member::Field { field, .. } => emit_field(field, names),
+            dictionary::Member::Group(group) => emit_group(group, names),
+            dictionary::Member::Component(component) => emit_view(component, names),
+        })
+        .collect()
 }
 
 /// The declaration reading a component as a view.

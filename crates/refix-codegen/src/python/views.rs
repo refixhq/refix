@@ -21,7 +21,7 @@ pub(super) fn emit_view(section: Section, dictionary: &Dictionary, names: &Names
         })
         .collect();
     let listed = section.listed(dictionary).into_iter();
-    items.push(emit_declarations(listed, names, true));
+    items.push(emit_declarations(listed, names));
     format!(
         "class {}(fields.Component):\n{}",
         section.type_name(),

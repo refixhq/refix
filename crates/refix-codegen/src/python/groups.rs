@@ -36,7 +36,7 @@ fn emit_instance_class(group: dictionary::Group<'_>, names: &Names) -> String {
         items.push(format!("    __qualname__ = \"{path}.Instance\"\n"));
     }
     items.extend(nested_groups(group).map(|nested| indent(&emit_group_class(nested, names), 1)));
-    items.push(emit_declarations(group.members(), names, true));
+    items.push(emit_declarations(group.members(), names));
     format!(
         "class Instance(fields.GroupInstance):\n{}",
         items.join("\n")
