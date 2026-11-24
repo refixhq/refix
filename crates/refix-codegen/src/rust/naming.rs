@@ -59,6 +59,13 @@ pub(super) fn message_module_name(message: &str) -> Result<String, Error> {
     })
 }
 
+/// The accessor of a component's view, escaped for Rust.
+pub(super) fn component_accessor_name(component: &str) -> Result<String, Error> {
+    identifier(snake_case(component)).ok_or_else(|| Error::UnrepresentableComponentName {
+        component: component.to_owned(),
+    })
+}
+
 /// Escapes a keyword as a raw identifier, or `None` for a keyword that
 /// cannot be escaped.
 fn identifier(name: String) -> Option<String> {
@@ -83,7 +90,8 @@ const RESERVED_WORDS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::{
-        group_accessor_name, group_module_name, message_module_name, method_name, variant_name,
+        component_accessor_name, group_accessor_name, group_module_name, message_module_name,
+        method_name, variant_name,
     };
     use crate::rust::Error;
     use crate::test_utils::with_group;
@@ -178,6 +186,25 @@ mod tests {
             Error::UnrepresentableMessageName {
                 message: "Self".to_owned(),
             }
+        );
+    }
+
+    #[test]
+    fn component_accessor_names_are_snake_case() {
+        assert_eq!(
+            component_accessor_name("OrderQtyData").unwrap(),
+            "order_qty_data"
+        );
+        assert_eq!(component_accessor_name("Yield").unwrap(), "r#yield");
+    }
+
+    #[test]
+    fn an_unescapable_component_accessor_name_is_an_error() {
+        assert_eq!(
+            component_accessor_name("Self"),
+            Err(Error::UnrepresentableComponentName {
+                component: "Self".to_owned()
+            })
         );
     }
 

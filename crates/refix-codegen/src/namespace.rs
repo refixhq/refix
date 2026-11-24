@@ -24,6 +24,8 @@ pub enum Owner {
     Message(String),
     /// A group's type, module or accessor, by the context of its instances.
     Group(MemberContext),
+    /// A component's view or the accessor that reaches it.
+    Component(String),
     /// One of a field's values.
     Value {
         field: String,
@@ -41,6 +43,7 @@ impl fmt::Display for Owner {
             Owner::Enum(field) => write!(f, "the enum of field '{field}'"),
             Owner::Message(message) => write!(f, "message '{message}'"),
             Owner::Group(context) => write!(f, "{context}"),
+            Owner::Component(component) => write!(f, "component '{component}'"),
             Owner::Value {
                 field,
                 code,
@@ -88,8 +91,8 @@ impl Namespace {
 
     /// Takes the name of a field's enum.
     ///
-    /// The enum yields to a message or group of its name, taking `Enum`
-    /// after it, with a warning.
+    /// The enum yields to a message, group or component of its name, taking
+    /// `Enum` after it, with a warning.
     pub(crate) fn claim_enum(
         &mut self,
         field: &str,
@@ -98,7 +101,14 @@ impl Namespace {
         let owner = Owner::Enum(field.to_owned());
         let clash = match self.claim(field, owner.clone()) {
             Ok(()) => return Ok(field.to_owned()),
-            Err(clash) if matches!(clash.first, Owner::Message(_) | Owner::Group(_)) => clash,
+            Err(clash)
+                if matches!(
+                    clash.first,
+                    Owner::Message(_) | Owner::Group(_) | Owner::Component(_)
+                ) =>
+            {
+                clash
+            }
             Err(clash) => return Err(clash),
         };
         let name = format!("{field}Enum");
@@ -232,6 +242,18 @@ mod tests {
         let name = namespace.claim_enum("RateSource", &mut Vec::new()).unwrap();
 
         assert_eq!(name, "RateSourceEnum");
+    }
+
+    #[test]
+    fn an_enum_yields_to_a_component() {
+        let mut namespace = Namespace::default();
+        namespace
+            .claim("YieldData", Owner::Component("YieldData".to_owned()))
+            .unwrap();
+
+        let name = namespace.claim_enum("YieldData", &mut Vec::new()).unwrap();
+
+        assert_eq!(name, "YieldDataEnum");
     }
 
     #[test]
