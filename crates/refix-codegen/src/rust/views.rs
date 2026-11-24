@@ -43,7 +43,6 @@ pub(super) fn emit_view(
         names,
         Lifetime::Scope,
         "self.1",
-        true,
     ));
 
     let mut items = vec![

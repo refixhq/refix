@@ -480,33 +480,9 @@ impl NewOrderSingle {
         Instrument(self.0.scope(), Self::KNOWN_TAGS)
     }
 
-    /// The `Symbol` (55) field.
-    #[doc(alias = "Symbol")]
-    pub fn symbol(&self) -> Result<Option<&str>, InvalidValue> {
-        self.0.get_str(Tag(55))
-    }
-
-    /// The instances of the `NoSecurityAltID` (454) group.
-    #[doc(alias = "NoSecurityAltID")]
-    pub fn security_alt_id(&self) -> Result<Instances<'_, sec_alt_id_grp::Instance<'_>>, InvalidValue> {
-        self.0.get_group(&sec_alt_id_grp::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
-    }
-
-    /// The `SecurityXMLSchema` (1186) field.
-    #[doc(alias = "SecurityXMLSchema")]
-    pub fn security_xml_schema(&self) -> Result<Option<&str>, InvalidValue> {
-        self.0.get_str(Tag(1186))
-    }
-
     /// The `OrderQtyData` component.
     pub fn order_qty_data(&self) -> OrderQtyData<'_> {
         OrderQtyData(self.0.scope())
-    }
-
-    /// The `OrderQty` (38) field.
-    #[doc(alias = "OrderQty")]
-    pub fn order_qty(&self) -> Result<Option<i64>, InvalidValue> {
-        self.0.get_int(Tag(38))
     }
 
     /// The `Price` (44) field.
@@ -784,24 +760,6 @@ pub mod mass_quote {
                 /// The `Instrument` component.
                 pub fn instrument(&self) -> Instrument<'a> {
                     Instrument(self.0, KNOWN_TAGS)
-                }
-
-                /// The `Symbol` (55) field.
-                #[doc(alias = "Symbol")]
-                pub fn symbol(&self) -> Result<Option<&'a str>, InvalidValue> {
-                    self.0.get_str(Tag(55))
-                }
-
-                /// The instances of the `NoSecurityAltID` (454) group.
-                #[doc(alias = "NoSecurityAltID")]
-                pub fn security_alt_id(&self) -> Result<Instances<'a, sec_alt_id_grp::Instance<'a>>, InvalidValue> {
-                    self.0.get_group(&sec_alt_id_grp::TABLE, &KNOWN_TAGS).map(Instances::from)
-                }
-
-                /// The `SecurityXMLSchema` (1186) field.
-                #[doc(alias = "SecurityXMLSchema")]
-                pub fn security_xml_schema(&self) -> Result<Option<&'a str>, InvalidValue> {
-                    self.0.get_str(Tag(1186))
                 }
             }
         }

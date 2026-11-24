@@ -37,7 +37,6 @@ pub(super) fn emit_component(component: dictionary::Component<'_>, names: &Names
         names,
         Lifetime::Scope,
         "self.1",
-        false,
     ));
 
     [

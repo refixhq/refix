@@ -60,7 +60,7 @@ fn typed_reads_over_a_tokenized_frame() {
     assert_eq!(NewOrderSingle::MSG_TYPE, b"D");
     assert_eq!(order.raw().get(Tag(35)), Some(b"D".as_slice()));
     assert_eq!(order.cl_ord_id(), Ok(Some("ORDER-1")));
-    assert_eq!(order.order_qty(), Ok(Some(200)));
+    assert_eq!(order.order_qty_data().order_qty(), Ok(Some(200)));
     assert_eq!(order.price(), Ok(Some(Decimal::new(1015, -1))));
     assert_eq!(
         order.settl_date(),
@@ -152,7 +152,7 @@ fn an_absent_field_reads_as_none() {
 
     let order = NewOrderSingle::from_raw(raw);
 
-    assert_eq!(order.order_qty(), Ok(None));
+    assert_eq!(order.order_qty_data().order_qty(), Ok(None));
     assert_eq!(order.price(), Ok(None));
     assert_eq!(order.settl_date(), Ok(None));
     assert_eq!(order.maturity_month_year(), Ok(None));
@@ -178,7 +178,10 @@ fn a_malformed_value_reads_as_an_error() {
 
     let order = NewOrderSingle::from_raw(raw);
 
-    assert_eq!(order.order_qty(), Err(InvalidValue { tag: Tag(38) }));
+    assert_eq!(
+        order.order_qty_data().order_qty(),
+        Err(InvalidValue { tag: Tag(38) })
+    );
 }
 
 #[test]
@@ -203,7 +206,7 @@ fn typed_reads_over_groups() {
     assert_eq!(sub_ids.get(0).unwrap().party_sub_id(), Ok(Some("DESK-1")));
     assert!(parties.get(1).unwrap().party_sub_ids().unwrap().is_empty());
 
-    assert_eq!(order.order_qty(), Ok(Some(200)));
+    assert_eq!(order.order_qty_data().order_qty(), Ok(Some(200)));
 }
 
 #[test]
