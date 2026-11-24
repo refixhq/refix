@@ -5,21 +5,17 @@ use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
 use super::Error;
 use super::naming::{
-    component_accessor_name, group_accessor_name, group_module_name, message_module_name,
-    method_name, numbered_variant, variant_name,
+    component_accessor_name, group_accessor_name, group_type_name, method_name, numbered_variant,
+    variant_name,
 };
 use crate::Warning;
 use crate::components::components;
 use crate::conversion::Conversion;
 use crate::envelope::Section;
-use crate::flat;
 use crate::groups::{declared_groups, instance_context};
-use crate::namespace::{NameClash, Namespace, Owner};
+use crate::namespace::{Namespace, Owner};
 
 /// Names the generated root defines or relies on.
-///
-/// `Instance` is here because each group module imports the root and
-/// defines its own.
 const ROOT: &[&str] = &[
     "DIALECT",
     "Date",
@@ -28,7 +24,6 @@ const ROOT: &[&str] = &[
     "From",
     "GroupTable",
     "Header",
-    "Instance",
     "Instances",
     "InvalidValue",
     "KnownTags",
@@ -45,12 +40,10 @@ const ROOT: &[&str] = &[
     "Trailer",
     "UtcTimestamp",
     "bool",
-    "header",
     "i64",
     "refix_message",
     "std",
     "str",
-    "trailer",
     "u8",
 ];
 
@@ -74,10 +67,9 @@ const COMPONENT: &[&str] = &["TAGS", "raw"];
 pub(super) struct Names {
     enums: HashMap<Tag, EnumNames>,
     accessors: HashMap<Tag, String>,
-    group_modules: HashMap<MemberContext, String>,
+    group_types: HashMap<MemberContext, String>,
     group_accessors: HashMap<MemberContext, String>,
     component_accessors: HashMap<String, String>,
-    message_modules: HashMap<String, String>,
 }
 
 struct EnumNames {
@@ -94,10 +86,9 @@ impl Names {
         let mut names = Names {
             enums: HashMap::new(),
             accessors: HashMap::new(),
-            group_modules: HashMap::new(),
+            group_types: HashMap::new(),
             group_accessors: HashMap::new(),
             component_accessors: HashMap::new(),
-            message_modules: HashMap::new(),
         };
         let mut root = Namespace::with_generated(ROOT);
         let mut message_variants = Namespace::with_generated(&["Unrecognized"]);
@@ -105,15 +96,8 @@ impl Names {
             root.claim(message.name(), Owner::Message(message.name().to_owned()))?;
             message_variants.claim(message.name(), Owner::Message(message.name().to_owned()))?;
         }
-        for message in dictionary.messages() {
-            names.name_message_module(message, &mut root)?;
-        }
         for group in declared_groups(dictionary) {
-            if matches!(group.declared_in(), MemberContext::Component(_)) {
-                let name = group_module_name(group)?;
-                root.claim(&name, Owner::Group(instance_context(group)))?;
-                names.group_modules.insert(instance_context(group), name);
-            }
+            names.name_group_type(group, &mut root)?;
         }
         for component in components(dictionary) {
             let name = component.name();
@@ -123,10 +107,10 @@ impl Names {
                 .insert(name.to_owned(), component_accessor_name(name)?);
         }
         for section in [Section::Header, Section::Trailer] {
-            names.name_section(section, dictionary)?;
-        }
-        for group in declared_groups(dictionary) {
-            names.name_nested_modules(group, &root)?;
+            names.name_accessors(
+                section.listed(dictionary).into_iter(),
+                Namespace::with_generated(INSTANCE),
+            )?;
         }
         for field in dictionary.fields() {
             if Conversion::of(field).is_enum() {
@@ -146,91 +130,25 @@ impl Names {
         Ok(names)
     }
 
-    /// Names the module holding the groups a message declares itself, if it
-    /// declares any.
-    fn name_message_module(
-        &mut self,
-        message: dictionary::Message<'_>,
-        root: &mut Namespace,
-    ) -> Result<(), Error> {
-        let groups: Vec<dictionary::Group<'_>> = flat::members(message.members())
-            .filter_map(|member| match member {
-                flat::Member::Group(group)
-                    if matches!(group.declared_in(), MemberContext::Message(_)) =>
-                {
-                    Some(group)
-                }
-                _ => None,
-            })
-            .collect();
-        if groups.is_empty() {
-            return Ok(());
-        }
-        let module = message_module_name(message.name())?;
-        root.claim(&module, Owner::Message(message.name().to_owned()))?;
-        let mut modules = Namespace::default();
-        for group in groups {
-            let name = group_module_name(group)?;
-            modules.claim(&name, Owner::Group(instance_context(group)))?;
-            self.group_modules.insert(instance_context(group), name);
-        }
-        self.message_modules
-            .insert(message.name().to_owned(), module);
-        Ok(())
-    }
-
-    /// Names the modules of the groups declared directly in a group's
-    /// instances, which sit inside the group's own module.
+    /// Names the type of a group's instances.
     ///
-    /// Inside that module such a name would hide a root name, so it must
-    /// not be one.
-    fn name_nested_modules(
+    /// A group declared in another group's instances follows that group's
+    /// type, which is named first.
+    fn name_group_type(
         &mut self,
         group: dictionary::Group<'_>,
-        root: &Namespace,
+        root: &mut Namespace,
     ) -> Result<(), Error> {
-        let mut modules = Namespace::default();
-        for member in flat::members(group.members()) {
-            let flat::Member::Group(nested) = member else {
-                continue;
-            };
-            if !matches!(nested.declared_in(), MemberContext::Group { .. }) {
-                continue;
-            }
-            let name = group_module_name(nested)?;
-            let owner = Owner::Group(instance_context(nested));
-            if let Some(first) = root.owner(&name) {
-                return Err(Box::new(NameClash {
-                    name,
-                    first: first.clone(),
-                    second: owner,
-                })
-                .into());
-            }
-            modules.claim(&name, owner)?;
-            self.group_modules.insert(instance_context(nested), name);
-        }
+        let owner = match group.declared_in() {
+            MemberContext::Message(name) | MemberContext::Component(name) => name,
+            MemberContext::Header => Section::Header.type_name(),
+            MemberContext::Trailer => Section::Trailer.type_name(),
+            outer @ MemberContext::Group { .. } => &self.group_types[outer],
+        };
+        let name = group_type_name(group, owner)?;
+        root.claim(&name, Owner::Group(instance_context(group)))?;
+        self.group_types.insert(instance_context(group), name);
         Ok(())
-    }
-
-    /// Names a section view's accessors and the module of the groups the
-    /// section declares itself.
-    fn name_section(&mut self, section: Section, dictionary: &Dictionary) -> Result<(), Error> {
-        let members = section.members(dictionary);
-        let mut modules = Namespace::default();
-        for member in &members {
-            if let flat::Member::Group(group) = member
-                && *group.declared_in() == section.context()
-            {
-                let name = group_module_name(*group)?;
-                modules.claim(&name, Owner::Group(instance_context(*group)))?;
-                self.group_modules.insert(instance_context(*group), name);
-            }
-        }
-        self.name_accessors(
-            section.listed(dictionary).into_iter(),
-            Namespace::with_generated(INSTANCE),
-        )
     }
 
     fn name_enum(
@@ -305,9 +223,9 @@ impl Names {
         &self.accessors[&field.tag]
     }
 
-    /// A group's module.
-    pub(super) fn group_module(&self, group: dictionary::Group<'_>) -> &str {
-        &self.group_modules[&instance_context(group)]
+    /// The type of a group's instances.
+    pub(super) fn group_type(&self, group: dictionary::Group<'_>) -> &str {
+        &self.group_types[&instance_context(group)]
     }
 
     /// The method reading a group's instances.
@@ -318,30 +236,6 @@ impl Names {
     /// The method returning a component's view.
     pub(super) fn component_accessor(&self, component: dictionary::Component<'_>) -> &str {
         &self.component_accessors[component.name()]
-    }
-
-    /// The module holding the groups a message declares itself.
-    pub(super) fn message_module(&self, message: &str) -> &str {
-        &self.message_modules[message]
-    }
-
-    /// The path of a group's module from the generated root.
-    pub(super) fn group_path(&self, group: dictionary::Group<'_>) -> String {
-        self.module_path(group.declared_in(), self.group_module(group))
-    }
-
-    /// The path of the module `name` of a group declared in `context`.
-    fn module_path(&self, context: &MemberContext, name: &str) -> String {
-        match context {
-            MemberContext::Message(message) => format!("{}::{name}", self.message_module(message)),
-            MemberContext::Header => format!("{}::{name}", Section::Header.member_name()),
-            MemberContext::Trailer => format!("{}::{name}", Section::Trailer.member_name()),
-            MemberContext::Component(_) => name.to_owned(),
-            MemberContext::Group { parent, .. } => {
-                let outer = self.module_path(parent, &self.group_modules[context]);
-                format!("{outer}::{name}")
-            }
-        }
     }
 }
 
@@ -738,21 +632,18 @@ mod tests {
     }
 
     #[test]
-    fn a_message_module_and_a_group_module_clash() {
+    fn a_group_type_named_like_a_message_clashes() {
         let dictionary = with_parties(
             vec![
-                message("Parties", "X", vec![group(384, vec![field_ref(372)])]),
+                message("Parties", "X", vec![]),
                 message("NewOrderSingle", "D", vec![parties_ref()]),
             ],
-            vec![
-                field("NoMsgTypes", 384, DataType::NumInGroup),
-                field("RefMsgType", 372, DataType::String),
-            ],
+            vec![],
         );
         assert_eq!(
             clash_in(&dictionary),
             NameClash {
-                name: "parties".to_owned(),
+                name: "Parties".to_owned(),
                 first: Owner::Message("Parties".to_owned()),
                 second: Owner::Group(
                     MemberContext::Component("Parties".to_owned()).group("NoPartyIDs")
@@ -761,12 +652,11 @@ mod tests {
         );
     }
 
-    /// A message whose `NoMsgTypes` group declares `NoMsgSubTypes` in its
-    /// instances.
-    fn with_a_group_in_a_group(message_name: &str) -> Dictionary {
-        with_parties(
+    #[test]
+    fn a_group_in_a_group_instance_follows_its_parents_type() {
+        let dictionary = with_parties(
             vec![message(
-                message_name,
+                "Logon",
                 "A",
                 vec![group(
                     384,
@@ -779,38 +669,12 @@ mod tests {
                 field("NoMsgSubTypes", 9001, DataType::NumInGroup),
                 field("MsgSubType", 9002, DataType::String),
             ],
-        )
-    }
-
-    #[test]
-    fn a_group_in_a_group_instance_sits_in_its_parents_module() {
-        let dictionary = with_a_group_in_a_group("Logon");
+        );
         let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
         let groups = declared_groups(&dictionary);
-        let nested = groups
-            .iter()
-            .find(|group| group.count_field().name == "NoMsgSubTypes")
-            .unwrap();
 
-        assert_eq!(names.group_path(*nested), "logon::msg_types::msg_sub_types");
-        assert_eq!(names.group_accessor(*nested), "msg_sub_types");
-    }
-
-    #[test]
-    fn a_nested_group_module_named_like_a_root_module_clashes() {
-        let dictionary = with_a_group_in_a_group("MsgSubTypes");
-        assert_eq!(
-            clash_in(&dictionary),
-            NameClash {
-                name: "msg_sub_types".to_owned(),
-                first: Owner::Message("MsgSubTypes".to_owned()),
-                second: Owner::Group(
-                    MemberContext::Message("MsgSubTypes".to_owned())
-                        .group("NoMsgTypes")
-                        .group("NoMsgSubTypes")
-                ),
-            }
-        );
+        assert_eq!(names.group_type(groups[0]), "LogonMsgTypes");
+        assert_eq!(names.group_type(groups[1]), "LogonMsgTypesMsgSubTypes");
     }
 
     #[test]

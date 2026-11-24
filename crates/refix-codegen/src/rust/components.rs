@@ -1,7 +1,8 @@
 use refix_dictionary::dictionary;
 
 use super::docs::code;
-use super::layout::{MAX_WIDTH, indent, slice};
+use super::groups::emit_known_tags;
+use super::layout::{MAX_WIDTH, indent};
 use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
 use crate::components::{component_tags, holds_group};
@@ -17,16 +18,7 @@ pub(super) fn emit_component(component: dictionary::Component<'_>, names: &Names
     } else {
         "(refix_message::Scope<'a>)"
     };
-    let tags: Vec<String> = component_tags(component)
-        .iter()
-        .map(|tag| format!("Tag({tag})"))
-        .collect();
-    let tags = slice(
-        "const TAGS: KnownTags<'static> = KnownTags::new(",
-        &tags,
-        ");",
-        MAX_WIDTH - 4,
-    );
+    let tags = emit_known_tags("const TAGS", &component_tags(component), MAX_WIDTH - 4);
 
     let mut methods = vec![
         indent(&tags, 1),
@@ -114,8 +106,8 @@ impl<'a> Instrument<'a> {
 
     /// The instances of the `NoSecurityAltID` (454) group.
     #[doc(alias = "NoSecurityAltID")]
-    pub fn security_alt_id(&self) -> Result<Instances<'a, sec_alt_id_grp::Instance<'a>>, InvalidValue> {
-        self.0.get_group(&sec_alt_id_grp::TABLE, &self.1).map(Instances::from)
+    pub fn security_alt_id(&self) -> Result<Instances<'a, SecAltIDGrp<'a>>, InvalidValue> {
+        self.0.get_group(&SecAltIDGrp::TABLE, &self.1).map(Instances::from)
     }
 
     /// The `SecurityXML` component.

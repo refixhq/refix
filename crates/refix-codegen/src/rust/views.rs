@@ -1,13 +1,13 @@
 use refix_dictionary::Dictionary;
 
-use super::groups::{emit_group_module, emit_known_tags};
+use super::groups::{emit_group, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
 use crate::envelope::{Envelope, Section};
 use crate::flat;
 
-/// A section's view, and the module of the groups the section declares
+/// A section's view, then the types of the groups the section declares
 /// itself.
 ///
 /// A view whose section holds a group keeps the known tags to walk it with.
@@ -33,7 +33,10 @@ pub(super) fn emit_view(
 
     let mut methods = Vec::new();
     if walks_groups {
-        methods.push(indent(&emit_known_tags(&envelope.tags, MAX_WIDTH - 4), 1));
+        methods.push(indent(
+            &emit_known_tags("pub const KNOWN_TAGS", &envelope.tags, MAX_WIDTH - 4),
+            1,
+        ));
     }
     methods.push(
         "    pub fn raw(&self) -> refix_message::Scope<'a> {\n        self.0\n    }\n".to_owned(),
@@ -55,22 +58,12 @@ pub(super) fn emit_view(
         ),
         format!("impl<'a> {name}<'a> {{\n{}}}\n", methods.join("\n")),
     ];
-    let modules: Vec<String> = members
-        .iter()
-        .filter_map(|member| match member {
-            flat::Member::Group(group) if *group.declared_in() == section.context() => {
-                Some(emit_group_module(*group, names))
-            }
-            _ => None,
-        })
-        .collect();
-    if !modules.is_empty() {
-        items.push(format!(
-            "pub mod {} {{\n{}}}\n",
-            section.member_name(),
-            indent(&modules.join("\n"), 1)
-        ));
-    }
+    items.extend(members.iter().filter_map(|member| match member {
+        flat::Member::Group(group) if *group.declared_in() == section.context() => {
+            Some(emit_group(*group, names))
+        }
+        _ => None,
+    }));
     items.join("\n")
 }
 

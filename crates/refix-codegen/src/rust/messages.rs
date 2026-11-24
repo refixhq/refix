@@ -3,7 +3,7 @@ use refix_dictionary::{MemberContext, Tag, dictionary};
 
 use super::components::emit_component_accessor;
 use super::docs::{code, member_docs, plain};
-use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
+use super::groups::{emit_group, emit_group_accessor, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::names::Names;
 use super::views::emit_view_accessor;
@@ -12,8 +12,10 @@ use crate::envelope::Envelope;
 use crate::flat;
 use crate::groups::message_known_tags;
 
-/// A message's struct, impl and group module. Its known tags include the
-/// `envelope`'s, and it reaches each view the envelope has.
+/// A message's struct and impl, then the types of the groups it declares.
+///
+/// Its known tags include the `envelope`'s, and it reaches each view the
+/// envelope has.
 pub(super) fn emit_message(
     message: dictionary::Message<'_>,
     envelope: &Envelope,
@@ -24,9 +26,7 @@ pub(super) fn emit_message(
         emit_message_impl(message, envelope, names),
         emit_message_printing(message),
     ];
-    if let Some(module) = emit_message_module(message, names) {
-        items.push(module);
-    }
+    items.extend(emit_message_groups(message, names));
     items.join("\n")
 }
 
@@ -50,7 +50,11 @@ fn emit_message_impl(
             byte_str_literal(message.msg_type())
         ),
         indent(
-            &emit_known_tags(&message_known_tags(message, &envelope.tags), MAX_WIDTH - 4),
+            &emit_known_tags(
+                "pub const KNOWN_TAGS",
+                &message_known_tags(message, &envelope.tags),
+                MAX_WIDTH - 4,
+            ),
             1,
         ),
         "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),
@@ -78,27 +82,18 @@ fn emit_message_printing(message: dictionary::Message<'_>) -> String {
     )
 }
 
-/// The module holding the groups declared directly in a message, if it
-/// declares any.
-fn emit_message_module(message: dictionary::Message<'_>, names: &Names) -> Option<String> {
-    let modules: Vec<String> = flat::members(message.members())
+/// The types of the groups declared directly in a message.
+fn emit_message_groups(message: dictionary::Message<'_>, names: &Names) -> Vec<String> {
+    flat::members(message.members())
         .filter_map(|member| match member {
             flat::Member::Group(group)
                 if matches!(group.declared_in(), MemberContext::Message(_)) =>
             {
-                Some(emit_group_module(group, names))
+                Some(emit_group(group, names))
             }
             _ => None,
         })
-        .collect();
-    if modules.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "pub mod {} {{\n{}}}\n",
-        names.message_module(message.name()),
-        indent(&modules.join("\n"), 1)
-    ))
+        .collect()
 }
 
 /// The lifetime an accessor's borrowed results live for.
