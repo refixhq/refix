@@ -5,10 +5,11 @@ use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
 use super::Error;
 use super::naming::{
-    group_property_name, member_name, nanos_declaration, nanos_property_name, numbered_member,
-    property_name,
+    component_property_name, group_property_name, member_name, nanos_declaration,
+    nanos_property_name, numbered_member, property_name,
 };
 use crate::Warning;
+use crate::components::components;
 use crate::conversion::Conversion;
 use crate::envelope::Section;
 use crate::flat;
@@ -44,8 +45,8 @@ const MODULE: &[&str] = &[
 /// after it.
 const MESSAGE: &[&str] = &["MSG_TYPE", "fields", "from_raw", "header", "raw", "trailer"];
 
-/// The members every header or trailer class inherits, and `fields`, which
-/// its body looks up.
+/// The members every header, trailer or component class inherits, and
+/// `fields`, which its body looks up.
 const VIEW: &[&str] = &["fields", "from_raw", "raw"];
 
 /// The members every group instance class inherits, and `fields`, which its
@@ -61,6 +62,7 @@ pub(super) struct Names {
     properties: HashMap<Tag, String>,
     nanos_properties: HashMap<Tag, String>,
     groups: HashMap<MemberContext, GroupNames>,
+    component_properties: HashMap<String, String>,
 }
 
 struct EnumNames {
@@ -84,6 +86,7 @@ impl Names {
             properties: HashMap::new(),
             nanos_properties: HashMap::new(),
             groups: HashMap::new(),
+            component_properties: HashMap::new(),
         };
         let mut module = Namespace::with_generated(MODULE);
         for message in dictionary.messages() {
@@ -96,6 +99,13 @@ impl Names {
             if matches!(group.declared_in(), MemberContext::Component(_)) {
                 module.claim(&class, Owner::Group(instance_context(group)))?;
             }
+        }
+        for component in components(dictionary) {
+            let name = component.name();
+            module.claim(name, Owner::Component(name.to_owned()))?;
+            names
+                .component_properties
+                .insert(name.to_owned(), component_property_name(name));
         }
         for field in dictionary.fields() {
             if Conversion::of(field).is_enum() {
@@ -118,7 +128,7 @@ impl Names {
                     members.claim(class, owner)?;
                 }
             }
-            names.name_properties(flat::members(message.members()), members)?;
+            names.name_properties(message.members(), members, true)?;
         }
         for section in [Section::Header, Section::Trailer] {
             names.name_section(section, dictionary, &module)?;
@@ -131,7 +141,11 @@ impl Names {
                     Owner::Group(instance_context(nested)),
                 )?;
             }
-            names.name_properties(flat::members(group.members()), members)?;
+            names.name_properties(group.members(), members, true)?;
+        }
+        for component in components(dictionary) {
+            let members = Namespace::with_generated(VIEW);
+            names.name_properties(component.members(), members, false)?;
         }
         Ok(names)
     }
@@ -173,7 +187,7 @@ impl Names {
                 namespace.claim(class, owner)?;
             }
         }
-        self.name_properties(members.into_iter(), namespace)
+        self.name_properties(section.listed(dictionary).into_iter(), namespace, true)
     }
 
     /// Names a group's class and property, returning the class.
@@ -220,32 +234,67 @@ impl Names {
         Ok(())
     }
 
-    /// Names the properties of a message or group instance.
+    /// Names the properties of a message, group instance or component.
+    ///
+    /// With `inline`, the fields and groups of a component are read by
+    /// whatever includes it as well as through its view.
     fn name_properties<'a>(
         &mut self,
-        members: impl Iterator<Item = flat::Member<'a>>,
+        members: impl Iterator<Item = dictionary::Member<'a>>,
         mut namespace: Namespace,
+        inline: bool,
     ) -> Result<(), Error> {
         for member in members {
             match member {
-                flat::Member::Field { field, .. } => {
-                    let name = property_name(field);
-                    namespace.claim(&name, Owner::Field(field.name.clone()))?;
-                    self.properties.insert(field.tag, name);
-                    if nanos_declaration(field).is_some() {
-                        let name = nanos_property_name(field);
-                        namespace.claim(&name, Owner::Nanos(field.name.clone()))?;
-                        self.nanos_properties.insert(field.tag, name);
-                    }
+                dictionary::Member::Field { field, .. } => {
+                    self.name_property(field, &mut namespace)?;
                 }
-                flat::Member::Group(group) => {
-                    namespace.claim(
-                        self.group_property(group),
-                        Owner::Group(instance_context(group)),
-                    )?;
+                dictionary::Member::Group(group) => {
+                    self.claim_group_property(group, &mut namespace)?;
+                }
+                dictionary::Member::Component(component) => {
+                    let name = &self.component_properties[component.name()];
+                    namespace.claim(name, Owner::Component(component.name().to_owned()))?;
+                    if !inline {
+                        continue;
+                    }
+                    for member in flat::members(component.members()) {
+                        match member {
+                            flat::Member::Field { field, .. } => {
+                                self.name_property(field, &mut namespace)?;
+                            }
+                            flat::Member::Group(group) => {
+                                self.claim_group_property(group, &mut namespace)?;
+                            }
+                        }
+                    }
                 }
             }
         }
+        Ok(())
+    }
+
+    fn name_property(&mut self, field: &Field, namespace: &mut Namespace) -> Result<(), Error> {
+        let name = property_name(field);
+        namespace.claim(&name, Owner::Field(field.name.clone()))?;
+        self.properties.insert(field.tag, name);
+        if nanos_declaration(field).is_some() {
+            let name = nanos_property_name(field);
+            namespace.claim(&name, Owner::Nanos(field.name.clone()))?;
+            self.nanos_properties.insert(field.tag, name);
+        }
+        Ok(())
+    }
+
+    fn claim_group_property(
+        &self,
+        group: dictionary::Group<'_>,
+        namespace: &mut Namespace,
+    ) -> Result<(), Error> {
+        namespace.claim(
+            self.group_property(group),
+            Owner::Group(instance_context(group)),
+        )?;
         Ok(())
     }
 
@@ -277,6 +326,11 @@ impl Names {
     /// The property reading a group's instances.
     pub(super) fn group_property(&self, group: dictionary::Group<'_>) -> &str {
         &self.groups[&instance_context(group)].property
+    }
+
+    /// The property reading a component as a view.
+    pub(super) fn component_property(&self, component: dictionary::Component<'_>) -> &str {
+        &self.component_properties[component.name()]
     }
 
     /// The path of a group's class from the module.
@@ -333,6 +387,7 @@ fn nested_groups<'a>(group: dictionary::Group<'a>) -> impl Iterator<Item = dicti
 #[cfg(test)]
 mod tests {
     use super::Names;
+    use crate::components::components;
     use crate::groups::declared_groups;
     use crate::python::Error;
     use crate::test_utils::message_with;
@@ -708,6 +763,104 @@ mod tests {
                     MemberContext::Component("Parties".to_owned()).group("NoPartyIDs")
                 ),
             }
+        );
+    }
+
+    /// A dictionary whose `component` holds `Symbol`.
+    fn with_component(
+        component: &str,
+        messages: Vec<Message>,
+        mut fields: Vec<Field>,
+    ) -> Dictionary {
+        fields.push(field("Symbol", 55, DataType::String));
+        let components = vec![Component {
+            name: component.to_owned(),
+            members: vec![field_ref(55)],
+        }];
+        dictionary(messages, fields, components)
+    }
+
+    fn component_ref(name: &str) -> Member {
+        Member::Component(ComponentRef {
+            name: name.to_owned(),
+            is_required: false,
+        })
+    }
+
+    fn order_with(members: Vec<Member>) -> Vec<Message> {
+        vec![message("NewOrderSingle", "D", members)]
+    }
+
+    #[test]
+    fn a_view_property_is_the_component_in_snake_case() {
+        let messages = order_with(vec![component_ref("OrderQtyData")]);
+        let dictionary = with_component("OrderQtyData", messages, vec![]);
+        let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
+        let order_qty_data = components(&dictionary)[0];
+
+        assert_eq!(names.component_property(order_qty_data), "order_qty_data");
+    }
+
+    #[test]
+    fn a_view_property_named_like_a_field_property_clashes() {
+        let messages = order_with(vec![field_ref(9000), component_ref("Instrument")]);
+        let dictionary = with_component(
+            "Instrument",
+            messages,
+            vec![field("Instrument", 9000, DataType::String)],
+        );
+
+        assert_eq!(
+            clash_in(&dictionary),
+            NameClash {
+                name: "instrument".to_owned(),
+                first: Owner::Field("Instrument".to_owned()),
+                second: Owner::Component("Instrument".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_component_named_like_a_message_clashes() {
+        let messages = vec![message("Quote", "S", vec![component_ref("Quote")])];
+        let dictionary = with_component("Quote", messages, vec![]);
+
+        assert_eq!(
+            clash_in(&dictionary),
+            NameClash {
+                name: "Quote".to_owned(),
+                first: Owner::Message("Quote".to_owned()),
+                second: Owner::Component("Quote".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn an_enum_named_like_a_component_yields() {
+        let messages = order_with(vec![component_ref("Instrument")]);
+        let dictionary = with_component(
+            "Instrument",
+            messages,
+            vec![with_values(
+                field("Instrument", 9000, DataType::Char),
+                &[("1", "FIRST")],
+            )],
+        );
+        let mut warnings = Vec::new();
+
+        let names = Names::new(&dictionary, &mut warnings).unwrap();
+
+        assert_eq!(names.enum_class(&dictionary.fields()[0]), "InstrumentEnum");
+        assert_eq!(
+            warnings,
+            vec![Warning::Renamed {
+                clash: Box::new(NameClash {
+                    name: "Instrument".to_owned(),
+                    first: Owner::Component("Instrument".to_owned()),
+                    second: Owner::Enum("Instrument".to_owned()),
+                }),
+                name: "InstrumentEnum".to_owned(),
+            }]
         );
     }
 

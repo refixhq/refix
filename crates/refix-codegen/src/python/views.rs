@@ -20,7 +20,8 @@ pub(super) fn emit_view(section: Section, dictionary: &Dictionary, names: &Names
             _ => None,
         })
         .collect();
-    items.push(emit_declarations(members.into_iter(), names));
+    let listed = section.listed(dictionary).into_iter();
+    items.push(emit_declarations(listed, names, true));
     format!(
         "class {}(fields.Component):\n{}",
         section.type_name(),

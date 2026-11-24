@@ -48,6 +48,20 @@ class SecAltIDGrp:
         security_alt_id = fields.Str(455)
 
 
+class SecurityXML(fields.Component):
+    security_xml_schema = fields.Str(1186)
+
+
+class Instrument(fields.Component):
+    symbol = fields.Str(55)
+    security_alt_id = fields.Group(454, SecAltIDGrp.Instance)
+    security_xml = fields.View(SecurityXML)
+
+
+class OrderQtyData(fields.Component):
+    order_qty = fields.Int(38)
+
+
 class Header(fields.Component):
     class Hops:
         class Instance(fields.GroupInstance):
@@ -79,9 +93,11 @@ class NewOrderSingle(fields.Message):
     trailer = fields.View(Trailer)
     cl_ord_id = fields.Str(11)
     party_ids = fields.Group(453, Parties.Instance)
+    instrument = fields.View(Instrument)
     symbol = fields.Str(55)
     security_alt_id = fields.Group(454, SecAltIDGrp.Instance)
     security_xml_schema = fields.Str(1186)
+    order_qty_data = fields.View(OrderQtyData)
     order_qty = fields.Int(38)
     price = fields.Decimal(44)
     settl_date = fields.Date(64)
@@ -120,6 +136,7 @@ class MassQuote(fields.Message):
                     __qualname__ = "MassQuote.QuoteSets.QuoteEntries.Instance"
 
                     quote_entry_id = fields.Str(299)
+                    instrument = fields.View(Instrument)
                     symbol = fields.Str(55)
                     security_alt_id = fields.Group(454, SecAltIDGrp.Instance)
                     security_xml_schema = fields.Str(1186)

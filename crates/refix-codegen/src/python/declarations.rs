@@ -9,16 +9,43 @@ use crate::flat;
 /// The declarations of a message, component or group instance.
 ///
 /// The first one in a group instance is the field its instances start with.
+/// A component with fields is read through a view. With `inline`, its
+/// fields and groups are declared by whatever includes it as well.
 pub(super) fn emit_declarations<'a>(
-    members: impl Iterator<Item = flat::Member<'a>>,
+    members: impl Iterator<Item = dictionary::Member<'a>>,
     names: &Names,
+    inline: bool,
 ) -> String {
-    members
-        .map(|member| match member {
-            flat::Member::Field { field, .. } => emit_field(field, names),
-            flat::Member::Group(group) => emit_group(group, names),
-        })
-        .collect()
+    let mut declarations = String::new();
+    for member in members {
+        match member {
+            dictionary::Member::Field { field, .. } => {
+                declarations.push_str(&emit_field(field, names));
+            }
+            dictionary::Member::Group(group) => {
+                declarations.push_str(&emit_group(group, names));
+            }
+            dictionary::Member::Component(component) => {
+                declarations.push_str(&emit_view(component, names));
+                if !inline {
+                    continue;
+                }
+                for member in flat::members(component.members()) {
+                    declarations.push_str(&match member {
+                        flat::Member::Field { field, .. } => emit_field(field, names),
+                        flat::Member::Group(group) => emit_group(group, names),
+                    });
+                }
+            }
+        }
+    }
+    declarations
+}
+
+/// The declaration reading a component as a view.
+fn emit_view(component: dictionary::Component<'_>, names: &Names) -> String {
+    let name = names.component_property(component);
+    format!("    {name} = fields.View({})\n", component.name())
 }
 
 /// The declaration reading `field`, followed by the one reading its

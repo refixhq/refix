@@ -15,6 +15,7 @@ from toy_generated import (
     CODEC,
     ExecInst,
     Header,
+    Instrument,
     Logon,
     MassQuote,
     Message,
@@ -252,6 +253,65 @@ class TestGroups:
         new_order = order("35=D|453=1|448=AL|")
 
         assert new_order.party_ids is new_order.party_ids
+
+
+class TestComponents:
+    def test_reads_a_component_through_its_view(self):
+        new_order = order("35=D|11=ORDER-1|55=ACME|1186=schema.xsd|38=200|")
+
+        assert new_order.instrument.symbol == "ACME"
+        assert new_order.order_qty_data.order_qty == 200
+        assert new_order.instrument.security_xml.security_xml_schema == "schema.xsd"
+
+    def test_a_view_is_an_object_of_its_component_class(self):
+        new_order = order("35=D|11=ORDER-1|55=ACME|")
+
+        instrument: Instrument = new_order.instrument
+        assert isinstance(instrument, Instrument)
+        assert new_order.instrument is instrument
+
+    def test_a_view_reads_the_groups_of_its_component(self):
+        new_order = order("35=D|11=ORDER-1|55=ACME|454=2|455=ALT-1|455=ALT-2|38=200|")
+
+        alt_ids = new_order.instrument.security_alt_id
+        assert [alt_id.security_alt_id for alt_id in alt_ids] == ["ALT-1", "ALT-2"]
+        assert new_order.order_qty_data.order_qty == 200
+
+    def test_a_group_instance_reaches_a_component_through_its_view(self):
+        quote = MassQuote(
+            tokenize_body(
+                "35=i|117=Q1|296=1|302=SET-1|295=2|"
+                "299=E1|55=ACME|454=1|455=ALT-1|299=E2|55=INIT|"
+            )
+        )
+
+        first, second = quote.quote_sets[0].quote_entries
+        assert first.instrument.symbol == "ACME"
+        assert second.instrument.symbol == "INIT"
+        assert len(first.instrument.security_alt_id) == 1
+        assert second.instrument.security_alt_id == ()
+
+    def test_a_view_prints_the_fields_of_its_component(self):
+        new_order = order(
+            "35=D|11=ORDER-1|55=ACME|454=1|455=ALT-1|1186=schema.xsd|38=200|"
+        )
+
+        assert (
+            repr(new_order.instrument)
+            == "Instrument(55=ACME|454=1|455=ALT-1|1186=schema.xsd)"
+        )
+        assert repr(new_order.instrument.security_xml) == "SecurityXML(1186=schema.xsd)"
+        assert repr(new_order.order_qty_data) == "OrderQtyData(38=200)"
+
+    def test_a_view_in_a_group_instance_prints_that_instance_alone(self):
+        quote = MassQuote(
+            tokenize_body(
+                "35=i|117=Q1|296=1|302=SET-1|295=2|299=E1|55=ACME|299=E2|55=INIT|"
+            )
+        )
+
+        entries = quote.quote_sets[0].quote_entries
+        assert repr(entries[1].instrument) == "Instrument(55=INIT)"
 
 
 class TestPrinting:

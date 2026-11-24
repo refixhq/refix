@@ -40,7 +40,7 @@ pub(super) fn emit_message(
         .iter()
         .map(|section| emit_view_declaration(*section))
         .collect();
-    let declarations = views + &emit_declarations(flat::members(message.members()), names);
+    let declarations = views + &emit_declarations(message.members(), names, true);
     if !declarations.is_empty() {
         items.push(declarations);
     }
