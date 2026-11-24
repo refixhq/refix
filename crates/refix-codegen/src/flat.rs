@@ -26,6 +26,7 @@ fn collect<'a>(members: impl Iterator<Item = dictionary::Member<'a>>, flat: &mut
         match member {
             dictionary::Member::Field { field, .. } => flat.push(Member::Field { field }),
             dictionary::Member::Group(group) => flat.push(Member::Group(group)),
+            dictionary::Member::Component(component) => collect(component.members(), flat),
         }
     }
 }

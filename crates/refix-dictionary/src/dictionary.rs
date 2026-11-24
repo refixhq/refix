@@ -45,6 +45,14 @@ enum ResolvedMember {
         is_required: bool,
     },
     Group(ResolvedGroup),
+    Component(ResolvedComponent),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ResolvedComponent {
+    name: String,
+    is_required: bool,
+    members: Vec<ResolvedMember>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -93,13 +101,12 @@ impl Dictionary {
         &self.spec.fields
     }
 
-    /// The members every message starts with, in source order, components
-    /// expanded in place.
+    /// The members every message starts with, in source order.
     pub fn header(&self) -> impl Iterator<Item = Member<'_>> {
         members_of(&self.header, &self.spec.fields)
     }
 
-    /// The messages, with references resolved and components expanded.
+    /// The messages, with references resolved.
     pub fn messages(&self) -> impl Iterator<Item = Message<'_>> {
         self.spec
             .messages
@@ -112,8 +119,7 @@ impl Dictionary {
             })
     }
 
-    /// The members every message ends with, in source order, components
-    /// expanded in place.
+    /// The members every message ends with, in source order.
     pub fn trailer(&self) -> impl Iterator<Item = Member<'_>> {
         members_of(&self.trailer, &self.spec.fields)
     }
@@ -146,22 +152,61 @@ impl<'a> Message<'a> {
         self.declared.category
     }
 
-    /// The members in source order, components expanded in place.
+    /// The members in source order.
     pub fn members(&self) -> impl Iterator<Item = Member<'a>> + use<'a> {
         members_of(self.members, self.fields)
     }
 }
 
-/// A member of a message or group instance, with its references resolved.
+/// A member of a message, component or group instance, with its
+/// references resolved.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Member<'a> {
     Field {
         /// The referenced field definition.
         field: &'a Field,
-        /// Whether the field is required at every level on the path to it.
+        /// Whether the field is required where it is listed.
         is_required: bool,
     },
     Group(Group<'a>),
+    Component(Component<'a>),
+}
+
+/// A read view of one use of a component that carries fields.
+///
+/// A component made up of groups alone has no view. Its groups are members
+/// of whatever includes it.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct Component<'a> {
+    resolved: &'a ResolvedComponent,
+    fields: &'a [Field],
+}
+
+impl<'a> Component<'a> {
+    pub fn name(&self) -> &'a str {
+        &self.resolved.name
+    }
+
+    /// Whether the component is required where it is included.
+    pub fn is_required(&self) -> bool {
+        self.resolved.is_required
+    }
+
+    /// The members in source order, with requiredness relative to the
+    /// component.
+    pub fn members(&self) -> impl Iterator<Item = Member<'a>> + use<'a> {
+        members_of(&self.resolved.members, self.fields)
+    }
+}
+
+impl fmt::Debug for Component<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Component")
+            .field("name", &self.name())
+            .field("is_required", &self.is_required())
+            .field("members", &self.members().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 /// A read view of one repeating group, with its instance members resolved.
@@ -185,8 +230,7 @@ impl<'a> Group<'a> {
         &self.fields[self.resolved.delimiter_index]
     }
 
-    /// Whether the count field is required in the enclosing scope,
-    /// combined across every component on the path to it.
+    /// Whether the count field is required where the group is listed.
     pub fn is_required(&self) -> bool {
         self.resolved.is_required
     }
@@ -236,6 +280,10 @@ fn members_of<'a>(
             resolved: group,
             fields,
         }),
+        ResolvedMember::Component(component) => Member::Component(Component {
+            resolved: component,
+            fields,
+        }),
     })
 }
 
@@ -268,8 +316,19 @@ mod tests {
             .map(|member| match member {
                 Member::Field { field, is_required } => (field.tag, is_required),
                 Member::Group(group) => panic!("unexpected group {}", group.count_field().name),
+                Member::Component(component) => panic!("unexpected component {}", component.name()),
             })
             .collect()
+    }
+
+    fn component_at<'a>(
+        mut members: impl Iterator<Item = Member<'a>>,
+        position: usize,
+    ) -> super::Component<'a> {
+        match members.nth(position) {
+            Some(Member::Component(component)) => component,
+            other => panic!("expected a component, found {other:?}"),
+        }
     }
 
     fn component_ref(name: &str, is_required: bool) -> spec::Member {
@@ -365,9 +424,12 @@ mod tests {
         let dictionary = spec.resolve().unwrap().dictionary;
 
         assert_eq!(
-            field_members(dictionary.header()),
-            [(Tag(49), true), (Tag(56), false)]
+            field_members(dictionary.header().take(1)),
+            [(Tag(49), true)]
         );
+        let target = component_at(dictionary.header(), 1);
+        assert!(!target.is_required());
+        assert_eq!(field_members(target.members()), [(Tag(56), true)]);
         assert_eq!(field_members(dictionary.trailer()), [(Tag(10), true)]);
     }
 
@@ -497,7 +559,7 @@ mod tests {
     }
 
     #[test]
-    fn expands_components_in_place() {
+    fn keeps_a_component_that_carries_fields() {
         let spec = spec_of(
             vec![
                 field("ClOrdID", 11),
@@ -522,19 +584,21 @@ mod tests {
         let dictionary = spec.resolve().unwrap().dictionary;
 
         let message = dictionary.messages().next().unwrap();
+        let commission = component_at(message.members(), 1);
+        assert_eq!(commission.name(), "CommissionData");
+        assert!(commission.is_required());
         assert_eq!(
-            field_members(message.members()),
-            vec![
-                (Tag(11), true),
-                (Tag(12), true),
-                (Tag(13), true),
-                (Tag(58), false)
-            ]
+            field_members(commission.members()),
+            [(Tag(12), true), (Tag(13), true)]
         );
+        let own = message
+            .members()
+            .filter(|member| matches!(member, Member::Field { .. }));
+        assert_eq!(field_members(own), [(Tag(11), true), (Tag(58), false)]);
     }
 
     #[test]
-    fn requiredness_combines_across_every_level() {
+    fn requiredness_is_relative_to_each_component() {
         let spec = spec_of(
             vec![field("Commission", 12), field("CommType", 13)],
             vec![
@@ -549,32 +613,15 @@ mod tests {
 
         let dictionary = spec.resolve().unwrap().dictionary;
 
-        // An optional component makes everything below it optional.
         let message = dictionary.messages().next().unwrap();
+        let outer = component_at(message.members(), 0);
+        let inner = component_at(outer.members(), 0);
+        assert!(!outer.is_required());
+        assert!(inner.is_required());
         assert_eq!(
-            field_members(message.members()),
-            vec![(Tag(12), false), (Tag(13), false)]
+            field_members(inner.members()),
+            [(Tag(12), true), (Tag(13), false)]
         );
-    }
-
-    #[test]
-    fn a_required_path_stays_required() {
-        let spec = spec_of(
-            vec![field("Commission", 12)],
-            vec![
-                component("Inner", vec![field_ref(12, true)]),
-                component("Outer", vec![component_ref("Inner", true)]),
-            ],
-            vec![message(
-                "NewOrderSingle",
-                vec![component_ref("Outer", true)],
-            )],
-        );
-
-        let dictionary = spec.resolve().unwrap().dictionary;
-
-        let message = dictionary.messages().next().unwrap();
-        assert_eq!(field_members(message.members()), vec![(Tag(12), true)]);
     }
 
     #[test]
@@ -724,7 +771,12 @@ mod tests {
         let resolved = spec.resolve().unwrap();
 
         let message = resolved.dictionary.messages().next().unwrap();
-        assert_eq!(field_members(message.members()), [(Tag(58), false)]);
+        let top = component_at(message.members(), 0);
+        assert_eq!(top.members().count(), 1);
+        let left = component_at(top.members(), 0);
+        assert_eq!(left.name(), "Left");
+        let bottom = component_at(left.members(), 0);
+        assert_eq!(field_members(bottom.members()), [(Tag(58), false)]);
         assert_eq!(
             resolved.warnings,
             [Warning::DuplicateField {
@@ -1113,7 +1165,7 @@ mod tests {
                 .flat_map(|message| message.members())
                 .filter_map(|member| match member {
                     Member::Group(group) => Some(group),
-                    Member::Field { .. } => None,
+                    Member::Field { .. } | Member::Component(_) => None,
                 })
                 .flat_map(|group| group.members());
 
@@ -1184,9 +1236,11 @@ mod tests {
 
             let group = group_at(dictionary.messages().next().unwrap(), 0);
             assert_eq!(group.delimiter().tag, Tag(55));
+            let instrument = component_at(group.members(), 0);
+            assert!(instrument.is_required());
             assert_eq!(
-                field_members(group.members()),
-                vec![(Tag(55), true), (Tag(48), true), (Tag(58), false)]
+                field_members(instrument.members()),
+                [(Tag(55), true), (Tag(48), true)]
             );
         }
 
@@ -1285,7 +1339,10 @@ mod tests {
 
             let dictionary = spec.resolve().unwrap().dictionary;
 
-            let group = group_at(dictionary.messages().next().unwrap(), 1);
+            let instrument = component_at(dictionary.messages().next().unwrap().members(), 0);
+            let Some(Member::Group(group)) = instrument.members().nth(1) else {
+                panic!("expected a group");
+            };
             assert_eq!(
                 group.declared_in(),
                 &MemberContext::Component("Instrument".to_owned())

@@ -36,8 +36,9 @@ fn main() {
 }
 ```
 
-Components are expanded in place, so a message lists every field and group it can hold. `refix-codegen` generates typed
-messages from a `Dictionary`, and `refix-cli` runs it from the command line.
+A component that carries fields is a member with members of its own. One made up of groups alone gives its groups to
+whatever includes it. `refix-codegen` generates typed messages from a `Dictionary`, and `refix-cli` runs it from the
+command line.
 
 ## License
 

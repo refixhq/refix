@@ -45,7 +45,7 @@ fn parses_the_full_fix42_dictionary() {
         .members()
         .find_map(|member| match member {
             dictionary::Member::Group(group) => Some(group),
-            dictionary::Member::Field { .. } => None,
+            _ => None,
         })
         .unwrap();
     assert_eq!(quote_sets.count_field().name, "NoQuoteSets");
@@ -53,7 +53,7 @@ fn parses_the_full_fix42_dictionary() {
         .members()
         .find_map(|member| match member {
             dictionary::Member::Group(group) => Some(group),
-            dictionary::Member::Field { .. } => None,
+            _ => None,
         })
         .unwrap();
     assert_eq!(quote_entries.count_field().name, "NoQuoteEntries");
@@ -124,7 +124,7 @@ fn joins_the_fix50_dictionary_with_its_transport() {
         .members()
         .find_map(|member| match member {
             dictionary::Member::Group(group) => Some(group),
-            dictionary::Member::Field { .. } => None,
+            _ => None,
         })
         .unwrap();
     assert_eq!(msg_types.count_field().name, "NoMsgTypes");
@@ -244,10 +244,20 @@ fn parses_the_full_fix44_dictionary() {
         .messages()
         .find(|message| message.name() == "NewOrderSingle")
         .unwrap();
-    // 149 fields and 7 groups, components expanded in place.
-    assert_eq!(resolved.members().count(), 156);
-    // Symbol(55) arrives through the Instrument component's expansion.
-    assert!(resolved.members().any(|member| matches!(
+    // 63 fields, 5 groups and the 8 components that carry fields.
+    assert_eq!(resolved.members().count(), 76);
+    // Symbol(55) is a member of the Instrument component.
+    let instrument = resolved
+        .members()
+        .find_map(|member| match member {
+            dictionary::Member::Component(component) if component.name() == "Instrument" => {
+                Some(component)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(instrument.is_required());
+    assert!(instrument.members().any(|member| matches!(
         member,
         dictionary::Member::Field { field, .. } if field.tag == Tag(55) && field.name == "Symbol"
     )));
@@ -268,6 +278,9 @@ fn parses_the_full_fix44_dictionary() {
         .map(|member| match member {
             dictionary::Member::Field { field, is_required } => (field.tag, is_required),
             dictionary::Member::Group(group) => (group.count_field().tag, group.is_required()),
+            dictionary::Member::Component(component) => {
+                panic!("unexpected component {component:?}")
+            }
         })
         .collect();
     assert_eq!(
@@ -290,7 +303,7 @@ fn parses_the_full_fix44_dictionary() {
         .members()
         .find_map(|member| match member {
             dictionary::Member::Group(group) => Some(group),
-            dictionary::Member::Field { .. } => None,
+            _ => None,
         })
         .unwrap();
     assert_eq!(msg_types.count_field().name, "NoMsgTypes");
@@ -300,16 +313,12 @@ fn parses_the_full_fix44_dictionary() {
     );
     assert_eq!(msg_types.component(), None);
 
-    // Every message-level group parses and resolves.
+    // Every message-level group parses and resolves, those of its
+    // components included.
     let groups: usize = parsed
         .dictionary
         .messages()
-        .map(|message| {
-            message
-                .members()
-                .filter(|member| matches!(member, dictionary::Member::Group(_)))
-                .count()
-        })
+        .map(|message| count_groups(message.members()))
         .sum();
     assert_eq!(groups, 356);
 
@@ -329,6 +338,9 @@ fn parses_the_full_fix44_dictionary() {
         .map(|member| match member {
             dictionary::Member::Field { field, .. } => field.name.as_str(),
             dictionary::Member::Group(group) => panic!("unexpected group {group:?}"),
+            dictionary::Member::Component(component) => {
+                panic!("unexpected component {component:?}")
+            }
         })
         .collect();
     assert_eq!(trailer, ["SignatureLength", "Signature", "CheckSum"]);
@@ -370,4 +382,16 @@ fn links_each_fix44_data_field_to_its_length_field() {
             (622, 621),
         ]
     );
+}
+
+/// The groups in `members` and in the components among them, without the
+/// groups nested in a group.
+fn count_groups<'a>(members: impl Iterator<Item = dictionary::Member<'a>>) -> usize {
+    members
+        .map(|member| match member {
+            dictionary::Member::Field { .. } => 0,
+            dictionary::Member::Group(_) => 1,
+            dictionary::Member::Component(component) => count_groups(component.members()),
+        })
+        .sum()
 }
