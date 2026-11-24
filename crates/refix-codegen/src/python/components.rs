@@ -8,7 +8,7 @@ pub(super) fn emit_component(component: dictionary::Component<'_>, names: &Names
     format!(
         "class {}(fields.Component):\n{}",
         component.name(),
-        emit_declarations(component.members(), names, false)
+        emit_declarations(component.members(), names)
     )
 }
 

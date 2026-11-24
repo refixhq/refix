@@ -66,7 +66,7 @@ class TestReads:
         assert NewOrderSingle.MSG_TYPE == b"D"
         assert new_order.raw.get(35) == NewOrderSingle.MSG_TYPE
         assert new_order.cl_ord_id == "ORDER-1"
-        assert new_order.order_qty == 200
+        assert new_order.order_qty_data.order_qty == 200
         assert new_order.price == Decimal("101.5")
         assert new_order.settl_date == date(2026, 11, 3)
         assert new_order.maturity_month_year == MonthYear(2026, 12)
@@ -78,7 +78,7 @@ class TestReads:
     def test_an_absent_field_reads_as_none(self):
         new_order = order("35=D|11=ORDER-1|")
 
-        assert new_order.order_qty is None
+        assert new_order.order_qty_data.order_qty is None
         assert new_order.price is None
         assert new_order.settl_date is None
         assert new_order.maturity_month_year is None
@@ -90,7 +90,7 @@ class TestReads:
 
     def test_a_malformed_value_raises(self):
         with pytest.raises(InvalidValueError) as excinfo:
-            _ = order("35=D|38=12x3|").order_qty
+            _ = order("35=D|38=12x3|").order_qty_data.order_qty
 
         assert excinfo.value.tag == 38
 
@@ -196,7 +196,7 @@ class TestGroups:
             "S2",
         ]
         assert parties[1].party_sub_ids == ()
-        assert new_order.order_qty == 200
+        assert new_order.order_qty_data.order_qty == 200
 
     def test_an_absent_group_reads_as_empty(self):
         assert order("35=D|11=ORDER-1|").party_ids == ()

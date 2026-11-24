@@ -94,11 +94,7 @@ class NewOrderSingle(fields.Message):
     cl_ord_id = fields.Str(11)
     party_ids = fields.Group(453, Parties.Instance)
     instrument = fields.View(Instrument)
-    symbol = fields.Str(55)
-    security_alt_id = fields.Group(454, SecAltIDGrp.Instance)
-    security_xml_schema = fields.Str(1186)
     order_qty_data = fields.View(OrderQtyData)
-    order_qty = fields.Int(38)
     price = fields.Decimal(44)
     settl_date = fields.Date(64)
     maturity_month_year = fields.MonthYear(200)
@@ -137,9 +133,6 @@ class MassQuote(fields.Message):
 
                     quote_entry_id = fields.Str(299)
                     instrument = fields.View(Instrument)
-                    symbol = fields.Str(55)
-                    security_alt_id = fields.Group(454, SecAltIDGrp.Instance)
-                    security_xml_schema = fields.Str(1186)
 
             quote_set_id = fields.Str(302)
             quote_entries = fields.Group(295, QuoteEntries.Instance)
