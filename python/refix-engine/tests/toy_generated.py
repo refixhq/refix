@@ -43,6 +43,11 @@ class Parties:
         party_sub_ids = fields.Group(802, PtysSubGrp.Instance)
 
 
+class SecAltIDGrp:
+    class Instance(fields.GroupInstance):
+        security_alt_id = fields.Str(455)
+
+
 class Header(fields.Component):
     class Hops:
         class Instance(fields.GroupInstance):
@@ -74,6 +79,9 @@ class NewOrderSingle(fields.Message):
     trailer = fields.View(Trailer)
     cl_ord_id = fields.Str(11)
     party_ids = fields.Group(453, Parties.Instance)
+    symbol = fields.Str(55)
+    security_alt_id = fields.Group(454, SecAltIDGrp.Instance)
+    security_xml_schema = fields.Str(1186)
     order_qty = fields.Int(38)
     price = fields.Decimal(44)
     settl_date = fields.Date(64)
@@ -112,6 +120,9 @@ class MassQuote(fields.Message):
                     __qualname__ = "MassQuote.QuoteSets.QuoteEntries.Instance"
 
                     quote_entry_id = fields.Str(299)
+                    symbol = fields.Str(55)
+                    security_alt_id = fields.Group(454, SecAltIDGrp.Instance)
+                    security_xml_schema = fields.Str(1186)
 
             quote_set_id = fields.Str(302)
             quote_entries = fields.Group(295, QuoteEntries.Instance)

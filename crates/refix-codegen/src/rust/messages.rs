@@ -1,6 +1,7 @@
 use refix_dictionary::spec::Field;
 use refix_dictionary::{MemberContext, Tag, dictionary};
 
+use super::components::emit_component_accessor;
 use super::docs::{code, member_docs, plain};
 use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
@@ -58,19 +59,13 @@ fn emit_message_impl(
     for section in &envelope.sections {
         members.push(emit_view_accessor(*section, envelope));
     }
-    for member in flat::members(message.members()) {
-        match member {
-            flat::Member::Field { field, .. } => {
-                members.push(emit_accessor(field, names, Lifetime::Receiver))
-            }
-            flat::Member::Group(group) => members.push(emit_group_accessor(
-                group,
-                names,
-                Lifetime::Receiver,
-                "Self::KNOWN_TAGS",
-            )),
-        }
-    }
+    members.extend(emit_accessors(
+        message.members(),
+        names,
+        Lifetime::Receiver,
+        "Self::KNOWN_TAGS",
+        true,
+    ));
 
     format!("impl {} {{\n{}}}\n", message.name(), members.join("\n"))
 }
@@ -114,6 +109,48 @@ pub(super) enum Lifetime {
     Receiver,
     /// The wrapped scope's `'a`, as a group instance borrows its bytes.
     Scope,
+}
+
+/// The accessors of a message, group instance or view.
+///
+/// Groups are walked with `known_tags`. A component with fields is reached
+/// through its view. With `inline`, its fields and groups are read by
+/// whatever includes it as well.
+pub(super) fn emit_accessors<'a>(
+    members: impl Iterator<Item = dictionary::Member<'a>>,
+    names: &Names,
+    lifetime: Lifetime,
+    known_tags: &str,
+    inline: bool,
+) -> Vec<String> {
+    let mut accessors = Vec::new();
+    for member in members {
+        match member {
+            dictionary::Member::Field { field, .. } => {
+                accessors.push(emit_accessor(field, names, lifetime));
+            }
+            dictionary::Member::Group(group) => {
+                accessors.push(emit_group_accessor(group, names, lifetime, known_tags));
+            }
+            dictionary::Member::Component(component) => {
+                accessors.push(emit_component_accessor(
+                    component, names, lifetime, known_tags,
+                ));
+                if !inline {
+                    continue;
+                }
+                for member in flat::members(component.members()) {
+                    accessors.push(match member {
+                        flat::Member::Field { field } => emit_accessor(field, names, lifetime),
+                        flat::Member::Group(group) => {
+                            emit_group_accessor(group, names, lifetime, known_tags)
+                        }
+                    });
+                }
+            }
+        }
+    }
+    accessors
 }
 
 pub(super) fn emit_accessor(field: &Field, names: &Names, lifetime: Lifetime) -> String {

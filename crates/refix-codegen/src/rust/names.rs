@@ -5,10 +5,11 @@ use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
 use super::Error;
 use super::naming::{
-    group_accessor_name, group_module_name, message_module_name, method_name, numbered_variant,
-    variant_name,
+    component_accessor_name, group_accessor_name, group_module_name, message_module_name,
+    method_name, numbered_variant, variant_name,
 };
 use crate::Warning;
+use crate::components::components;
 use crate::conversion::Conversion;
 use crate::envelope::Section;
 use crate::flat;
@@ -66,12 +67,16 @@ const MESSAGE: &[&str] = &[
 /// The methods every group instance and header or trailer view defines.
 const INSTANCE: &[&str] = &["raw"];
 
+/// The constant and method every component's view defines.
+const COMPONENT: &[&str] = &["TAGS", "raw"];
+
 /// Every name the generated Rust uses, settled before anything is emitted.
 pub(super) struct Names {
     enums: HashMap<Tag, EnumNames>,
     accessors: HashMap<Tag, String>,
     group_modules: HashMap<MemberContext, String>,
     group_accessors: HashMap<MemberContext, String>,
+    component_accessors: HashMap<String, String>,
     message_modules: HashMap<String, String>,
 }
 
@@ -91,6 +96,7 @@ impl Names {
             accessors: HashMap::new(),
             group_modules: HashMap::new(),
             group_accessors: HashMap::new(),
+            component_accessors: HashMap::new(),
             message_modules: HashMap::new(),
         };
         let mut root = Namespace::with_generated(ROOT);
@@ -109,6 +115,13 @@ impl Names {
                 names.group_modules.insert(instance_context(group), name);
             }
         }
+        for component in components(dictionary) {
+            let name = component.name();
+            root.claim(name, Owner::Component(name.to_owned()))?;
+            names
+                .component_accessors
+                .insert(name.to_owned(), component_accessor_name(name)?);
+        }
         for section in [Section::Header, Section::Trailer] {
             names.name_section(section, dictionary)?;
         }
@@ -122,15 +135,16 @@ impl Names {
             }
         }
         for message in dictionary.messages() {
-            names.name_accessors(
-                flat::members(message.members()),
-                Namespace::with_generated(MESSAGE),
-            )?;
+            names.name_accessors(message.members(), Namespace::with_generated(MESSAGE), true)?;
         }
         for group in declared_groups(dictionary) {
+            names.name_accessors(group.members(), Namespace::with_generated(INSTANCE), true)?;
+        }
+        for component in components(dictionary) {
             names.name_accessors(
-                flat::members(group.members()),
-                Namespace::with_generated(INSTANCE),
+                component.members(),
+                Namespace::with_generated(COMPONENT),
+                false,
             )?;
         }
         Ok(names)
@@ -217,7 +231,11 @@ impl Names {
                 self.group_modules.insert(instance_context(*group), name);
             }
         }
-        self.name_accessors(members.into_iter(), Namespace::with_generated(INSTANCE))
+        self.name_accessors(
+            section.listed(dictionary).into_iter(),
+            Namespace::with_generated(INSTANCE),
+            true,
+        )
     }
 
     fn name_enum(
@@ -250,26 +268,61 @@ impl Names {
         Ok(())
     }
 
-    /// Names the accessors of a message or group instance.
+    /// Names the accessors of a message, group instance or view.
+    ///
+    /// With `inline`, the fields and groups of a component are read by
+    /// whatever includes it as well as through its view.
     fn name_accessors<'a>(
         &mut self,
-        members: impl Iterator<Item = flat::Member<'a>>,
+        members: impl Iterator<Item = dictionary::Member<'a>>,
         mut namespace: Namespace,
+        inline: bool,
     ) -> Result<(), Error> {
         for member in members {
             match member {
-                flat::Member::Field { field, .. } => {
-                    let name = method_name(field)?;
-                    namespace.claim(&name, Owner::Field(field.name.clone()))?;
-                    self.accessors.insert(field.tag, name);
+                dictionary::Member::Field { field, .. } => {
+                    self.name_accessor(field, &mut namespace)?;
                 }
-                flat::Member::Group(group) => {
-                    let name = group_accessor_name(group)?;
-                    namespace.claim(&name, Owner::Group(instance_context(group)))?;
-                    self.group_accessors.insert(instance_context(group), name);
+                dictionary::Member::Group(group) => {
+                    self.name_group_accessor(group, &mut namespace)?;
+                }
+                dictionary::Member::Component(component) => {
+                    let name = &self.component_accessors[component.name()];
+                    namespace.claim(name, Owner::Component(component.name().to_owned()))?;
+                    if !inline {
+                        continue;
+                    }
+                    for member in flat::members(component.members()) {
+                        match member {
+                            flat::Member::Field { field } => {
+                                self.name_accessor(field, &mut namespace)?;
+                            }
+                            flat::Member::Group(group) => {
+                                self.name_group_accessor(group, &mut namespace)?;
+                            }
+                        }
+                    }
                 }
             }
         }
+        Ok(())
+    }
+
+    fn name_accessor(&mut self, field: &Field, namespace: &mut Namespace) -> Result<(), Error> {
+        let name = method_name(field)?;
+        namespace.claim(&name, Owner::Field(field.name.clone()))?;
+        self.accessors.insert(field.tag, name);
+        Ok(())
+    }
+
+    fn name_group_accessor(
+        &mut self,
+        group: dictionary::Group<'_>,
+        namespace: &mut Namespace,
+    ) -> Result<(), Error> {
+        let name = group_accessor_name(group)?;
+        namespace.claim(&name, Owner::Group(instance_context(group)))?;
+        self.group_accessors.insert(instance_context(group), name);
         Ok(())
     }
 
@@ -296,6 +349,11 @@ impl Names {
     /// The method reading a group's instances.
     pub(super) fn group_accessor(&self, group: dictionary::Group<'_>) -> &str {
         &self.group_accessors[&instance_context(group)]
+    }
+
+    /// The method returning a component's view.
+    pub(super) fn component_accessor(&self, component: dictionary::Component<'_>) -> &str {
+        &self.component_accessors[component.name()]
     }
 
     /// The module holding the groups a message declares itself.
@@ -326,6 +384,7 @@ impl Names {
 #[cfg(test)]
 mod tests {
     use super::Names;
+    use crate::components::components;
     use crate::groups::declared_groups;
     use crate::rust::Error;
     use crate::test_utils::message_with;
@@ -588,6 +647,118 @@ mod tests {
                     MemberContext::Component("Parties".to_owned()).group("NoPartyIDs")
                 ),
             }
+        );
+    }
+
+    /// A dictionary whose `component` holds `Symbol`.
+    fn with_component(
+        component: &str,
+        messages: Vec<Message>,
+        mut fields: Vec<Field>,
+    ) -> Dictionary {
+        fields.push(field("Symbol", 55, DataType::String));
+        Spec {
+            version: Version {
+                protocol: Protocol::Fix,
+                major: 4,
+                minor: 4,
+                service_pack: 0,
+            },
+            header: vec![],
+            trailer: vec![],
+            messages,
+            fields,
+            components: vec![Component {
+                name: component.to_owned(),
+                members: vec![field_ref(55)],
+            }],
+        }
+        .resolve()
+        .unwrap()
+        .dictionary
+    }
+
+    fn component_ref(name: &str) -> Member {
+        Member::Component(ComponentRef {
+            name: name.to_owned(),
+            is_required: false,
+        })
+    }
+
+    fn order_with(members: Vec<Member>) -> Vec<Message> {
+        vec![message("NewOrderSingle", "D", members)]
+    }
+
+    #[test]
+    fn a_view_accessor_is_the_component_in_snake_case() {
+        let messages = order_with(vec![component_ref("OrderQtyData")]);
+        let dictionary = with_component("OrderQtyData", messages, vec![]);
+        let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
+        let order_qty_data = components(&dictionary)[0];
+
+        assert_eq!(names.component_accessor(order_qty_data), "order_qty_data");
+    }
+
+    #[test]
+    fn a_view_accessor_named_like_a_field_accessor_clashes() {
+        let messages = order_with(vec![field_ref(9000), component_ref("Instrument")]);
+        let dictionary = with_component(
+            "Instrument",
+            messages,
+            vec![field("Instrument", 9000, DataType::String)],
+        );
+
+        assert_eq!(
+            clash_in(&dictionary),
+            NameClash {
+                name: "instrument".to_owned(),
+                first: Owner::Field("Instrument".to_owned()),
+                second: Owner::Component("Instrument".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_component_named_like_a_message_clashes() {
+        let messages = vec![message("Quote", "S", vec![component_ref("Quote")])];
+        let dictionary = with_component("Quote", messages, vec![]);
+
+        assert_eq!(
+            clash_in(&dictionary),
+            NameClash {
+                name: "Quote".to_owned(),
+                first: Owner::Message("Quote".to_owned()),
+                second: Owner::Component("Quote".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn an_enum_named_like_a_component_yields() {
+        let messages = order_with(vec![component_ref("Instrument")]);
+        let dictionary = with_component(
+            "Instrument",
+            messages,
+            vec![with_values(
+                field("Instrument", 9000, DataType::Char),
+                &[("1", "FIRST")],
+            )],
+        );
+        let mut warnings = Vec::new();
+
+        let names = Names::new(&dictionary, &mut warnings).unwrap();
+
+        assert_eq!(names.enum_type(&dictionary.fields()[0]), "InstrumentEnum");
+        assert_eq!(
+            warnings,
+            vec![Warning::Renamed {
+                clash: Box::new(NameClash {
+                    name: "Instrument".to_owned(),
+                    first: Owner::Component("Instrument".to_owned()),
+                    second: Owner::Enum("Instrument".to_owned()),
+                }),
+                name: "InstrumentEnum".to_owned(),
+            }]
         );
     }
 

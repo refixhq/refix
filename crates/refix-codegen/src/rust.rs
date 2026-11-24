@@ -1,3 +1,4 @@
+mod components;
 mod dialect;
 mod dispatch;
 mod docs;
@@ -13,9 +14,11 @@ mod views;
 use refix_dictionary::Dictionary;
 
 use crate::Generated;
+use crate::components::components;
 use crate::conversion::{Conversion, unclaimed_types, uses};
 use crate::envelope::Envelope;
 use crate::flat;
+use components::emit_component;
 use dialect::emit_dialect;
 use dispatch::emit_dispatch;
 use enums::emit_enum;
@@ -47,6 +50,10 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .into_iter()
         .map(|group| emit_group_module(group, &names))
         .collect();
+    let components: Vec<String> = components(dictionary)
+        .into_iter()
+        .map(|component| emit_component(component, &names))
+        .collect();
     let views: Vec<String> = envelope
         .sections
         .iter()
@@ -59,6 +66,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
     let sections = std::iter::once(emit_dialect(dictionary))
         .chain(enums)
         .chain(groups)
+        .chain(components)
         .chain(views)
         .chain(messages)
         .chain(emit_dispatch(dictionary))

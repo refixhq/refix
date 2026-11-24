@@ -183,6 +183,118 @@ pub mod ptys_sub_grp {
     }
 }
 
+pub mod sec_alt_id_grp {
+    use super::*;
+
+    pub const TABLE: GroupTable<'static> = GroupTable::new(Tag(454), Tag(455), &[Tag(455)], &[]);
+
+    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(455)]);
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Instance<'a>(refix_message::Scope<'a>);
+
+    impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {
+        fn from(scope: refix_message::Scope<'a>) -> Self {
+            Self(scope)
+        }
+    }
+
+    impl<'a> Instance<'a> {
+        pub fn raw(&self) -> refix_message::Scope<'a> {
+            self.0
+        }
+
+        /// The `SecurityAltID` (455) field.
+        #[doc(alias = "SecurityAltID")]
+        pub fn security_alt_id(&self) -> Result<Option<&'a str>, InvalidValue> {
+            self.0.get_str(Tag(455))
+        }
+    }
+}
+
+/// The fields of the `Instrument` component.
+#[derive(Clone, Copy)]
+pub struct Instrument<'a>(refix_message::Scope<'a>, KnownTags<'static>);
+
+impl<'a> Instrument<'a> {
+    const TAGS: KnownTags<'static> = KnownTags::new(&[Tag(55), Tag(454), Tag(455), Tag(1186)]);
+
+    pub fn raw(&self) -> refix_message::Scope<'a> {
+        self.0
+    }
+
+    /// The `Symbol` (55) field.
+    #[doc(alias = "Symbol")]
+    pub fn symbol(&self) -> Result<Option<&'a str>, InvalidValue> {
+        self.0.get_str(Tag(55))
+    }
+
+    /// The instances of the `NoSecurityAltID` (454) group.
+    #[doc(alias = "NoSecurityAltID")]
+    pub fn security_alt_id(&self) -> Result<Instances<'a, sec_alt_id_grp::Instance<'a>>, InvalidValue> {
+        self.0.get_group(&sec_alt_id_grp::TABLE, &self.1).map(Instances::from)
+    }
+
+    /// The `SecurityXML` component.
+    pub fn security_xml(&self) -> SecurityXML<'a> {
+        SecurityXML(self.0)
+    }
+}
+
+impl std::fmt::Debug for Instrument<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Instrument({})", self.0.display_known(&Self::TAGS))
+    }
+}
+
+/// The fields of the `SecurityXML` component.
+#[derive(Clone, Copy)]
+pub struct SecurityXML<'a>(refix_message::Scope<'a>);
+
+impl<'a> SecurityXML<'a> {
+    const TAGS: KnownTags<'static> = KnownTags::new(&[Tag(1186)]);
+
+    pub fn raw(&self) -> refix_message::Scope<'a> {
+        self.0
+    }
+
+    /// The `SecurityXMLSchema` (1186) field.
+    #[doc(alias = "SecurityXMLSchema")]
+    pub fn security_xml_schema(&self) -> Result<Option<&'a str>, InvalidValue> {
+        self.0.get_str(Tag(1186))
+    }
+}
+
+impl std::fmt::Debug for SecurityXML<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SecurityXML({})", self.0.display_known(&Self::TAGS))
+    }
+}
+
+/// The fields of the `OrderQtyData` component.
+#[derive(Clone, Copy)]
+pub struct OrderQtyData<'a>(refix_message::Scope<'a>);
+
+impl<'a> OrderQtyData<'a> {
+    const TAGS: KnownTags<'static> = KnownTags::new(&[Tag(38)]);
+
+    pub fn raw(&self) -> refix_message::Scope<'a> {
+        self.0
+    }
+
+    /// The `OrderQty` (38) field.
+    #[doc(alias = "OrderQty")]
+    pub fn order_qty(&self) -> Result<Option<i64>, InvalidValue> {
+        self.0.get_int(Tag(38))
+    }
+}
+
+impl std::fmt::Debug for OrderQtyData<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OrderQtyData({})", self.0.display_known(&Self::TAGS))
+    }
+}
+
 /// The header fields of a message.
 #[derive(Clone, Copy, Debug)]
 pub struct Header<'a>(refix_message::Scope<'a>, KnownTags<'static>);
@@ -330,8 +442,9 @@ impl NewOrderSingle {
 
     pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
         Tag(8), Tag(9), Tag(10), Tag(11), Tag(18), Tag(34), Tag(35), Tag(38), Tag(40), Tag(44),
-        Tag(49), Tag(52), Tag(56), Tag(64), Tag(89), Tag(93), Tag(114), Tag(200), Tag(273),
-        Tag(448), Tag(452), Tag(453), Tag(523), Tag(627), Tag(628), Tag(802), Tag(1035),
+        Tag(49), Tag(52), Tag(55), Tag(56), Tag(64), Tag(89), Tag(93), Tag(114), Tag(200), Tag(273),
+        Tag(448), Tag(452), Tag(453), Tag(454), Tag(455), Tag(523), Tag(627), Tag(628), Tag(802),
+        Tag(1035), Tag(1186),
     ]);
 
     pub fn from_raw(raw: RawMessage) -> Self {
@@ -360,6 +473,34 @@ impl NewOrderSingle {
     #[doc(alias = "NoPartyIDs")]
     pub fn party_ids(&self) -> Result<Instances<'_, parties::Instance<'_>>, InvalidValue> {
         self.0.get_group(&parties::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
+    }
+
+    /// The `Instrument` component.
+    pub fn instrument(&self) -> Instrument<'_> {
+        Instrument(self.0.scope(), Self::KNOWN_TAGS)
+    }
+
+    /// The `Symbol` (55) field.
+    #[doc(alias = "Symbol")]
+    pub fn symbol(&self) -> Result<Option<&str>, InvalidValue> {
+        self.0.get_str(Tag(55))
+    }
+
+    /// The instances of the `NoSecurityAltID` (454) group.
+    #[doc(alias = "NoSecurityAltID")]
+    pub fn security_alt_id(&self) -> Result<Instances<'_, sec_alt_id_grp::Instance<'_>>, InvalidValue> {
+        self.0.get_group(&sec_alt_id_grp::TABLE, &Self::KNOWN_TAGS).map(Instances::from)
+    }
+
+    /// The `SecurityXMLSchema` (1186) field.
+    #[doc(alias = "SecurityXMLSchema")]
+    pub fn security_xml_schema(&self) -> Result<Option<&str>, InvalidValue> {
+        self.0.get_str(Tag(1186))
+    }
+
+    /// The `OrderQtyData` component.
+    pub fn order_qty_data(&self) -> OrderQtyData<'_> {
+        OrderQtyData(self.0.scope())
     }
 
     /// The `OrderQty` (38) field.
@@ -518,8 +659,9 @@ impl MassQuote {
     pub const MSG_TYPE: &[u8] = b"i";
 
     pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
-        Tag(8), Tag(9), Tag(10), Tag(34), Tag(35), Tag(49), Tag(52), Tag(56), Tag(89), Tag(93),
-        Tag(117), Tag(295), Tag(296), Tag(299), Tag(302), Tag(627), Tag(628),
+        Tag(8), Tag(9), Tag(10), Tag(34), Tag(35), Tag(49), Tag(52), Tag(55), Tag(56), Tag(89),
+        Tag(93), Tag(117), Tag(295), Tag(296), Tag(299), Tag(302), Tag(454), Tag(455), Tag(627),
+        Tag(628), Tag(1186),
     ]);
 
     pub fn from_raw(raw: RawMessage) -> Self {
@@ -574,7 +716,9 @@ pub mod mass_quote {
             &[mass_quote::quote_sets::quote_entries::TABLE],
         );
 
-        pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(295), Tag(299), Tag(302)]);
+        pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
+            Tag(55), Tag(295), Tag(299), Tag(302), Tag(454), Tag(455), Tag(1186),
+        ]);
 
         #[derive(Clone, Copy, Debug)]
         pub struct Instance<'a>(refix_message::Scope<'a>);
@@ -609,11 +753,13 @@ pub mod mass_quote {
             pub const TABLE: GroupTable<'static> = GroupTable::new(
                 Tag(295),
                 Tag(299),
-                &[Tag(299)],
-                &[],
+                &[Tag(55), Tag(299), Tag(454), Tag(1186)],
+                &[sec_alt_id_grp::TABLE],
             );
 
-            pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[Tag(299)]);
+            pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
+                Tag(55), Tag(299), Tag(454), Tag(455), Tag(1186),
+            ]);
 
             #[derive(Clone, Copy, Debug)]
             pub struct Instance<'a>(refix_message::Scope<'a>);
@@ -633,6 +779,29 @@ pub mod mass_quote {
                 #[doc(alias = "QuoteEntryID")]
                 pub fn quote_entry_id(&self) -> Result<Option<&'a str>, InvalidValue> {
                     self.0.get_str(Tag(299))
+                }
+
+                /// The `Instrument` component.
+                pub fn instrument(&self) -> Instrument<'a> {
+                    Instrument(self.0, KNOWN_TAGS)
+                }
+
+                /// The `Symbol` (55) field.
+                #[doc(alias = "Symbol")]
+                pub fn symbol(&self) -> Result<Option<&'a str>, InvalidValue> {
+                    self.0.get_str(Tag(55))
+                }
+
+                /// The instances of the `NoSecurityAltID` (454) group.
+                #[doc(alias = "NoSecurityAltID")]
+                pub fn security_alt_id(&self) -> Result<Instances<'a, sec_alt_id_grp::Instance<'a>>, InvalidValue> {
+                    self.0.get_group(&sec_alt_id_grp::TABLE, &KNOWN_TAGS).map(Instances::from)
+                }
+
+                /// The `SecurityXMLSchema` (1186) field.
+                #[doc(alias = "SecurityXMLSchema")]
+                pub fn security_xml_schema(&self) -> Result<Option<&'a str>, InvalidValue> {
+                    self.0.get_str(Tag(1186))
                 }
             }
         }

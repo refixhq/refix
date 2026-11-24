@@ -1,4 +1,4 @@
-use refix_dictionary::{Dictionary, MemberContext, Tag};
+use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
 use crate::flat;
 use crate::groups::known_tags;
@@ -38,9 +38,14 @@ impl Section {
 
     /// The section's members, components expanded in place.
     pub(crate) fn members(self, dictionary: &Dictionary) -> Vec<flat::Member<'_>> {
+        flat::members(self.listed(dictionary).into_iter()).collect()
+    }
+
+    /// The section's members as the dictionary lists them.
+    pub(crate) fn listed(self, dictionary: &Dictionary) -> Vec<dictionary::Member<'_>> {
         match self {
-            Section::Header => flat::members(dictionary.header()).collect(),
-            Section::Trailer => flat::members(dictionary.trailer()).collect(),
+            Section::Header => dictionary.header().collect(),
+            Section::Trailer => dictionary.trailer().collect(),
         }
     }
 }

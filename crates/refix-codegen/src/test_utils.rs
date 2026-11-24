@@ -3,7 +3,7 @@ use refix_dictionary::spec::{
     Category, Component, ComponentRef, DataType, Field, FieldRef, Group, Member, Message, Protocol,
     Spec, Version,
 };
-use refix_dictionary::{Dictionary, Tag, dictionary};
+use refix_dictionary::{Dictionary, Tag, dictionary, quickfix};
 
 /// A dictionary whose one message, `NewOrderSingle`, holds each of `fields`.
 pub fn message_with(fields: Vec<Field>) -> Dictionary {
@@ -37,6 +37,50 @@ pub fn message_with(fields: Vec<Field>) -> Dictionary {
     .resolve()
     .unwrap()
     .dictionary
+}
+
+/// A dictionary whose one message, `NewOrderSingle`, includes `Instrument`
+/// and `OrderQtyData`. `Instrument` holds a field, a group through
+/// `SecAltIDGrp` and the fields of `SecurityXML`.
+pub fn instrument_dictionary() -> Dictionary {
+    let xml = r#"<fix type="FIX" major="4" minor="4" servicepack="0">
+  <header/>
+  <messages>
+    <message name="NewOrderSingle" msgtype="D" msgcat="app">
+      <field name="ClOrdID" required="Y"/>
+      <component name="Instrument" required="Y"/>
+      <component name="OrderQtyData" required="N"/>
+    </message>
+  </messages>
+  <trailer/>
+  <components>
+    <component name="Instrument">
+      <field name="Symbol" required="Y"/>
+      <component name="SecAltIDGrp" required="N"/>
+      <component name="SecurityXML" required="N"/>
+    </component>
+    <component name="SecAltIDGrp">
+      <group name="NoSecurityAltID" required="N">
+        <field name="SecurityAltID" required="N"/>
+      </group>
+    </component>
+    <component name="SecurityXML">
+      <field name="SecurityXMLSchema" required="N"/>
+    </component>
+    <component name="OrderQtyData">
+      <field name="OrderQty" required="N"/>
+    </component>
+  </components>
+  <fields>
+    <field number="11" name="ClOrdID" type="STRING"/>
+    <field number="55" name="Symbol" type="STRING"/>
+    <field number="454" name="NoSecurityAltID" type="NUMINGROUP"/>
+    <field number="455" name="SecurityAltID" type="STRING"/>
+    <field number="1186" name="SecurityXMLSchema" type="STRING"/>
+    <field number="38" name="OrderQty" type="INT"/>
+  </fields>
+</fix>"#;
+    quickfix::parse(xml).unwrap().dictionary
 }
 
 /// Runs `read` on a group counted by `count_field`, declared inline in a
