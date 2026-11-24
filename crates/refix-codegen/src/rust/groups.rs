@@ -4,6 +4,7 @@ use super::docs::{code, member_docs};
 use super::layout::{MAX_WIDTH, indent, slice};
 use super::messages::{Lifetime, emit_accessor};
 use super::names::Names;
+use crate::flat;
 use crate::groups::{known_tags, member_tags};
 
 /// The groups declared in components, each once, in order of first
@@ -13,21 +14,21 @@ use crate::groups::{known_tags, member_tags};
 pub(super) fn shared_groups(dictionary: &Dictionary) -> Vec<dictionary::Group<'_>> {
     let mut groups = Vec::new();
     let mut seen = Vec::new();
-    collect_groups(dictionary.header(), &mut groups, &mut seen);
+    collect_groups(flat::members(dictionary.header()), &mut groups, &mut seen);
     for message in dictionary.messages() {
-        collect_groups(message.members(), &mut groups, &mut seen);
+        collect_groups(flat::members(message.members()), &mut groups, &mut seen);
     }
-    collect_groups(dictionary.trailer(), &mut groups, &mut seen);
+    collect_groups(flat::members(dictionary.trailer()), &mut groups, &mut seen);
     groups
 }
 
 fn collect_groups<'a>(
-    members: impl Iterator<Item = dictionary::Member<'a>>,
+    members: impl Iterator<Item = flat::Member<'a>>,
     groups: &mut Vec<dictionary::Group<'a>>,
     seen: &mut Vec<MemberContext>,
 ) {
     for member in members {
-        let dictionary::Member::Group(group) = member else {
+        let flat::Member::Group(group) = member else {
             continue;
         };
         let context = group.declared_in().group(&group.count_field().name);
@@ -38,7 +39,7 @@ fn collect_groups<'a>(
         if matches!(group.declared_in(), MemberContext::Component(_)) {
             groups.push(group);
         }
-        collect_groups(group.members(), groups, seen);
+        collect_groups(flat::members(group.members()), groups, seen);
     }
 }
 
@@ -50,13 +51,13 @@ pub(super) fn emit_group_module(group: dictionary::Group<'_>, names: &Names) -> 
     let mut items = vec![
         format!("use {}*;\n", "super::".repeat(depth)),
         emit_table(group, names, width),
-        emit_known_tags(&known_tags(group.members()), width),
+        emit_known_tags(&known_tags(flat::members(group.members())), width),
         "#[derive(Clone, Copy, Debug)]\npub struct Instance<'a>(refix_message::Scope<'a>);\n".to_owned(),
         "impl<'a> From<refix_message::Scope<'a>> for Instance<'a> {\n    fn from(scope: refix_message::Scope<'a>) -> Self {\n        Self(scope)\n    }\n}\n".to_owned(),
         emit_instance_impl(group, names),
     ];
-    for member in group.members() {
-        if let dictionary::Member::Group(nested) = member
+    for member in flat::members(group.members()) {
+        if let flat::Member::Group(nested) = member
             && matches!(nested.declared_in(), MemberContext::Group { .. })
         {
             items.push(emit_group_module(nested, names));
@@ -73,12 +74,12 @@ fn emit_instance_impl(group: dictionary::Group<'_>, names: &Names) -> String {
     let mut members = vec![
         "    pub fn raw(&self) -> refix_message::Scope<'a> {\n        self.0\n    }\n".to_owned(),
     ];
-    for member in group.members() {
+    for member in flat::members(group.members()) {
         match member {
-            dictionary::Member::Field { field, .. } => {
+            flat::Member::Field { field, .. } => {
                 members.push(emit_accessor(field, names, Lifetime::Scope))
             }
-            dictionary::Member::Group(nested) => members.push(emit_group_accessor(
+            flat::Member::Group(nested) => members.push(emit_group_accessor(
                 nested,
                 names,
                 Lifetime::Scope,
@@ -142,11 +143,10 @@ fn table_arguments(
     group: dictionary::Group<'_>,
     names: &Names,
 ) -> (Tag, Tag, Vec<String>, Vec<String>) {
-    let nested = group
-        .members()
+    let nested = flat::members(group.members())
         .filter_map(|member| match member {
-            dictionary::Member::Group(child) => Some(format!("{}::TABLE", names.group_path(child))),
-            dictionary::Member::Field { .. } => None,
+            flat::Member::Group(child) => Some(format!("{}::TABLE", names.group_path(child))),
+            flat::Member::Field { .. } => None,
         })
         .collect();
     let members = member_tags(group)

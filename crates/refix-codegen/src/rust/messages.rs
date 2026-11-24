@@ -8,6 +8,7 @@ use super::names::Names;
 use super::views::emit_view_accessor;
 use crate::conversion::Conversion;
 use crate::envelope::Envelope;
+use crate::flat;
 use crate::groups::message_known_tags;
 
 /// A message's struct, impl and group module. Its known tags include the
@@ -57,12 +58,12 @@ fn emit_message_impl(
     for section in &envelope.sections {
         members.push(emit_view_accessor(*section, envelope));
     }
-    for member in message.members() {
+    for member in flat::members(message.members()) {
         match member {
-            dictionary::Member::Field { field, .. } => {
+            flat::Member::Field { field, .. } => {
                 members.push(emit_accessor(field, names, Lifetime::Receiver))
             }
-            dictionary::Member::Group(group) => members.push(emit_group_accessor(
+            flat::Member::Group(group) => members.push(emit_group_accessor(
                 group,
                 names,
                 Lifetime::Receiver,
@@ -86,10 +87,9 @@ fn emit_message_printing(message: dictionary::Message<'_>) -> String {
 /// The module holding the groups declared directly in a message, if it
 /// declares any.
 fn emit_message_module(message: dictionary::Message<'_>, names: &Names) -> Option<String> {
-    let modules: Vec<String> = message
-        .members()
+    let modules: Vec<String> = flat::members(message.members())
         .filter_map(|member| match member {
-            dictionary::Member::Group(group)
+            flat::Member::Group(group)
                 if matches!(group.declared_in(), MemberContext::Message(_)) =>
             {
                 Some(emit_group_module(group, names))

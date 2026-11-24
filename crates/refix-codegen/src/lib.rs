@@ -4,6 +4,7 @@ mod case_converter;
 mod conversion;
 mod dialect;
 mod envelope;
+mod flat;
 mod generated;
 mod groups;
 mod literal;

@@ -1,6 +1,6 @@
 use super::{
-    ComponentIndex, Dictionary, Error, FieldIndex, Resolved, ResolvedGroup, ResolvedMember,
-    ResolvedMessage, Warning,
+    ComponentIndex, Dictionary, Error, FieldIndex, Resolved, ResolvedComponent, ResolvedGroup,
+    ResolvedMember, ResolvedMessage, Warning,
 };
 use crate::spec::{self, DataType, Field, Spec};
 use crate::{MemberContext, Tag};
@@ -69,7 +69,7 @@ impl<'a> Resolver<'a> {
         })
     }
 
-    /// Expands every component definition into its flat member list, with
+    /// Resolves every component definition into its member list, with
     /// requiredness relative to the component itself.
     fn expand_components(&mut self) -> Result<(), Error> {
         for index in (0..self.spec.components.len()).map(ComponentIndex) {
@@ -119,8 +119,10 @@ impl<'a> Resolver<'a> {
         Ok(ResolvedMessage { members })
     }
 
-    /// Resolves one member list, expanding component references in
-    /// place, and drops every tag it lists twice.
+    /// Resolves one member list and drops every tag it lists twice.
+    ///
+    /// A component that carries fields stays one member. The groups of a
+    /// component made up of groups alone are spliced in.
     ///
     /// In a group instance a component in first position becomes required,
     /// so that the field every instance starts with is present.
@@ -149,7 +151,15 @@ impl<'a> Resolver<'a> {
                         .as_ref()
                         .expect("the call above expands the child");
                     let is_required = component_ref.is_required || (is_instance && position == 0);
-                    extend_with_expansion(&mut resolved, expansion, is_required);
+                    if expansion.iter().any(ResolvedMember::carries_fields) {
+                        resolved.push(ResolvedMember::Component(ResolvedComponent {
+                            name: component_ref.name.clone(),
+                            is_required,
+                            members: expansion.clone(),
+                        }));
+                    } else {
+                        extend_with_expansion(&mut resolved, expansion, is_required);
+                    }
                 }
                 spec::Member::Group(group) => {
                     resolved.push(ResolvedMember::Group(self.resolve_group(group, context)?));
@@ -172,6 +182,13 @@ impl<'a> Resolver<'a> {
         let spec = self.spec;
         let mut kept = Vec::with_capacity(members.len());
         for mut member in members.drain(..) {
+            if let ResolvedMember::Component(component) = &mut member {
+                self.drop_repeated_tags(&mut component.members, context, seen)?;
+                if !component.members.is_empty() {
+                    kept.push(member);
+                }
+                continue;
+            }
             let tag = spec.fields.as_slice()[member.first_field()].tag;
             match seen.entry(tag) {
                 Entry::Occupied(first) => self.warnings.push(Warning::DuplicateField {
@@ -255,7 +272,13 @@ impl ResolvedMember {
         match self {
             ResolvedMember::Field { field_index, .. } => *field_index,
             ResolvedMember::Group(group) => group.count_field_index,
+            ResolvedMember::Component(component) => component.members[0].first_field(),
         }
+    }
+
+    /// Whether this is a field or a component that carries fields.
+    fn carries_fields(&self) -> bool {
+        !matches!(self, ResolvedMember::Group(_))
     }
 
     /// Makes this member required in its scope.
@@ -263,6 +286,10 @@ impl ResolvedMember {
         match self {
             ResolvedMember::Field { is_required, .. } => *is_required = true,
             ResolvedMember::Group(group) => group.is_required = true,
+            ResolvedMember::Component(component) => {
+                component.is_required = true;
+                component.members[0].require();
+            }
         }
     }
 
@@ -273,6 +300,7 @@ impl ResolvedMember {
                 is_required: own, ..
             } => *own &= is_required,
             ResolvedMember::Group(group) => group.is_required &= is_required,
+            ResolvedMember::Component(component) => component.is_required &= is_required,
         }
     }
 }

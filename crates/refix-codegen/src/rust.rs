@@ -10,11 +10,12 @@ mod names;
 mod naming;
 mod views;
 
-use refix_dictionary::{Dictionary, dictionary};
+use refix_dictionary::Dictionary;
 
 use crate::Generated;
 use crate::conversion::{Conversion, unclaimed_types, uses};
 use crate::envelope::Envelope;
+use crate::flat;
 use dialect::emit_dialect;
 use dispatch::emit_dispatch;
 use enums::emit_enum;
@@ -65,9 +66,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .join("\n");
     let has_groups = !envelope.with_groups.is_empty()
         || dictionary.messages().any(|message| {
-            message
-                .members()
-                .any(|member| matches!(member, dictionary::Member::Group(_)))
+            flat::members(message.members()).any(|member| matches!(member, flat::Member::Group(_)))
         });
     let mut imports = vec!["Dialect", "InvalidValue", "KnownTags", "RawMessage", "Tag"];
     if has_groups {

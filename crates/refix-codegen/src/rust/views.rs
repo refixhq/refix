@@ -1,10 +1,11 @@
-use refix_dictionary::{Dictionary, dictionary};
+use refix_dictionary::Dictionary;
 
 use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::messages::{Lifetime, emit_accessor};
 use super::names::Names;
 use crate::envelope::{Envelope, Section};
+use crate::flat;
 
 /// A section's view, and the module of the groups the section declares
 /// itself.
@@ -39,10 +40,10 @@ pub(super) fn emit_view(
     );
     for member in &members {
         match member {
-            dictionary::Member::Field { field, .. } => {
+            flat::Member::Field { field, .. } => {
                 methods.push(emit_accessor(field, names, Lifetime::Scope));
             }
-            dictionary::Member::Group(group) => {
+            flat::Member::Group(group) => {
                 methods.push(emit_group_accessor(
                     *group,
                     names,
@@ -66,7 +67,7 @@ pub(super) fn emit_view(
     let modules: Vec<String> = members
         .iter()
         .filter_map(|member| match member {
-            dictionary::Member::Group(group) if *group.declared_in() == section.context() => {
+            flat::Member::Group(group) if *group.declared_in() == section.context() => {
                 Some(emit_group_module(*group, names))
             }
             _ => None,

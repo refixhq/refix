@@ -1,5 +1,6 @@
-use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
+use refix_dictionary::{Dictionary, MemberContext, Tag};
 
+use crate::flat;
 use crate::groups::known_tags;
 
 /// The header or the trailer, each read through a view of its own.
@@ -36,10 +37,10 @@ impl Section {
     }
 
     /// The section's members, components expanded in place.
-    pub(crate) fn members(self, dictionary: &Dictionary) -> Vec<dictionary::Member<'_>> {
+    pub(crate) fn members(self, dictionary: &Dictionary) -> Vec<flat::Member<'_>> {
         match self {
-            Section::Header => dictionary.header().collect(),
-            Section::Trailer => dictionary.trailer().collect(),
+            Section::Header => flat::members(dictionary.header()).collect(),
+            Section::Trailer => flat::members(dictionary.trailer()).collect(),
         }
     }
 }
@@ -66,7 +67,7 @@ impl Envelope {
             sections.push(section);
             if members
                 .iter()
-                .any(|member| matches!(member, dictionary::Member::Group(_)))
+                .any(|member| matches!(member, flat::Member::Group(_)))
             {
                 with_groups.push(section);
             }
@@ -74,7 +75,9 @@ impl Envelope {
         Self {
             sections,
             with_groups,
-            tags: known_tags(dictionary.header().chain(dictionary.trailer())),
+            tags: known_tags(
+                flat::members(dictionary.header()).chain(flat::members(dictionary.trailer())),
+            ),
         }
     }
 }

@@ -11,6 +11,7 @@ use super::naming::{
 use crate::Warning;
 use crate::conversion::Conversion;
 use crate::envelope::Section;
+use crate::flat;
 use crate::groups::{declared_groups, instance_context};
 use crate::namespace::{NameClash, Namespace, Owner};
 use crate::naming::group_source_name;
@@ -107,8 +108,8 @@ impl Names {
         }
         for message in dictionary.messages() {
             let mut members = Namespace::with_generated(MESSAGE);
-            for member in message.members() {
-                if let dictionary::Member::Group(group) = member
+            for member in flat::members(message.members()) {
+                if let flat::Member::Group(group) = member
                     && matches!(group.declared_in(), MemberContext::Message(_))
                 {
                     let class = names.group_class(group);
@@ -117,7 +118,7 @@ impl Names {
                     members.claim(class, owner)?;
                 }
             }
-            names.name_properties(message.members(), members)?;
+            names.name_properties(flat::members(message.members()), members)?;
         }
         for section in [Section::Header, Section::Trailer] {
             names.name_section(section, dictionary, &module)?;
@@ -130,7 +131,7 @@ impl Names {
                     Owner::Group(instance_context(nested)),
                 )?;
             }
-            names.name_properties(group.members(), members)?;
+            names.name_properties(flat::members(group.members()), members)?;
         }
         Ok(names)
     }
@@ -163,7 +164,7 @@ impl Names {
         let members = section.members(dictionary);
         let mut namespace = Namespace::with_generated(VIEW);
         for member in &members {
-            if let dictionary::Member::Group(group) = member
+            if let flat::Member::Group(group) = member
                 && *group.declared_in() == section.context()
             {
                 let class = self.group_class(*group);
@@ -222,12 +223,12 @@ impl Names {
     /// Names the properties of a message or group instance.
     fn name_properties<'a>(
         &mut self,
-        members: impl Iterator<Item = dictionary::Member<'a>>,
+        members: impl Iterator<Item = flat::Member<'a>>,
         mut namespace: Namespace,
     ) -> Result<(), Error> {
         for member in members {
             match member {
-                dictionary::Member::Field { field, .. } => {
+                flat::Member::Field { field, .. } => {
                     let name = property_name(field);
                     namespace.claim(&name, Owner::Field(field.name.clone()))?;
                     self.properties.insert(field.tag, name);
@@ -237,7 +238,7 @@ impl Names {
                         self.nanos_properties.insert(field.tag, name);
                     }
                 }
-                dictionary::Member::Group(group) => {
+                flat::Member::Group(group) => {
                     namespace.claim(
                         self.group_property(group),
                         Owner::Group(instance_context(group)),
@@ -319,8 +320,8 @@ fn hides_no_module_name(module: &Namespace, class: &str, owner: &Owner) -> Resul
 
 /// The groups declared directly in the instances of `group`.
 fn nested_groups<'a>(group: dictionary::Group<'a>) -> impl Iterator<Item = dictionary::Group<'a>> {
-    group.members().filter_map(|member| match member {
-        dictionary::Member::Group(nested)
+    flat::members(group.members()).filter_map(|member| match member {
+        flat::Member::Group(nested)
             if matches!(nested.declared_in(), MemberContext::Group { .. }) =>
         {
             Some(nested)

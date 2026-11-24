@@ -1,7 +1,8 @@
+use refix_dictionary::Dictionary;
 use refix_dictionary::spec::{DataType, Field};
-use refix_dictionary::{Dictionary, dictionary};
 
 use crate::Warning;
+use crate::flat;
 
 /// How generated code reads a field's value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -100,21 +101,23 @@ pub(crate) fn unclaimed_types(dictionary: &Dictionary) -> impl Iterator<Item = W
 
 /// Whether an accessor generated from `dictionary` reads a `wanted` field.
 fn reads(dictionary: &Dictionary, wanted: impl Fn(&Field) -> bool + Copy) -> bool {
-    reads_in(dictionary.header().chain(dictionary.trailer()), wanted)
-        || dictionary
-            .messages()
-            .any(|message| reads_in(message.members(), wanted))
+    reads_in(
+        flat::members(dictionary.header()).chain(flat::members(dictionary.trailer())),
+        wanted,
+    ) || dictionary
+        .messages()
+        .any(|message| reads_in(flat::members(message.members()), wanted))
 }
 
 /// Whether an accessor generated for `members` reads a `wanted` field, inside
 /// group instances too.
 fn reads_in<'a>(
-    mut members: impl Iterator<Item = dictionary::Member<'a>>,
+    mut members: impl Iterator<Item = flat::Member<'a>>,
     wanted: impl Fn(&Field) -> bool + Copy,
 ) -> bool {
     members.any(|member| match member {
-        dictionary::Member::Field { field, .. } => wanted(field),
-        dictionary::Member::Group(group) => reads_in(group.members(), wanted),
+        flat::Member::Field { field, .. } => wanted(field),
+        flat::Member::Group(group) => reads_in(flat::members(group.members()), wanted),
     })
 }
 

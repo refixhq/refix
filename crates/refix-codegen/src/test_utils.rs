@@ -1,3 +1,4 @@
+use crate::flat;
 use refix_dictionary::spec::{
     Category, Component, ComponentRef, DataType, Field, FieldRef, Group, Member, Message, Protocol,
     Spec, Version,
@@ -98,8 +99,8 @@ pub fn with_group<R>(
     .unwrap()
     .dictionary;
     let message = dictionary.messages().next().unwrap();
-    match message.members().next() {
-        Some(dictionary::Member::Group(group)) => read(group),
+    match flat::members(message.members()).next() {
+        Some(flat::Member::Group(group)) => read(group),
         other => panic!("expected a group, found {other:?}"),
     }
 }
