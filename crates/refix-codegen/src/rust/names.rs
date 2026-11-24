@@ -351,6 +351,11 @@ impl Names {
         &self.group_accessors[&instance_context(group)]
     }
 
+    /// The method returning a component's view.
+    pub(super) fn component_accessor(&self, component: dictionary::Component<'_>) -> &str {
+        &self.component_accessors[component.name()]
+    }
+
     /// The module holding the groups a message declares itself.
     pub(super) fn message_module(&self, message: &str) -> &str {
         &self.message_modules[message]
@@ -379,6 +384,7 @@ impl Names {
 #[cfg(test)]
 mod tests {
     use super::Names;
+    use crate::components::components;
     use crate::groups::declared_groups;
     use crate::rust::Error;
     use crate::test_utils::message_with;
@@ -681,6 +687,16 @@ mod tests {
 
     fn order_with(members: Vec<Member>) -> Vec<Message> {
         vec![message("NewOrderSingle", "D", members)]
+    }
+
+    #[test]
+    fn a_view_accessor_is_the_component_in_snake_case() {
+        let messages = order_with(vec![component_ref("OrderQtyData")]);
+        let dictionary = with_component("OrderQtyData", messages, vec![]);
+        let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
+        let order_qty_data = components(&dictionary)[0];
+
+        assert_eq!(names.component_accessor(order_qty_data), "order_qty_data");
     }
 
     #[test]

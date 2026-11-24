@@ -1,8 +1,8 @@
 use refix_dictionary::Dictionary;
 
-use super::groups::{emit_group_accessor, emit_group_module, emit_known_tags};
+use super::groups::{emit_group_module, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
-use super::messages::{Lifetime, emit_accessor};
+use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
 use crate::envelope::{Envelope, Section};
 use crate::flat;
@@ -38,21 +38,13 @@ pub(super) fn emit_view(
     methods.push(
         "    pub fn raw(&self) -> refix_message::Scope<'a> {\n        self.0\n    }\n".to_owned(),
     );
-    for member in &members {
-        match member {
-            flat::Member::Field { field, .. } => {
-                methods.push(emit_accessor(field, names, Lifetime::Scope));
-            }
-            flat::Member::Group(group) => {
-                methods.push(emit_group_accessor(
-                    *group,
-                    names,
-                    Lifetime::Scope,
-                    "self.1",
-                ));
-            }
-        }
-    }
+    methods.extend(emit_accessors(
+        section.listed(dictionary).into_iter(),
+        names,
+        Lifetime::Scope,
+        "self.1",
+        true,
+    ));
 
     let mut items = vec![
         format!(

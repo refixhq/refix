@@ -2,7 +2,7 @@ use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 
 use super::docs::{code, member_docs};
 use super::layout::{MAX_WIDTH, indent, slice};
-use super::messages::{Lifetime, emit_accessor};
+use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
 use crate::flat;
 use crate::groups::{known_tags, member_tags};
@@ -74,19 +74,13 @@ fn emit_instance_impl(group: dictionary::Group<'_>, names: &Names) -> String {
     let mut members = vec![
         "    pub fn raw(&self) -> refix_message::Scope<'a> {\n        self.0\n    }\n".to_owned(),
     ];
-    for member in flat::members(group.members()) {
-        match member {
-            flat::Member::Field { field, .. } => {
-                members.push(emit_accessor(field, names, Lifetime::Scope))
-            }
-            flat::Member::Group(nested) => members.push(emit_group_accessor(
-                nested,
-                names,
-                Lifetime::Scope,
-                "KNOWN_TAGS",
-            )),
-        }
-    }
+    members.extend(emit_accessors(
+        group.members(),
+        names,
+        Lifetime::Scope,
+        "KNOWN_TAGS",
+        true,
+    ));
     format!("impl<'a> Instance<'a> {{\n{}}}\n", members.join("\n"))
 }
 

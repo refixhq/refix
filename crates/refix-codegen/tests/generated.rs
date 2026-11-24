@@ -13,7 +13,9 @@ use refix_message::{
 #[path = "data/toy_generated.rs"]
 mod toy;
 
-use toy::{ExecInst, Header, Logon, MassQuote, Message, NewOrderSingle, OrdType, PartyRole};
+use toy::{
+    ExecInst, Header, Instrument, Logon, MassQuote, Message, NewOrderSingle, OrdType, PartyRole,
+};
 
 const TOY_XML: &str = include_str!("data/toy.xml");
 const TOY_GENERATED: &str = include_str!("data/toy_generated.rs");
@@ -373,6 +375,122 @@ fn a_group_in_a_group_instance_has_a_type_in_its_parents_module() {
     let entry: toy::mass_quote::quote_sets::quote_entries::Instance<'_> = entries.get(0).unwrap();
 
     assert_eq!(entry.quote_entry_id(), Ok(Some("E1")));
+}
+
+#[test]
+fn reads_a_component_through_its_view() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|11=ORDER-1|55=ACME|1186=schema.xsd|38=200|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(order.instrument().symbol(), Ok(Some("ACME")));
+    assert_eq!(order.order_qty_data().order_qty(), Ok(Some(200)));
+    assert_eq!(
+        order.instrument().security_xml().security_xml_schema(),
+        Ok(Some("schema.xsd"))
+    );
+}
+
+#[test]
+fn a_value_outlives_the_view_it_was_read_through() {
+    fn symbol_of<'a>(instrument: Instrument<'a>) -> Option<&'a str> {
+        instrument.symbol().unwrap()
+    }
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|11=ORDER-1|55=ACME|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(symbol_of(order.instrument()), Some("ACME"));
+}
+
+#[test]
+fn a_view_reads_the_groups_of_its_component() {
+    let raw = Tokenizer::default()
+        .tokenize(frame(
+            "35=D|11=ORDER-1|55=ACME|454=2|455=ALT-1|455=ALT-2|38=200|",
+        ))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+    let alt_ids: Vec<Option<&str>> = order
+        .instrument()
+        .security_alt_id()
+        .unwrap()
+        .iter()
+        .map(|alt_id| alt_id.security_alt_id().unwrap())
+        .collect();
+
+    assert_eq!(alt_ids, [Some("ALT-1"), Some("ALT-2")]);
+    assert_eq!(order.order_qty_data().order_qty(), Ok(Some(200)));
+}
+
+#[test]
+fn a_group_instance_reaches_a_component_through_its_view() {
+    let raw = Tokenizer::default()
+        .tokenize(frame(
+            "35=i|117=Q1|296=1|302=SET-1|295=2|299=E1|55=ACME|454=1|455=ALT-1|299=E2|55=INIT|",
+        ))
+        .unwrap();
+
+    let quote = MassQuote::from_raw(raw);
+    let sets = quote.quote_sets().unwrap();
+    let entries = sets.get(0).unwrap().quote_entries().unwrap();
+    let symbols: Vec<Option<&str>> = entries
+        .iter()
+        .map(|entry| entry.instrument().symbol().unwrap())
+        .collect();
+    let first = entries.get(0).unwrap().instrument();
+    let second = entries.get(1).unwrap().instrument();
+
+    assert_eq!(symbols, [Some("ACME"), Some("INIT")]);
+    assert_eq!(first.security_alt_id().unwrap().len(), 1);
+    assert!(second.security_alt_id().unwrap().is_empty());
+}
+
+#[test]
+fn a_view_prints_the_fields_of_its_component() {
+    let raw = Tokenizer::default()
+        .tokenize(frame(
+            "35=D|11=ORDER-1|55=ACME|454=1|455=ALT-1|1186=schema.xsd|38=200|",
+        ))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(
+        format!("{:?}", order.instrument()),
+        "Instrument(55=ACME|454=1|455=ALT-1|1186=schema.xsd)"
+    );
+    assert_eq!(
+        format!("{:?}", order.instrument().security_xml()),
+        "SecurityXML(1186=schema.xsd)"
+    );
+    assert_eq!(
+        format!("{:?}", order.order_qty_data()),
+        "OrderQtyData(38=200)"
+    );
+}
+
+#[test]
+fn a_view_in_a_group_instance_prints_that_instance_alone() {
+    let raw = Tokenizer::default()
+        .tokenize(frame(
+            "35=i|117=Q1|296=1|302=SET-1|295=2|299=E1|55=ACME|299=E2|55=INIT|",
+        ))
+        .unwrap();
+
+    let quote = MassQuote::from_raw(raw);
+    let sets = quote.quote_sets().unwrap();
+    let entries = sets.get(0).unwrap().quote_entries().unwrap();
+
+    assert_eq!(
+        format!("{:?}", entries.get(1).unwrap().instrument()),
+        "Instrument(55=INIT)"
+    );
 }
 
 #[test]
