@@ -4,6 +4,7 @@ use refix_dictionary::spec::{EnumValue, Field};
 use crate::conversion::Conversion;
 use crate::naming::{field_base_name, group_accessor_base_name};
 use crate::python::Error;
+use crate::snake_case;
 
 pub(super) fn property_name(field: &Field) -> String {
     identifier(field_base_name(field))
@@ -26,6 +27,11 @@ pub(super) fn nanos_property_name(field: &Field) -> String {
 
 pub(super) fn group_property_name(group: dictionary::Group<'_>) -> String {
     identifier(group_accessor_base_name(group))
+}
+
+/// The property reading a component as a view.
+pub(super) fn component_property_name(component: &str) -> String {
+    identifier(snake_case(component))
 }
 
 pub(super) fn member_name(field: &Field, value: &EnumValue) -> Result<String, Error> {
@@ -73,7 +79,7 @@ const KEYWORDS: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::{member_name, property_name};
+    use super::{component_property_name, member_name, property_name};
     use crate::python::Error;
     use refix_dictionary::Tag;
     use refix_dictionary::spec::{DataType, EnumValue, Field};
@@ -113,6 +119,12 @@ mod tests {
     fn suffixed_raw_names_are_not_escaped() {
         let price = field("Yield", DataType::Other("PRICE".to_owned()));
         assert_eq!(property_name(&price), "yield_raw");
+    }
+
+    #[test]
+    fn component_property_names_are_snake_case() {
+        assert_eq!(component_property_name("OrderQtyData"), "order_qty_data");
+        assert_eq!(component_property_name("Yield"), "yield_");
     }
 
     #[test]
