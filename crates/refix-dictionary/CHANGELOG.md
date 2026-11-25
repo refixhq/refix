@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/refixhq/refix/compare/refix-dictionary-v0.6.0...refix-dictionary-v0.7.0) - 2026-11-25
+
+### Added
+
+- [**breaking**] reject a tag listed inside a group and outside it ([#196](https://github.com/refixhq/refix/pull/196))
+- [**breaking**] keep a field that a scope and its component both list ([#194](https://github.com/refixhq/refix/pull/194))
+- [**breaking**] keep components that carry fields in the resolved dictionary ([#185](https://github.com/refixhq/refix/pull/185))
+
 ## [0.6.0](https://github.com/refixhq/refix/compare/refix-dictionary-v0.5.2...refix-dictionary-v0.6.0) - 2026-11-17
 
 ### Added

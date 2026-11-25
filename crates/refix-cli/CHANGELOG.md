@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/refixhq/refix/compare/refix-cli-v0.2.8...refix-cli-v0.3.0) - 2026-11-25
+
+### Added
+
+- *(codegen)* [**breaking**] write a Rust module tree with a file per message and component ([#204](https://github.com/refixhq/refix/pull/204))
+- *(codegen)* [**breaking**] write a Python package with a module per message and component ([#203](https://github.com/refixhq/refix/pull/203))
+
 ## [0.2.8](https://github.com/refixhq/refix/compare/refix-cli-v0.2.7...refix-cli-v0.2.8) - 2026-11-21
 
 ### Other
