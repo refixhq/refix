@@ -30,4 +30,4 @@ pub use tokenizer::{TokenizeError, Tokenizer};
 pub use value::{
     Date, Decimal, InvalidValue, MonthYear, OutOfRange, Time, TimePrecision, UtcTimestamp,
 };
-pub use writer::{FieldWriter, WriteError};
+pub use writer::{FieldWriter, WriteError, frame};

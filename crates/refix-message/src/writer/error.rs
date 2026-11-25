@@ -8,6 +8,8 @@ pub enum WriteError {
     EmptyValue { tag: Tag },
     /// The value holds the field separator.
     SeparatorInValue { tag: Tag },
+    /// The field is one that framing writes itself.
+    ReservedTag { tag: Tag },
 }
 
 impl fmt::Display for WriteError {
@@ -17,6 +19,7 @@ impl fmt::Display for WriteError {
             WriteError::SeparatorInValue { tag } => {
                 write!(f, "separator in the value for field {tag}")
             }
+            WriteError::ReservedTag { tag } => write!(f, "field {tag} is written by framing"),
         }
     }
 }
@@ -37,6 +40,10 @@ mod tests {
             (
                 WriteError::SeparatorInValue { tag: Tag(58) },
                 "separator in the value for field 58",
+            ),
+            (
+                WriteError::ReservedTag { tag: Tag(35) },
+                "field 35 is written by framing",
             ),
         ];
         for (error, expected) in cases {

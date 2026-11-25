@@ -1,10 +1,12 @@
 mod error;
+mod frame;
 
 use crate::framing::SOH;
 use crate::message::RawField;
 use crate::{Date, Decimal, MonthYear, RawMessage, Tag, Time, UtcTimestamp};
 use bytes::Bytes;
 pub use error::WriteError;
+pub use frame::frame;
 
 const NANOS_PER_SECOND: u64 = 1_000_000_000;
 const SECONDS_PER_DAY: u32 = 86_400;
