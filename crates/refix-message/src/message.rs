@@ -8,7 +8,7 @@ use bytes::Bytes;
 pub struct Slot(u32);
 
 impl Slot {
-    /// The first field of a message, always `BeginString`.
+    /// The first field of a message.
     pub const START: Slot = Slot(0);
 
     fn index(self) -> usize {

@@ -14,6 +14,7 @@ mod tag;
 mod test_utils;
 mod tokenizer;
 mod value;
+mod writer;
 
 pub use dialect::Dialect;
 pub use group::{
@@ -29,3 +30,4 @@ pub use tokenizer::{TokenizeError, Tokenizer};
 pub use value::{
     Date, Decimal, InvalidValue, MonthYear, OutOfRange, Time, TimePrecision, UtcTimestamp,
 };
+pub use writer::{FieldWriter, WriteError};
