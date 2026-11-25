@@ -298,6 +298,15 @@ class TestComponents:
         assert len(first.instrument.security_alt_id) == 1
         assert second.instrument.security_alt_id == ()
 
+    def test_a_group_instance_and_its_view_read_a_field_they_both_list(self):
+        quote = MassQuote.from_raw(
+            tokenize_body("35=i|117=Q1|296=1|302=SET-1|295=1|299=E1|55=ACME|")
+        )
+
+        entry = quote.quote_sets[0].quote_entries[0]
+        assert entry.symbol == "ACME"
+        assert entry.instrument.symbol == "ACME"
+
     def test_a_view_prints_the_fields_of_its_component(self):
         new_order = order(
             "35=D|11=ORDER-1|55=ACME|454=1|455=ALT-1|1186=schema.xsd|38=200|"

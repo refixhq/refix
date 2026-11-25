@@ -9,17 +9,22 @@ use std::collections::{HashMap, hash_map::Entry};
 impl Spec {
     /// Resolves this spec into a [`Dictionary`], checking its integrity.
     ///
-    /// A tag may appear only once in a message, at any depth. Later
-    /// occurrences are dropped with a [`Warning`].
+    /// A message or group instance and the components it includes may list
+    /// the same field. A tag listed again in any other way is dropped with
+    /// a [`Warning`].
     pub fn resolve(self) -> Result<Resolved, Error> {
         let mut resolver = Resolver::new(&self)?;
         resolver.expand_components()?;
         let mut header = resolver.resolve_members(&self.header, &MemberContext::Header, false)?;
         let mut trailer =
             resolver.resolve_members(&self.trailer, &MemberContext::Trailer, false)?;
-        let mut fixed = HashMap::new();
-        resolver.drop_repeated_tags(&mut header, &MemberContext::Header, &mut fixed)?;
-        resolver.drop_repeated_tags(&mut trailer, &MemberContext::Trailer, &mut fixed)?;
+        let mut fixed = Listings::default();
+        resolver.drop_repeated_tags(&mut header, &Scope::of(&MemberContext::Header), &mut fixed)?;
+        resolver.drop_repeated_tags(
+            &mut trailer,
+            &Scope::of(&MemberContext::Trailer),
+            &mut fixed,
+        )?;
         let messages = self
             .messages
             .iter()
@@ -111,15 +116,15 @@ impl<'a> Resolver<'a> {
     fn resolve_message(
         &mut self,
         message: &spec::Message,
-        fixed: &HashMap<Tag, MemberContext>,
+        fixed: &Listings,
     ) -> Result<ResolvedMessage, Error> {
         let context = MemberContext::Message(message.name.clone());
         let mut members = self.resolve_members(&message.members, &context, false)?;
-        self.drop_repeated_tags(&mut members, &context, &mut fixed.clone())?;
+        self.drop_repeated_tags(&mut members, &Scope::of(&context), &mut fixed.clone())?;
         Ok(ResolvedMessage { members })
     }
 
-    /// Resolves one member list and drops every tag it lists twice.
+    /// Resolves one member list and drops every tag it may not list again.
     ///
     /// A component that carries fields stays one member. The groups of a
     /// component made up of groups alone are spliced in.
@@ -167,41 +172,55 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        self.drop_repeated_tags(&mut resolved, context, &mut HashMap::new())?;
+        self.drop_repeated_tags(&mut resolved, &Scope::of(context), &mut Listings::default())?;
         Ok(resolved)
     }
 
-    /// Drops every member whose tag is in `seen` or listed earlier, in
-    /// document order and at any depth, with a warning for each.
+    /// Drops every member whose tag is already listed, in document order
+    /// and at any depth, with a warning for each.
+    ///
+    /// A component shares the scope of whatever includes it. A field stays
+    /// when its earlier listings are in the same scope and came through
+    /// other components.
     fn drop_repeated_tags(
         &mut self,
         members: &mut Vec<ResolvedMember>,
-        context: &MemberContext,
-        seen: &mut HashMap<Tag, MemberContext>,
+        scope: &Scope,
+        listings: &mut Listings,
     ) -> Result<(), Error> {
         let spec = self.spec;
         let mut kept = Vec::with_capacity(members.len());
         for mut member in members.drain(..) {
             if let ResolvedMember::Component(component) = &mut member {
-                self.drop_repeated_tags(&mut component.members, context, seen)?;
+                let scope = scope.through(&component.name);
+                self.drop_repeated_tags(&mut component.members, &scope, listings)?;
                 if !component.members.is_empty() {
                     kept.push(member);
                 }
                 continue;
             }
             let tag = spec.fields.as_slice()[member.first_field()].tag;
-            match seen.entry(tag) {
-                Entry::Occupied(first) => self.warnings.push(Warning::DuplicateField {
-                    tag,
-                    kept: first.get().clone(),
-                    dropped: context.clone(),
-                }),
+            match listings.entry(tag) {
+                Entry::Occupied(mut first) => {
+                    let first = first.get_mut();
+                    if member.carries_fields() && first.may_be_shared_from(scope) {
+                        first.paths.push(scope.path.clone());
+                        kept.push(member);
+                    } else {
+                        self.warnings.push(Warning::DuplicateField {
+                            tag,
+                            kept: first.context.clone(),
+                            dropped: scope.context.clone(),
+                        });
+                    }
+                }
                 Entry::Vacant(slot) => {
-                    slot.insert(context.clone());
+                    slot.insert(Listing::of(&member, scope));
                     if let ResolvedMember::Group(group) = &mut member {
                         let count_field = &spec.fields.as_slice()[group.count_field_index];
-                        let instance = context.group(&count_field.name);
-                        self.drop_repeated_tags(&mut group.members, &instance, seen)?;
+                        let instance = scope.context.group(&count_field.name);
+                        let scope = Scope::of(&instance);
+                        self.drop_repeated_tags(&mut group.members, &scope, listings)?;
                         group.delimiter_index = delimit(&mut group.members, &instance)?;
                     }
                     kept.push(member);
@@ -263,6 +282,68 @@ impl<'a> Resolver<'a> {
                 context: context.clone(),
                 tag,
             })
+    }
+}
+
+/// The first listing of each tag in a message, at any depth.
+type Listings = HashMap<Tag, Listing>;
+
+/// Where a message, section or group instance lists its members.
+struct Scope {
+    context: MemberContext,
+    /// The components the members are listed through, outermost first.
+    path: Vec<String>,
+}
+
+impl Scope {
+    /// The scope's own member list.
+    fn of(context: &MemberContext) -> Self {
+        Self {
+            context: context.clone(),
+            path: Vec::new(),
+        }
+    }
+
+    /// The member list of `component`, included in this one.
+    fn through(&self, component: &str) -> Self {
+        let mut path = self.path.clone();
+        path.push(component.to_owned());
+        Self {
+            context: self.context.clone(),
+            path,
+        }
+    }
+}
+
+/// The scope that lists a tag first.
+#[derive(Clone)]
+struct Listing {
+    context: MemberContext,
+    /// The component paths that list the tag as a field.
+    ///
+    /// A group's count tag has none, so it is never shared.
+    paths: Vec<Vec<String>>,
+}
+
+impl Listing {
+    fn of(member: &ResolvedMember, scope: &Scope) -> Self {
+        let paths = if member.carries_fields() {
+            vec![scope.path.clone()]
+        } else {
+            Vec::new()
+        };
+        Self {
+            context: scope.context.clone(),
+            paths,
+        }
+    }
+
+    /// Whether `scope` may list the field as well.
+    ///
+    /// It may when it is the same scope and reaches the field through
+    /// components that have not listed it yet.
+    fn may_be_shared_from(&self, scope: &Scope) -> bool {
+        self.context == scope.context && !self.paths.is_empty() && !self.paths.contains(&scope.path)
     }
 }
 
