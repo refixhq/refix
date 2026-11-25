@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/refixhq/refix/compare/python-v0.11.0...python-v0.12.0) - 2026-11-25
+
+### Added
+
+- *(codegen)* [**breaking**] write a Python package with a module per message and component ([#203](https://github.com/refixhq/refix/pull/203))
+- [**breaking**] keep a field that a scope and its component both list ([#194](https://github.com/refixhq/refix/pull/194))
+- *(codegen)* [**breaking**] wrap received messages with from_raw in Python ([#193](https://github.com/refixhq/refix/pull/193))
+- *(codegen)* [**breaking**] make a group's class its component in Python ([#192](https://github.com/refixhq/refix/pull/192))
+- *(codegen)* [**breaking**] read component fields through their view in Python ([#191](https://github.com/refixhq/refix/pull/191))
+- *(codegen)* generate a view for each component with fields in Python ([#190](https://github.com/refixhq/refix/pull/190))
+- *(codegen)* [**breaking**] generate a view for each component with fields in Rust ([#187](https://github.com/refixhq/refix/pull/187))
+
+### Other
+
+- *(python)* write the test group classes as the generator does ([#198](https://github.com/refixhq/refix/pull/198))
+
 ## [0.11.0](https://github.com/refixhq/refix/compare/python-v0.10.0...python-v0.11.0) - 2026-11-21
 
 ### Added

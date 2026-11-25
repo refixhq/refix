@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7](https://github.com/refixhq/refix/compare/refix-message-v0.4.6...refix-message-v0.4.7) - 2026-11-25
+
+### Added
+
+- add known tags merged on first use ([#200](https://github.com/refixhq/refix/pull/200))
+
 ## [0.4.6](https://github.com/refixhq/refix/compare/refix-message-v0.4.5...refix-message-v0.4.6) - 2026-11-20
 
 ### Added

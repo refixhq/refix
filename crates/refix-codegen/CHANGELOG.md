@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/refixhq/refix/compare/refix-codegen-v0.7.0...refix-codegen-v0.8.0) - 2026-11-25
+
+### Added
+
+- *(codegen)* [**breaking**] write a Rust module tree with a file per message and component ([#204](https://github.com/refixhq/refix/pull/204))
+- *(codegen)* [**breaking**] write a Python package with a module per message and component ([#203](https://github.com/refixhq/refix/pull/203))
+- *(codegen)* generate a warm-up function in Rust ([#202](https://github.com/refixhq/refix/pull/202))
+- *(codegen)* [**breaking**] keep known tags private in Rust ([#199](https://github.com/refixhq/refix/pull/199))
+- *(codegen)* print the own fields of a header, trailer or group instance in Rust ([#195](https://github.com/refixhq/refix/pull/195))
+- [**breaking**] keep a field that a scope and its component both list ([#194](https://github.com/refixhq/refix/pull/194))
+- *(codegen)* [**breaking**] wrap received messages with from_raw in Python ([#193](https://github.com/refixhq/refix/pull/193))
+- *(codegen)* [**breaking**] make a group's class its component in Python ([#192](https://github.com/refixhq/refix/pull/192))
+- *(codegen)* [**breaking**] read component fields through their view in Python ([#191](https://github.com/refixhq/refix/pull/191))
+- *(codegen)* generate a view for each component with fields in Python ([#190](https://github.com/refixhq/refix/pull/190))
+- *(codegen)* [**breaking**] make a group's type its component in Rust ([#189](https://github.com/refixhq/refix/pull/189))
+- *(codegen)* [**breaking**] read component fields through their view in Rust ([#188](https://github.com/refixhq/refix/pull/188))
+- *(codegen)* [**breaking**] generate a view for each component with fields in Rust ([#187](https://github.com/refixhq/refix/pull/187))
+- [**breaking**] keep components that carry fields in the resolved dictionary ([#185](https://github.com/refixhq/refix/pull/185))
+
+### Fixed
+
+- *(codegen)* let a nested group class share a name its body does not use ([#197](https://github.com/refixhq/refix/pull/197))
+
+### Other
+
+- *(codegen)* build known tags from each component in Rust ([#201](https://github.com/refixhq/refix/pull/201))
+
 ## [0.7.0](https://github.com/refixhq/refix/compare/refix-codegen-v0.6.2...refix-codegen-v0.7.0) - 2026-11-21
 
 ### Added
