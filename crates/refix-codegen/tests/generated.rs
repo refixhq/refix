@@ -512,6 +512,40 @@ fn a_view_in_a_group_instance_prints_that_instance_alone() {
 }
 
 #[test]
+fn a_group_instance_prints_its_own_fields() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|453=2|448=AL|802=1|523=S1|448=BOB|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+    let parties = order.party_ids().unwrap();
+    let first = parties.get(0).unwrap();
+    let sub_ids = first.party_sub_ids().unwrap();
+
+    assert_eq!(format!("{first:?}"), "Parties(448=AL|802=1|523=S1)");
+    assert_eq!(
+        format!("{:?}", sub_ids.get(0).unwrap()),
+        "PtysSubGrp(523=S1)"
+    );
+    assert_eq!(format!("{:?}", parties.get(1).unwrap()), "Parties(448=BOB)");
+}
+
+#[test]
+fn a_header_and_a_trailer_print_their_own_fields() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|49=SENDER|627=1|628=HOP-1|11=ORDER-1|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(
+        format!("{:?}", order.header()),
+        "Header(8=FIX.4.4|9=42|35=D|49=SENDER|627=1|628=HOP-1)"
+    );
+    assert_eq!(format!("{:?}", order.trailer()), "Trailer(10=255)");
+}
+
+#[test]
 fn an_int_coded_enum_reads_by_value() {
     let raw = Tokenizer::default()
         .tokenize(frame(
