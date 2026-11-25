@@ -22,17 +22,19 @@ fn main() {
   </fields>
 </fix>";
     let parsed = quickfix::parse(xml).unwrap();
-    let generated = rust::generate(&parsed.dictionary, "TestRequest.xml").unwrap();
-    for warning in &generated.warnings {
+    let package = rust::generate(&parsed.dictionary, "TestRequest.xml").unwrap();
+    for warning in &package.warnings {
         eprintln!("warning: {warning}");
     }
-    print!("{}", generated.code);
+    for module in &package.modules {
+        println!("{}", module.path.display());
+    }
 }
 ```
 
-The source name goes in the generated file's header. Rust output depends on `refix-message`. `python::generate`
-returns a package for the `refix` package on PyPI, which `Package::write` puts in a directory. `refix-cli` runs both
-from the command line.
+The source name goes in the first line of every generated file. `Package::write` puts the files in a directory.
+Rust output depends on `refix-message`. `python::generate` returns a package for the `refix` package on PyPI the same
+way. `refix-cli` runs both from the command line.
 
 ## License
 

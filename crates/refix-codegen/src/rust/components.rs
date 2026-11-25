@@ -6,6 +6,7 @@ use super::layout::indent;
 use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
 use super::printing::emit_debug;
+use super::views::emit_view_struct;
 use crate::components::holds_group;
 
 /// A component's view over the scope of whatever includes the component.
@@ -14,11 +15,6 @@ use crate::components::holds_group;
 /// with, which its owner passes. `Debug` prints the component's own fields.
 pub(super) fn emit_component(component: dictionary::Component<'_>, names: &Names) -> String {
     let name = component.name();
-    let fields = if holds_group(component) {
-        "(refix_message::Scope<'a>, KnownTags<'static>)"
-    } else {
-        "(refix_message::Scope<'a>)"
-    };
     let tags = emit_known_tags(component.members(), &[], names);
 
     let mut methods = vec![
@@ -34,8 +30,9 @@ pub(super) fn emit_component(component: dictionary::Component<'_>, names: &Names
 
     [
         format!(
-            "/// The fields of the {} component.\n#[derive(Clone, Copy)]\npub struct {name}<'a>{fields};\n",
-            code(name)
+            "/// The fields of the {} component.\n{}",
+            code(name),
+            emit_view_struct(name, holds_group(component))
         ),
         format!("impl<'a> {name}<'a> {{\n{}}}\n", methods.join("\n")),
         emit_debug(name, &format!("self.0.display_known(&{KNOWN_TAGS})")),
@@ -89,10 +86,13 @@ mod tests {
             emit_component(instrument, &names),
             r#"/// The fields of the `Instrument` component.
 #[derive(Clone, Copy)]
-pub struct Instrument<'a>(refix_message::Scope<'a>, KnownTags<'static>);
+pub struct Instrument<'a>(
+    pub(in super::super) refix_message::Scope<'a>,
+    pub(in super::super) KnownTags<'static>,
+);
 
 impl<'a> Instrument<'a> {
-    const fn known_tags() -> &'static LazyKnownTags {
+    pub(in super::super) const fn known_tags() -> &'static LazyKnownTags {
         static TAGS: LazyKnownTags = LazyKnownTags::new(
             &[Tag(55), Tag(454)],
             &[SecAltIDGrp::known_tags(), SecurityXML::known_tags()],
@@ -137,10 +137,9 @@ impl std::fmt::Debug for Instrument<'_> {
         let names = Names::new(&dictionary, &mut Vec::new()).unwrap();
         let order_qty_data = components(&dictionary)[2];
 
-        assert!(
-            emit_component(order_qty_data, &names)
-                .contains("pub struct OrderQtyData<'a>(refix_message::Scope<'a>);\n")
-        );
+        assert!(emit_component(order_qty_data, &names).contains(
+            "pub struct OrderQtyData<'a>(pub(in super::super) refix_message::Scope<'a>);\n"
+        ));
     }
 
     #[test]

@@ -15,12 +15,18 @@ pub(super) fn indent(text: &str, levels: usize) -> String {
         .collect()
 }
 
-/// A slice literal of `items` between `head` and `tail`.
-///
-/// It stays on one line when that fits in `width`. Otherwise the items fill
-/// indented lines.
+/// A slice literal of `items` between `head` and `tail`, laid out as
+/// [`list`] has it.
 pub(super) fn slice(head: &str, items: &[String], tail: &str, width: usize) -> String {
-    let one_line = format!("{head}&[{}]{tail}", items.join(", "));
+    list(&format!("{head}&["), items, &format!("]{tail}"), width)
+}
+
+/// `items` between `head` and `tail`.
+///
+/// They stay on one line when that fits in `width`. Otherwise the items fill
+/// indented lines.
+pub(super) fn list(head: &str, items: &[String], tail: &str, width: usize) -> String {
+    let one_line = format!("{head}{}{tail}", items.join(", "));
     if one_line.len() <= width || items.is_empty() {
         return format!("{one_line}\n");
     }
@@ -37,7 +43,7 @@ pub(super) fn slice(head: &str, items: &[String], tail: &str, width: usize) -> S
         }
     }
     let lines = indent(&(lines.join("\n") + "\n"), 1);
-    format!("{head}&[\n{lines}]{tail}\n")
+    format!("{head}\n{lines}{tail}\n")
 }
 
 #[cfg(test)]

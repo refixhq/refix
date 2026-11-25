@@ -36,16 +36,20 @@ generate-stock: (_generate-stock "42") (_generate-stock "44")
 # Generate one FIX version's stock packages
 _generate-stock version:
     cargo run -q -p refix-cli -- codegen dictionaries/quickfix/FIX{{ version }}.xml \
-        --rust crates/refix-fix{{ version }}/src/generated.rs \
+        --rust crates/refix-fix{{ version }}/src/generated \
         --python python/refix-fix{{ version }}/src/refix_fix{{ version }}
     just _fingerprint {{ version }} > crates/refix-fix{{ version }}/generated.sha256
 
 # Print the fingerprint of one FIX version's generated code
 _fingerprint version:
-    @shasum -a 256 crates/refix-fix{{ version }}/src/generated.rs
-    @find python/refix-fix{{ version }}/src/refix_fix{{ version }} -name '*.py' \
+    @just _digest crates/refix-fix{{ version }}/src/generated rs
+    @just _digest python/refix-fix{{ version }}/src/refix_fix{{ version }} py
+
+# Print one digest over every file with an extension in a directory
+_digest directory extension:
+    @find {{ directory }} -name '*.{{ extension }}' \
         | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256 \
-        | sed 's|-$|python/refix-fix{{ version }}/src/refix_fix{{ version }}|'
+        | sed 's|-$|{{ directory }}|'
 
 # Check the stock packages as published
 check-stock: (_check-stock "42") (_check-stock "44")

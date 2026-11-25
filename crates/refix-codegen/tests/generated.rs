@@ -1,5 +1,8 @@
-//! The checked-in generated module stays fresh and drives typed access
-//! end to end: dictionary XML to generated code to reads over a frame.
+//! The checked-in generated module tree stays fresh and drives typed
+//! access end to end: dictionary XML to generated code to reads over a frame.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
 use refix_codegen::rust::generate;
@@ -10,7 +13,7 @@ use refix_message::{
 
 // Not every generated item is read here, e.g. `DIALECT`.
 #[allow(dead_code)]
-#[path = "data/toy_generated.rs"]
+#[path = "data/toy_generated/mod.rs"]
 mod toy;
 
 use toy::{
@@ -18,13 +21,35 @@ use toy::{
 };
 
 const TOY_XML: &str = include_str!("data/toy.xml");
-const TOY_GENERATED: &str = include_str!("data/toy_generated.rs");
+
+/// The checked-in tree's files by path.
+fn checked_in() -> BTreeMap<PathBuf, String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/toy_generated");
+    let mut files = BTreeMap::new();
+    for folder in ["", "components", "messages"] {
+        for entry in std::fs::read_dir(root.join(folder)).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|extension| extension == "rs") {
+                let name = path.file_name().unwrap();
+                let code = std::fs::read_to_string(&path).unwrap();
+                files.insert(Path::new(folder).join(name), code);
+            }
+        }
+    }
+    files
+}
 
 #[test]
-fn the_checked_in_module_is_fresh() {
+fn the_checked_in_module_tree_is_fresh() {
     let parsed = quickfix::parse(TOY_XML).unwrap();
-    let generated = generate(&parsed.dictionary, "toy.xml").unwrap();
-    assert_eq!(generated.code, TOY_GENERATED);
+    let package = generate(&parsed.dictionary, "toy.xml").unwrap();
+
+    let generated: BTreeMap<PathBuf, String> = package
+        .modules
+        .into_iter()
+        .map(|module| (module.path, module.code))
+        .collect();
+    assert_eq!(generated, checked_in());
 }
 
 #[test]
@@ -513,8 +538,13 @@ fn a_view_in_a_group_instance_prints_that_instance_alone() {
 
 #[test]
 fn warm_up_builds_every_known_tags_list() {
-    let lists = TOY_GENERATED.matches("LazyKnownTags::new(").count();
-    let (_, warm_up) = TOY_GENERATED.split_once("pub fn warm_up() {\n").unwrap();
+    let files = checked_in();
+    let lists: usize = files
+        .values()
+        .map(|code| code.matches("LazyKnownTags::new(").count())
+        .sum();
+    let root = &files[Path::new("mod.rs")];
+    let (_, warm_up) = root.split_once("pub fn warm_up() {\n").unwrap();
     let built = warm_up.lines().take_while(|line| *line != "}").count();
 
     assert_eq!(built, lists);

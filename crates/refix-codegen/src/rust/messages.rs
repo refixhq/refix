@@ -25,7 +25,7 @@ pub(super) fn emit_message(
         emit_message_impl(message, envelope, names),
         emit_message_printing(message),
     ];
-    items.extend(emit_message_groups(message, names));
+    items.extend(message_groups(message).map(|group| emit_group(group, names)));
     items.join("\n")
 }
 
@@ -85,18 +85,16 @@ fn emit_message_printing(message: dictionary::Message<'_>) -> String {
     )
 }
 
-/// The types of the groups declared directly in a message.
-fn emit_message_groups(message: dictionary::Message<'_>, names: &Names) -> Vec<String> {
-    flat::members(message.members())
-        .filter_map(|member| match member {
-            flat::Member::Group(group)
-                if matches!(group.declared_in(), MemberContext::Message(_)) =>
-            {
-                Some(emit_group(group, names))
-            }
-            _ => None,
-        })
-        .collect()
+/// The groups declared directly in a message.
+pub(super) fn message_groups<'a>(
+    message: dictionary::Message<'a>,
+) -> impl Iterator<Item = dictionary::Group<'a>> {
+    flat::members(message.members()).filter_map(|member| match member {
+        flat::Member::Group(group) if matches!(group.declared_in(), MemberContext::Message(_)) => {
+            Some(group)
+        }
+        _ => None,
+    })
 }
 
 /// The lifetime an accessor's borrowed results live for.

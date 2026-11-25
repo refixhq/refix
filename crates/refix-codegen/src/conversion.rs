@@ -79,12 +79,6 @@ impl Conversion {
     }
 }
 
-/// Whether an accessor generated from `dictionary` reads a field whose
-/// conversion is `wanted`.
-pub(crate) fn uses(dictionary: &Dictionary, wanted: impl Fn(Conversion) -> bool + Copy) -> bool {
-    reads(dictionary, |field| wanted(Conversion::of(field)))
-}
-
 /// A warning for each field an accessor generated from `dictionary` reads raw,
 /// in the dictionary's order.
 pub(crate) fn unclaimed_types(dictionary: &Dictionary) -> impl Iterator<Item = Warning> + '_ {
