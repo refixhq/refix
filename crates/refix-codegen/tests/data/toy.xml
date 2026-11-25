@@ -38,6 +38,7 @@
         <group name="NoQuoteEntries" required="N">
           <field name="QuoteEntryID" required="N"/>
           <component name="Instrument" required="N"/>
+          <field name="Symbol" required="N"/>
         </group>
       </group>
     </message>

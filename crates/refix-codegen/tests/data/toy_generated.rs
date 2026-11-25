@@ -718,6 +718,12 @@ impl<'a> MassQuoteQuoteSetsQuoteEntries<'a> {
     pub fn instrument(&self) -> Instrument<'a> {
         Instrument(self.0, Self::KNOWN_TAGS)
     }
+
+    /// The `Symbol` (55) field.
+    #[doc(alias = "Symbol")]
+    pub fn symbol(&self) -> Result<Option<&'a str>, InvalidValue> {
+        self.0.get_str(Tag(55))
+    }
 }
 
 /// A message read as the type its MsgType names.

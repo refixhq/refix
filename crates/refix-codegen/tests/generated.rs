@@ -455,6 +455,21 @@ fn a_group_instance_reaches_a_component_through_its_view() {
 }
 
 #[test]
+fn a_group_instance_and_its_view_read_a_field_they_both_list() {
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=i|117=Q1|296=1|302=SET-1|295=1|299=E1|55=ACME|"))
+        .unwrap();
+
+    let quote = MassQuote::from_raw(raw);
+    let sets = quote.quote_sets().unwrap();
+    let entries = sets.get(0).unwrap().quote_entries().unwrap();
+    let entry = entries.get(0).unwrap();
+
+    assert_eq!(entry.symbol().unwrap(), Some("ACME"));
+    assert_eq!(entry.instrument().symbol().unwrap(), Some("ACME"));
+}
+
+#[test]
 fn a_view_prints_the_fields_of_its_component() {
     let raw = Tokenizer::default()
         .tokenize(frame(

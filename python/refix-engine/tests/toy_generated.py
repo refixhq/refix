@@ -160,6 +160,7 @@ class MassQuote(fields.Message):
         class QuoteEntries(fields.GroupInstance):
             quote_entry_id = fields.Str(299)
             instrument = fields.View(Instrument)
+            symbol = fields.Str(55)
 
             if TYPE_CHECKING:
                 def __init__(self) -> None: ...

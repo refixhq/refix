@@ -47,6 +47,7 @@ pub(crate) fn member_tags(group: dictionary::Group<'_>) -> Vec<Tag> {
         })
         .collect();
     tags.sort();
+    tags.dedup();
     tags
 }
 
@@ -55,6 +56,7 @@ pub(crate) fn known_tags<'a>(members: impl Iterator<Item = flat::Member<'a>>) ->
     let mut tags = Vec::new();
     collect_tags(members, &mut tags);
     tags.sort();
+    tags.dedup();
     tags
 }
 
@@ -63,6 +65,7 @@ pub(crate) fn message_known_tags(message: dictionary::Message<'_>, envelope: &[T
     let mut tags = envelope.to_vec();
     collect_tags(flat::members(message.members()), &mut tags);
     tags.sort();
+    tags.dedup();
     tags
 }
 

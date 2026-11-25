@@ -6,6 +6,9 @@ use std::fmt;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Warning {
     /// A tag listed again in a message, at any depth, after `kept`.
+    ///
+    /// A field that a scope and a component it includes both list is not
+    /// one.
     DuplicateField {
         tag: Tag,
         kept: MemberContext,

@@ -752,8 +752,7 @@ mod tests {
     }
 
     #[test]
-    fn a_diamond_over_a_field_keeps_the_tag_once() {
-        // Both arms of the diamond contribute tag 58 to Top's expansion.
+    fn both_arms_of_a_diamond_keep_a_field() {
         let spec = spec_of(
             vec![field("Text", 58)],
             vec![
@@ -772,23 +771,16 @@ mod tests {
 
         let message = resolved.dictionary.messages().next().unwrap();
         let top = component_at(message.members(), 0);
-        assert_eq!(top.members().count(), 1);
-        let left = component_at(top.members(), 0);
-        assert_eq!(left.name(), "Left");
-        let bottom = component_at(left.members(), 0);
-        assert_eq!(field_members(bottom.members()), [(Tag(58), false)]);
-        assert_eq!(
-            resolved.warnings,
-            [Warning::DuplicateField {
-                tag: Tag(58),
-                kept: MemberContext::Component("Top".to_owned()),
-                dropped: MemberContext::Component("Top".to_owned()),
-            }]
-        );
+        for position in [0, 1] {
+            let arm = component_at(top.members(), position);
+            let bottom = component_at(arm.members(), 0);
+            assert_eq!(field_members(bottom.members()), [(Tag(58), false)]);
+        }
+        assert_eq!(resolved.warnings, []);
     }
 
     #[test]
-    fn a_duplicate_tag_after_expansion_is_dropped() {
+    fn a_message_and_its_component_keep_a_field_they_both_list() {
         let spec = spec_of(
             vec![field("Text", 58)],
             vec![component("Notes", vec![field_ref(58, false)])],
@@ -801,7 +793,28 @@ mod tests {
         let resolved = spec.resolve().unwrap();
 
         let message = resolved.dictionary.messages().next().unwrap();
-        assert_eq!(field_members(message.members()), [(Tag(58), true)]);
+        let own = message.members().take(1);
+        assert_eq!(field_members(own), [(Tag(58), true)]);
+        let notes = component_at(message.members(), 1);
+        assert_eq!(field_members(notes.members()), [(Tag(58), false)]);
+        assert_eq!(resolved.warnings, []);
+    }
+
+    #[test]
+    fn a_component_listed_twice_is_kept_once() {
+        let spec = spec_of(
+            vec![field("Text", 58)],
+            vec![component("Notes", vec![field_ref(58, false)])],
+            vec![message(
+                "NewOrderSingle",
+                vec![component_ref("Notes", false), component_ref("Notes", false)],
+            )],
+        );
+
+        let resolved = spec.resolve().unwrap();
+
+        let message = resolved.dictionary.messages().next().unwrap();
+        assert_eq!(message.members().count(), 1);
         assert_eq!(
             resolved.warnings,
             [Warning::DuplicateField {
@@ -1518,6 +1531,41 @@ mod tests {
                     tag: Tag(448),
                     kept: nos_context(),
                     dropped: nos_context().group("NoPartyIDs"),
+                }]
+            );
+        }
+
+        #[test]
+        fn a_group_a_message_and_its_component_both_list_is_kept_once() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![component(
+                    "Named",
+                    vec![
+                        field_ref(447, false),
+                        group(453, false, vec![field_ref(448, false)]),
+                    ],
+                )],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![
+                        group(453, false, vec![field_ref(448, false)]),
+                        component_ref("Named", false),
+                    ],
+                )],
+            );
+
+            let resolved = spec.resolve().unwrap();
+
+            let message = resolved.dictionary.messages().next().unwrap();
+            let named = component_at(message.members(), 1);
+            assert_eq!(field_members(named.members()), [(Tag(447), false)]);
+            assert_eq!(
+                resolved.warnings,
+                [Warning::DuplicateField {
+                    tag: Tag(453),
+                    kept: nos_context(),
+                    dropped: nos_context(),
                 }]
             );
         }
