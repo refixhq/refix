@@ -37,10 +37,15 @@ generate-stock: (_generate-stock "42") (_generate-stock "44")
 _generate-stock version:
     cargo run -q -p refix-cli -- codegen dictionaries/quickfix/FIX{{ version }}.xml \
         --rust crates/refix-fix{{ version }}/src/generated.rs \
-        --python python/refix-fix{{ version }}/src/refix_fix{{ version }}/__init__.py
-    shasum -a 256 crates/refix-fix{{ version }}/src/generated.rs \
-        python/refix-fix{{ version }}/src/refix_fix{{ version }}/__init__.py \
-        > crates/refix-fix{{ version }}/generated.sha256
+        --python python/refix-fix{{ version }}/src/refix_fix{{ version }}
+    just _fingerprint {{ version }} > crates/refix-fix{{ version }}/generated.sha256
+
+# Print the fingerprint of one FIX version's generated code
+_fingerprint version:
+    @shasum -a 256 crates/refix-fix{{ version }}/src/generated.rs
+    @find python/refix-fix{{ version }}/src/refix_fix{{ version }} -name '*.py' \
+        | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256 \
+        | sed 's|-$|python/refix-fix{{ version }}/src/refix_fix{{ version }}|'
 
 # Check the stock packages as published
 check-stock: (_check-stock "42") (_check-stock "44")

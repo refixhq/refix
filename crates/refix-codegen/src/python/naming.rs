@@ -34,6 +34,17 @@ pub(super) fn component_property_name(component: &str) -> String {
     identifier(snake_case(component))
 }
 
+/// The module holding the class named `class`.
+pub(super) fn module_name(class: &str) -> String {
+    match MODULE_EXCEPTIONS.iter().find(|(name, _)| *name == class) {
+        Some((_, module)) => (*module).to_owned(),
+        None => identifier(snake_case(class)),
+    }
+}
+
+/// Classes whose snake-case name splits an acronym in the wrong place.
+const MODULE_EXCEPTIONS: &[(&str, &str)] = &[("XMLnonFIX", "xml_non_fix")];
+
 pub(super) fn member_name(field: &Field, value: &EnumValue) -> Result<String, Error> {
     let mut name = value
         .description
@@ -79,7 +90,7 @@ const KEYWORDS: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::{component_property_name, member_name, property_name};
+    use super::{component_property_name, member_name, module_name, property_name};
     use crate::python::Error;
     use refix_dictionary::Tag;
     use refix_dictionary::spec::{DataType, EnumValue, Field};
@@ -125,6 +136,18 @@ mod tests {
     fn component_property_names_are_snake_case() {
         assert_eq!(component_property_name("OrderQtyData"), "order_qty_data");
         assert_eq!(component_property_name("Yield"), "yield_");
+    }
+
+    #[test]
+    fn module_names_are_snake_case() {
+        assert_eq!(module_name("NewOrderSingle"), "new_order_single");
+        assert_eq!(module_name("SecAltIDGrp"), "sec_alt_id_grp");
+        assert_eq!(module_name("Yield"), "yield_");
+    }
+
+    #[test]
+    fn a_module_name_that_would_split_an_acronym_is_listed() {
+        assert_eq!(module_name("XMLnonFIX"), "xml_non_fix");
     }
 
     #[test]

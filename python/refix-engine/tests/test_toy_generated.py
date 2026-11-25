@@ -1,12 +1,12 @@
-import runpy
+import importlib
 from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from io import BytesIO
-from pathlib import Path
 from typing import assert_never
 
 import pytest
 import refix
+import toy_generated
 from refix import MonthYear, RawMessage, decode_log
 from refix.enums import Unrecognized
 from refix.errors import InvalidValueError
@@ -23,10 +23,11 @@ from toy_generated import (
     OrdType,
     Parties,
     PartyRole,
+    components,
+    enums,
     from_raw,
+    messages,
 )
-
-TOY = str(Path(__file__).with_name("toy_generated.py"))
 
 
 def order(body: str) -> NewOrderSingle:
@@ -42,9 +43,9 @@ class TestRuntimeVersion:
 
         with pytest.raises(
             ImportError,
-            match=f"toy needs refix 0.10 or newer, but refix {version} is installed",
+            match=f"toy_generated needs refix 0.10 or newer, but refix {version} is installed",
         ):
-            runpy.run_path(TOY, run_name="toy")
+            importlib.reload(toy_generated)
 
     @pytest.mark.parametrize("version", ["0.10.0", "0.11.2", "1.0.0"])
     def test_the_minimum_and_newer_runtimes_are_accepted(
@@ -52,9 +53,16 @@ class TestRuntimeVersion:
     ):
         monkeypatch.setattr(refix, "__version__", version)
 
-        module = runpy.run_path(TOY, run_name="toy")
+        module = importlib.reload(toy_generated)
 
-        assert "NewOrderSingle" in module
+        assert module.NewOrderSingle is NewOrderSingle
+
+
+class TestPackage:
+    def test_each_subpackage_offers_its_classes(self):
+        assert messages.NewOrderSingle is NewOrderSingle
+        assert components.Parties is Parties
+        assert enums.OrdType is OrdType
 
 
 class TestReads:
