@@ -200,6 +200,14 @@ impl FieldWriter {
         Ok(())
     }
 
+    /// Writes every field of `fields` again, in the same order.
+    ///
+    /// The values are written as they are, without the checks of [`write`](Self::write).
+    /// Panics as [`write`](Self::write) does.
+    pub fn write_fields(&mut self, fields: &RawMessage) {
+        self.append(fields, &WrittenSize::of(fields));
+    }
+
     /// The fields written, as a message.
     pub fn finish(self) -> RawMessage {
         RawMessage::new(Bytes::from(self.bytes), self.fields)
@@ -218,15 +226,41 @@ impl FieldWriter {
     fn end(&mut self, tag: Tag, value_start: usize) {
         let value_end = self.bytes.len();
         self.bytes.push(SOH);
-        assert!(
-            self.bytes.len() <= u32::MAX as usize,
-            "the fields written pass 4 GiB"
-        );
+        self.check_len();
         self.fields.push(RawField {
             tag,
             value_start: value_start as u32,
             value_end: value_end as u32,
         });
+    }
+
+    /// Writes the fields of `message`, which take `size` when written.
+    fn append(&mut self, message: &RawMessage, size: &WrittenSize) {
+        self.bytes.reserve(size.len);
+        if !size.bytes_match {
+            for (tag, value) in message.entries() {
+                let value_start = self.begin(tag);
+                self.bytes.extend_from_slice(value);
+                self.end(tag, value_start);
+            }
+            return;
+        }
+        let shift = self.bytes.len() as u32;
+        self.bytes.extend_from_slice(message.bytes());
+        self.check_len();
+        let moved = message.raw_fields().iter().map(|field| RawField {
+            tag: field.tag,
+            value_start: field.value_start + shift,
+            value_end: field.value_end + shift,
+        });
+        self.fields.extend(moved);
+    }
+
+    fn check_len(&self) {
+        assert!(
+            self.bytes.len() <= u32::MAX as usize,
+            "the fields written pass 4 GiB"
+        );
     }
 
     fn zeros(&mut self, count: usize) {
@@ -274,6 +308,38 @@ impl FieldWriter {
     }
 }
 
+/// The size of a message's fields when written.
+struct WrittenSize {
+    /// The count of bytes they take.
+    len: usize,
+    /// Whether the message's own bytes are exactly those bytes, so they can be copied.
+    bytes_match: bool,
+}
+
+impl WrittenSize {
+    fn of(message: &RawMessage) -> Self {
+        let bytes = message.bytes();
+        let mut len = 0;
+        let mut bytes_match = true;
+        for field in message.raw_fields() {
+            let tag_width = field
+                .tag
+                .0
+                .checked_ilog10()
+                .map_or(1, |log| log as usize + 1);
+            let value_start = len + tag_width + 1;
+            let value_end = value_start + (field.value_end - field.value_start) as usize;
+            bytes_match &=
+                field.value_start as usize == value_start && bytes.get(value_end) == Some(&SOH);
+            len = value_end + 1;
+        }
+        Self {
+            len,
+            bytes_match: bytes_match && len == bytes.len(),
+        }
+    }
+}
+
 /// The decimal digits of `number`, written at the end of `buffer`.
 fn digits(buffer: &mut [u8; 20], mut number: u64) -> &[u8] {
     let mut start = buffer.len();
@@ -290,7 +356,13 @@ fn digits(buffer: &mut [u8; 20], mut number: u64) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TimePrecision;
+    use crate::{TimePrecision, Tokenizer};
+
+    /// The fields of `bytes`, each ended by `separator`.
+    fn read(bytes: &'static [u8], separator: u8) -> RawMessage {
+        let fields = Tokenizer::default().tokenize_fields(bytes, separator);
+        RawMessage::new(Bytes::from_static(bytes), fields)
+    }
 
     #[test]
     fn writes_fields_in_the_order_of_the_calls() {
@@ -544,5 +616,56 @@ mod tests {
 
         assert_eq!(result, Err(WriteError::EmptyValue { tag: Tag(96) }));
         assert!(writer.finish().bytes().is_empty());
+    }
+
+    #[test]
+    fn writes_the_fields_of_a_written_message_after_its_own() {
+        let mut instrument = FieldWriter::new();
+        instrument.write_str(Tag(55), "ACME").unwrap();
+        instrument
+            .write_data(Tag(350), Tag(351), b"a\x01b")
+            .unwrap();
+        let instrument = instrument.finish();
+        let mut writer = FieldWriter::new();
+        writer.write_str(Tag(11), "ORDER-1").unwrap();
+        writer.write_fields(&instrument);
+        writer.write_int(Tag(38), 100);
+
+        let message = writer.finish();
+
+        assert_eq!(
+            message.bytes().as_ref(),
+            b"11=ORDER-1\x0155=ACME\x01350=3\x01351=a\x01b\x0138=100\x01"
+        );
+        assert_eq!(message.get_str(Tag(55)), Ok(Some("ACME")));
+        assert_eq!(message.get(Tag(351)), Some(&b"a\x01b"[..]));
+        assert_eq!(message.get_int(Tag(38)), Ok(Some(100)));
+    }
+
+    #[test]
+    fn writes_fields_read_with_another_separator_with_its_own() {
+        let read = read(b"55=ACME|48=US0000000001|", b'|');
+        let mut writer = FieldWriter::new();
+        writer.write_str(Tag(11), "ORDER-1").unwrap();
+        writer.write_fields(&read);
+
+        let message = writer.finish();
+
+        assert_eq!(
+            message.bytes().as_ref(),
+            b"11=ORDER-1\x0155=ACME\x0148=US0000000001\x01"
+        );
+        assert_eq!(message.get_str(Tag(48)), Ok(Some("US0000000001")));
+    }
+
+    #[test]
+    fn writes_a_tag_without_the_leading_zero_it_was_read_with() {
+        let read = read(b"55=ACME\x01049=X\x01", SOH);
+        let mut writer = FieldWriter::new();
+        writer.write_fields(&read);
+
+        let message = writer.finish();
+
+        assert_eq!(message.bytes().as_ref(), b"55=ACME\x0149=X\x01");
     }
 }

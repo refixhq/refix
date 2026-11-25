@@ -138,8 +138,7 @@ impl RawMessage {
         self.bytes.get(start..end).unwrap_or_default()
     }
 
-    /// The index itself, for tests asserting offset-level invariants.
-    #[cfg(test)]
+    /// The index itself.
     pub(crate) fn raw_fields(&self) -> &[RawField] {
         &self.fields
     }
