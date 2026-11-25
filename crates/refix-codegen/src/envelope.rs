@@ -1,7 +1,6 @@
-use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
+use refix_dictionary::{Dictionary, MemberContext, dictionary};
 
 use crate::flat;
-use crate::groups::known_tags;
 
 /// The header or the trailer, each read through a view of its own.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -49,14 +48,12 @@ impl Section {
     }
 }
 
-/// The sections a dictionary declares members for, and every tag they hold.
+/// The sections a dictionary declares members for.
 pub(crate) struct Envelope {
     pub(crate) sections: Vec<Section>,
     /// The sections holding a group. Their views keep the known tags they
     /// walk it with.
     pub(crate) with_groups: Vec<Section>,
-    /// Sorted, at any depth, group count tags included.
-    pub(crate) tags: Vec<Tag>,
 }
 
 impl Envelope {
@@ -79,9 +76,6 @@ impl Envelope {
         Self {
             sections,
             with_groups,
-            tags: known_tags(
-                flat::members(dictionary.header()).chain(flat::members(dictionary.trailer())),
-            ),
         }
     }
 }

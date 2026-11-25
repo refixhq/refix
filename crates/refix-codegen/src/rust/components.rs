@@ -1,12 +1,12 @@
 use refix_dictionary::dictionary;
 
 use super::docs::code;
-use super::groups::emit_known_tags;
-use super::layout::{MAX_WIDTH, indent};
+use super::groups::{KNOWN_TAGS, emit_known_tags};
+use super::layout::indent;
 use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
 use super::printing::emit_debug;
-use crate::components::{component_tags, holds_group};
+use crate::components::holds_group;
 
 /// A component's view over the scope of whatever includes the component.
 ///
@@ -19,7 +19,7 @@ pub(super) fn emit_component(component: dictionary::Component<'_>, names: &Names
     } else {
         "(refix_message::Scope<'a>)"
     };
-    let tags = emit_known_tags("const TAGS", &component_tags(component), MAX_WIDTH - 4);
+    let tags = emit_known_tags(component.members(), &[], names);
 
     let mut methods = vec![
         indent(&tags, 1),
@@ -38,7 +38,7 @@ pub(super) fn emit_component(component: dictionary::Component<'_>, names: &Names
             code(name)
         ),
         format!("impl<'a> {name}<'a> {{\n{}}}\n", methods.join("\n")),
-        emit_debug(name, "self.0.display_known(&Self::TAGS)"),
+        emit_debug(name, &format!("self.0.display_known(&{KNOWN_TAGS})")),
     ]
     .join("\n")
 }
@@ -74,6 +74,7 @@ pub(super) fn emit_component_accessor(
 mod tests {
     use super::{emit_component, emit_component_accessor};
     use crate::components::components;
+    use crate::rust::groups::KNOWN_TAGS;
     use crate::rust::messages::Lifetime;
     use crate::rust::names::Names;
     use crate::test_utils::instrument_dictionary;
@@ -91,7 +92,13 @@ mod tests {
 pub struct Instrument<'a>(refix_message::Scope<'a>, KnownTags<'static>);
 
 impl<'a> Instrument<'a> {
-    const TAGS: KnownTags<'static> = KnownTags::new(&[Tag(55), Tag(454), Tag(455), Tag(1186)]);
+    const fn known_tags() -> &'static LazyKnownTags {
+        static TAGS: LazyKnownTags = LazyKnownTags::new(
+            &[Tag(55), Tag(454)],
+            &[SecAltIDGrp::known_tags(), SecurityXML::known_tags()],
+        );
+        &TAGS
+    }
 
     pub fn raw(&self) -> refix_message::Scope<'a> {
         self.0
@@ -117,7 +124,7 @@ impl<'a> Instrument<'a> {
 
 impl std::fmt::Debug for Instrument<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Instrument({})", self.0.display_known(&Self::TAGS))
+        write!(f, "Instrument({})", self.0.display_known(&Self::known_tags().get()))
     }
 }
 "#
@@ -143,8 +150,8 @@ impl std::fmt::Debug for Instrument<'_> {
         let instrument = components(&dictionary)[0];
 
         assert_eq!(
-            emit_component_accessor(instrument, &names, Lifetime::Receiver, "Self::KNOWN_TAGS"),
-            "    /// The `Instrument` component.\n    pub fn instrument(&self) -> Instrument<'_> {\n        Instrument(self.0.scope(), Self::KNOWN_TAGS)\n    }\n"
+            emit_component_accessor(instrument, &names, Lifetime::Receiver, KNOWN_TAGS),
+            "    /// The `Instrument` component.\n    pub fn instrument(&self) -> Instrument<'_> {\n        Instrument(self.0.scope(), Self::known_tags().get())\n    }\n"
         );
     }
 
@@ -155,8 +162,8 @@ impl std::fmt::Debug for Instrument<'_> {
         let instrument = components(&dictionary)[0];
 
         assert_eq!(
-            emit_component_accessor(instrument, &names, Lifetime::Scope, "KNOWN_TAGS"),
-            "    /// The `Instrument` component.\n    pub fn instrument(&self) -> Instrument<'a> {\n        Instrument(self.0, KNOWN_TAGS)\n    }\n"
+            emit_component_accessor(instrument, &names, Lifetime::Scope, "self.1"),
+            "    /// The `Instrument` component.\n    pub fn instrument(&self) -> Instrument<'a> {\n        Instrument(self.0, self.1)\n    }\n"
         );
     }
 
@@ -167,12 +174,7 @@ impl std::fmt::Debug for Instrument<'_> {
         let order_qty_data = components(&dictionary)[2];
 
         assert_eq!(
-            emit_component_accessor(
-                order_qty_data,
-                &names,
-                Lifetime::Receiver,
-                "Self::KNOWN_TAGS"
-            ),
+            emit_component_accessor(order_qty_data, &names, Lifetime::Receiver, KNOWN_TAGS),
             "    /// The `OrderQtyData` component.\n    pub fn order_qty_data(&self) -> OrderQtyData<'_> {\n        OrderQtyData(self.0.scope())\n    }\n"
         );
     }

@@ -5,8 +5,9 @@ use super::layout::{MAX_WIDTH, indent, slice};
 use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
 use super::printing::emit_debug;
+use crate::envelope::Section;
 use crate::flat;
-use crate::groups::{known_tags, member_tags};
+use crate::groups::member_tags;
 
 /// The groups declared in components, each once, in order of first
 /// appearance across the header, messages and trailer.
@@ -73,28 +74,18 @@ pub(super) fn emit_group(group: dictionary::Group<'_>, names: &Names) -> String 
     items.join("\n")
 }
 
-/// The table an instance is walked with, then its methods.
-///
-/// An instance that holds a group also lists its known tags.
+/// The table an instance is walked with, its known tags, then its methods.
 fn emit_instance_impl(group: dictionary::Group<'_>, names: &Names) -> String {
-    let mut members = vec![indent(&emit_table(group, names), 1)];
-    let holds_group =
-        flat::members(group.members()).any(|member| matches!(member, flat::Member::Group(_)));
-    if holds_group {
-        let tags = known_tags(flat::members(group.members()));
-        members.push(indent(
-            &emit_known_tags("const KNOWN_TAGS", &tags, MAX_WIDTH - 4),
-            1,
-        ));
-    }
-    members.push(
+    let mut members = vec![
+        indent(&emit_table(group, names), 1),
+        indent(&emit_known_tags(group.members(), &[], names), 1),
         "    pub fn raw(&self) -> refix_message::Scope<'a> {\n        self.0\n    }\n".to_owned(),
-    );
+    ];
     members.extend(emit_accessors(
         group.members(),
         names,
         Lifetime::Scope,
-        "Self::KNOWN_TAGS",
+        KNOWN_TAGS,
     ));
     format!(
         "impl<'a> {}<'a> {{\n{}}}\n",
@@ -175,13 +166,59 @@ fn table_arguments(
     )
 }
 
-/// A `KnownTags` constant listing `tags`, declared as `declaration`.
-pub(super) fn emit_known_tags(declaration: &str, tags: &[Tag], width: usize) -> String {
-    let tags: Vec<String> = tags.iter().map(|tag| format!("Tag({tag})")).collect();
-    slice(
-        &format!("{declaration}: KnownTags<'static> = KnownTags::new("),
-        &tags,
-        ");",
-        width,
+/// The known tags of the type whose `known_tags` function is in scope.
+pub(super) const KNOWN_TAGS: &str = "Self::known_tags().get()";
+
+/// The function holding every tag a type can contain at any depth.
+///
+/// It writes the tags `members` list themselves. The rest come from the
+/// functions of `sections` and of the components and groups among the
+/// members.
+pub(super) fn emit_known_tags<'a>(
+    members: impl Iterator<Item = dictionary::Member<'a>>,
+    sections: &[Section],
+    names: &Names,
+) -> String {
+    let mut own = Vec::new();
+    let mut parts: Vec<String> = sections
+        .iter()
+        .map(|section| known_tags_of(section.type_name()))
+        .collect();
+    for member in members {
+        match member {
+            dictionary::Member::Field { field, .. } => own.push(format!("Tag({})", field.tag)),
+            dictionary::Member::Group(group) => {
+                own.push(format!("Tag({})", group.count_field().tag));
+                parts.push(known_tags_of(names.group_type(group)));
+            }
+            dictionary::Member::Component(component) => {
+                parts.push(known_tags_of(component.name()));
+            }
+        }
+    }
+    emit_lazy_tags("known_tags", &own, &parts)
+}
+
+/// The call returning the known tags a type holds.
+pub(super) fn known_tags_of(type_name: &str) -> String {
+    format!("{type_name}::known_tags()")
+}
+
+/// A function named `name` holding known tags that are merged on first use.
+///
+/// `own` are tags and `parts` are calls returning other such lists.
+pub(super) fn emit_lazy_tags(name: &str, own: &[String], parts: &[String]) -> String {
+    let head = "static TAGS: LazyKnownTags = LazyKnownTags::new(";
+    let one_line = format!("{head}&[{}], &[{}]);\n", own.join(", "), parts.join(", "));
+    let list = if one_line.len() <= MAX_WIDTH - 8 {
+        one_line
+    } else {
+        let width = MAX_WIDTH - 12;
+        let arguments = slice("", own, ",", width) + &slice("", parts, ",", width);
+        format!("{head}\n{});\n", indent(&arguments, 1))
+    };
+    format!(
+        "const fn {name}() -> &'static LazyKnownTags {{\n{}    &TAGS\n}}\n",
+        indent(&list, 1)
     )
 }

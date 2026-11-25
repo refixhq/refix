@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
-use refix_dictionary::{Dictionary, Tag, dictionary};
+use refix_dictionary::{Dictionary, dictionary};
 
 use crate::flat;
-use crate::groups::known_tags;
 
 /// Every component with fields that the header, messages and trailer reach.
 ///
@@ -44,18 +43,10 @@ pub(crate) fn holds_group(component: dictionary::Component<'_>) -> bool {
     flat::members(component.members()).any(|member| matches!(member, flat::Member::Group(_)))
 }
 
-/// Every tag a component can contain at any depth, sorted.
-///
-/// Group count tags are included.
-pub(crate) fn component_tags(component: dictionary::Component<'_>) -> Vec<Tag> {
-    known_tags(flat::members(component.members()))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{component_tags, components, holds_group};
+    use super::{components, holds_group};
     use crate::test_utils::instrument_dictionary;
-    use refix_dictionary::Tag;
 
     #[test]
     fn every_component_with_fields_is_found_once_outermost_first() {
@@ -77,16 +68,5 @@ mod tests {
             .collect();
 
         assert_eq!(held, [true, false, false]);
-    }
-
-    #[test]
-    fn component_tags_reach_every_depth() {
-        let dictionary = instrument_dictionary();
-        let instrument = components(&dictionary)[0];
-
-        assert_eq!(
-            component_tags(instrument),
-            [Tag(55), Tag(454), Tag(455), Tag(1186)]
-        );
     }
 }
