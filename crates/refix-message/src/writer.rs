@@ -2,9 +2,12 @@ mod error;
 
 use crate::framing::SOH;
 use crate::message::RawField;
-use crate::{Decimal, RawMessage, Tag};
+use crate::{Date, Decimal, MonthYear, RawMessage, Tag, Time, UtcTimestamp};
 use bytes::Bytes;
 pub use error::WriteError;
+
+const NANOS_PER_SECOND: u64 = 1_000_000_000;
+const SECONDS_PER_DAY: u32 = 86_400;
 
 /// Writes fields and gives them back as a [`RawMessage`].
 ///
@@ -122,6 +125,55 @@ impl FieldWriter {
         self.end(tag, value_start);
     }
 
+    /// Writes a field with `value` as a date, such as `20261103`.
+    ///
+    /// Panics as [`write`](Self::write) does.
+    pub fn write_date(&mut self, tag: Tag, value: Date) {
+        let value_start = self.begin(tag);
+        self.date(value);
+        self.end(tag, value_start);
+    }
+
+    /// Writes a field with `value` as a time of day, such as `09:30:36.250`.
+    ///
+    /// The fraction has the digits of the value's precision.
+    /// Digits past it are cut, not rounded.
+    /// Panics as [`write`](Self::write) does.
+    pub fn write_time(&mut self, tag: Tag, value: Time) {
+        let value_start = self.begin(tag);
+        self.time(value);
+        self.end(tag, value_start);
+    }
+
+    /// Writes a field with `value` as a UTC timestamp, such as `20261103-09:30:36.250`.
+    ///
+    /// The fraction has the digits of the value's precision.
+    /// Digits past it are cut, not rounded.
+    /// Panics as [`write`](Self::write) does.
+    pub fn write_utc_timestamp(&mut self, tag: Tag, value: UtcTimestamp) {
+        let value_start = self.begin(tag);
+        self.date(value.date());
+        self.bytes.push(b'-');
+        self.time(value.time());
+        self.end(tag, value_start);
+    }
+
+    /// Writes a field with `value` as a month and year, such as `202612`, `20261218` or `202612w3`.
+    ///
+    /// Panics as [`write`](Self::write) does.
+    pub fn write_month_year(&mut self, tag: Tag, value: MonthYear) {
+        let value_start = self.begin(tag);
+        self.two_digits(u32::from(value.year() / 100));
+        self.two_digits(u32::from(value.year() % 100));
+        self.two_digits(u32::from(value.month()));
+        if let Some(day) = value.day() {
+            self.two_digits(u32::from(day));
+        } else if let Some(week) = value.week() {
+            self.bytes.extend_from_slice(&[b'w', b'0' + week]);
+        }
+        self.end(tag, value_start);
+    }
+
     /// The fields written, as a message.
     pub fn finish(self) -> RawMessage {
         RawMessage::new(Bytes::from(self.bytes), self.fields)
@@ -154,6 +206,46 @@ impl FieldWriter {
     fn zeros(&mut self, count: usize) {
         self.bytes.resize(self.bytes.len() + count, b'0');
     }
+
+    fn date(&mut self, date: Date) {
+        self.two_digits(u32::from(date.year() / 100));
+        self.two_digits(u32::from(date.year() % 100));
+        self.two_digits(u32::from(date.month()));
+        self.two_digits(u32::from(date.day()));
+    }
+
+    fn time(&mut self, time: Time) {
+        let nanos = time.nanos_since_midnight() as u64;
+        let seconds = (nanos / NANOS_PER_SECOND) as u32;
+        // The second after 23:59:59 is a leap second.
+        let (hour, minute, second) = if seconds == SECONDS_PER_DAY {
+            (23, 59, 60)
+        } else {
+            (seconds / 3_600, seconds / 60 % 60, seconds % 60)
+        };
+        self.two_digits(hour);
+        self.bytes.push(b':');
+        self.two_digits(minute);
+        self.bytes.push(b':');
+        self.two_digits(second);
+
+        let count = usize::from(time.precision().fraction_digits());
+        if count > 0 {
+            let mut fraction = [b'0'; 9];
+            let mut rest = nanos % NANOS_PER_SECOND;
+            for digit in fraction.iter_mut().rev() {
+                *digit = b'0' + (rest % 10) as u8;
+                rest /= 10;
+            }
+            self.bytes.push(b'.');
+            self.bytes.extend_from_slice(&fraction[..count]);
+        }
+    }
+
+    fn two_digits(&mut self, number: u32) {
+        self.bytes
+            .extend_from_slice(&[b'0' + (number / 10) as u8, b'0' + (number % 10) as u8]);
+    }
 }
 
 /// The decimal digits of `number`, written at the end of `buffer`.
@@ -172,6 +264,7 @@ fn digits(buffer: &mut [u8; 20], mut number: u64) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::TimePrecision;
 
     #[test]
     fn writes_fields_in_the_order_of_the_calls() {
@@ -308,5 +401,100 @@ mod tests {
         let small = format!("0.{}1", "0".repeat(127));
         assert_eq!(message.get_str(Tag(44)), Ok(Some(&*large)));
         assert_eq!(message.get_str(Tag(31)), Ok(Some(&*small)));
+    }
+
+    #[test]
+    fn writes_a_date_that_reads_back() {
+        let date = Date::new(2026, 11, 3).unwrap();
+        let mut writer = FieldWriter::new();
+        writer.write_date(Tag(75), date);
+
+        let message = writer.finish();
+
+        assert_eq!(message.get_str(Tag(75)), Ok(Some("20261103")));
+        assert_eq!(message.get_date(Tag(75)), Ok(Some(date)));
+    }
+
+    #[test]
+    fn writes_a_time_with_the_digits_of_its_precision() {
+        let tenths = TimePrecision::from_fraction_digits(1).unwrap();
+        let cases = [
+            (TimePrecision::SECONDS, "09:30:36"),
+            (tenths, "09:30:36.2"),
+            (TimePrecision::MILLIS, "09:30:36.250"),
+            (TimePrecision::MICROS, "09:30:36.250999"),
+            (TimePrecision::NANOS, "09:30:36.250999999"),
+        ];
+        for (precision, expected) in cases {
+            let time = Time::new(34_236_250_999_999, precision).unwrap();
+            let mut writer = FieldWriter::new();
+            writer.write_time(Tag(273), time);
+
+            let message = writer.finish();
+
+            assert_eq!(message.get_str(Tag(273)), Ok(Some(expected)));
+            let read = message.get_time(Tag(273)).unwrap().unwrap();
+            assert_eq!(read.precision(), precision);
+        }
+    }
+
+    #[test]
+    fn writes_a_leap_second_that_reads_back() {
+        let time = Time::new(86_400_500_000_000, TimePrecision::MILLIS).unwrap();
+        let mut writer = FieldWriter::new();
+        writer.write_time(Tag(273), time);
+
+        let message = writer.finish();
+
+        assert_eq!(message.get_str(Tag(273)), Ok(Some("23:59:60.500")));
+        assert_eq!(message.get_time(Tag(273)), Ok(Some(time)));
+    }
+
+    #[test]
+    fn writes_a_utc_timestamp_that_reads_back() {
+        let stamp = UtcTimestamp::new(1_793_370_591_123_456_000, TimePrecision::MICROS);
+        let mut writer = FieldWriter::new();
+        writer.write_utc_timestamp(Tag(60), stamp);
+
+        let message = writer.finish();
+
+        assert_eq!(
+            message.get_str(Tag(60)),
+            Ok(Some("20261030-14:29:51.123456"))
+        );
+        let read = message.get_utc_timestamp(Tag(60)).unwrap().unwrap();
+        assert_eq!(read.unix_nanos(), stamp.unix_nanos());
+        assert_eq!(read.precision(), TimePrecision::MICROS);
+    }
+
+    #[test]
+    fn writes_a_utc_timestamp_before_1970() {
+        let mut writer = FieldWriter::new();
+        writer.write_utc_timestamp(Tag(60), UtcTimestamp::new(-1, TimePrecision::NANOS));
+
+        let message = writer.finish();
+
+        assert_eq!(
+            message.get_str(Tag(60)),
+            Ok(Some("19691231-23:59:59.999999999"))
+        );
+    }
+
+    #[test]
+    fn writes_a_month_year_in_each_form() {
+        let cases = [
+            (MonthYear::new(2026, 12).unwrap(), "202612"),
+            (MonthYear::with_day(2026, 12, 18).unwrap(), "20261218"),
+            (MonthYear::with_week(2026, 12, 3).unwrap(), "202612w3"),
+        ];
+        for (value, expected) in cases {
+            let mut writer = FieldWriter::new();
+            writer.write_month_year(Tag(200), value);
+
+            let message = writer.finish();
+
+            assert_eq!(message.get_str(Tag(200)), Ok(Some(expected)));
+            assert_eq!(message.get_month_year(Tag(200)), Ok(Some(value)));
+        }
     }
 }
