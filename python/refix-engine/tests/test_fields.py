@@ -31,25 +31,22 @@ class QuoteCondition(enum.StrEnum):
     CLOSED = "B"
 
 
-class PtysSubGrp:
-    class Instance(fields.GroupInstance):
-        party_sub_id = fields.Str(523)
+class PtysSubGrp(fields.GroupInstance):
+    party_sub_id = fields.Str(523)
 
 
-class Parties:
-    class Instance(fields.GroupInstance):
-        party_id = fields.Str(448)
-        party_role = fields.Int(452, PartyRole)
-        party_sub_ids = fields.Group(802, PtysSubGrp.Instance)
-
-
-class Hop(fields.GroupInstance):
-    hop_comp_id = fields.Str(628)
+class Parties(fields.GroupInstance):
+    party_id = fields.Str(448)
+    party_role = fields.Int(452, PartyRole)
+    party_sub_ids = fields.Group(802, PtysSubGrp)
 
 
 class Header(fields.Component):
+    class Hops(fields.GroupInstance):
+        hop_comp_id = fields.Str(628)
+
     sender_comp_id = fields.Str(49)
-    hops = fields.Group(627, Hop)
+    hops = fields.Group(627, Hops)
 
 
 class Trailer(fields.Component):
@@ -83,7 +80,7 @@ class NewOrderSingle(fields.Message):
     md_entry_time_ns = fields.TimeNs(273)
     quote_condition = fields.MultipleValues(276, QuoteCondition)
     party_role = fields.Int(452, PartyRole)
-    party_ids = fields.Group(453, Parties.Instance)
+    party_ids = fields.Group(453, Parties)
     underlyings = fields.Group(711, UndInstrmtGrp)
     trailer = fields.View(Trailer)
 
@@ -106,7 +103,7 @@ class EmptyHolder(fields.Message):
 
 class Plain:
     symbol = fields.Str(55)
-    party_ids = fields.Group(453, Parties.Instance)
+    party_ids = fields.Group(453, Parties)
     header = fields.View(Header)
 
 
@@ -205,24 +202,26 @@ class TestGroupInstance:
     def test_keeps_its_scope(self):
         scope = parties()[0]
 
-        assert Parties.Instance(scope).raw is scope
+        assert Parties(scope).raw is scope
 
     def test_from_raw_returns_the_subclass(self):
-        assert type(Parties.Instance.from_raw(parties()[0])) is Parties.Instance
+        assert type(Parties.from_raw(parties()[0])) is Parties
 
     def test_the_repr_uses_the_qualified_name(self):
-        instance = Parties.Instance(parties()[0])
+        raw = tokenize_body("35=D|627=1|628=HOP|55=ACME|")
 
-        assert repr(instance) == "Parties.Instance(448=AL|452=1)"
+        (hop,) = NewOrderSingle(raw).header.hops
+
+        assert repr(hop) == "Header.Hops(628=HOP)"
 
     def test_a_raw_message_raises(self):
         raw: Any = order()
 
         with pytest.raises(TypeError):
-            Parties.Instance(raw)
+            Parties(raw)
 
     def test_raw_by_keyword_raises(self):
-        instance: Any = Parties.Instance
+        instance: Any = Parties
 
         with pytest.raises(TypeError):
             instance(raw=parties()[0])
@@ -246,7 +245,7 @@ class TestCopy:
         assert copy.deepcopy(component) is component
 
     def test_a_copy_of_a_group_instance_is_the_instance(self):
-        instance = Parties.Instance(parties()[0])
+        instance = Parties(parties()[0])
 
         assert copy.copy(instance) is instance
         assert copy.deepcopy(instance) is instance
@@ -267,7 +266,7 @@ class TestStr:
         assert Instrument(order()).symbol == "ACME"
 
     def test_reads_text_from_a_group_instance(self):
-        ids = [Parties.Instance(scope).party_id for scope in parties()]
+        ids = [Parties(scope).party_id for scope in parties()]
 
         assert ids == ["AL", "BOB"]
 
@@ -790,7 +789,7 @@ class TestGroup:
     def test_reads_each_instance(self):
         parties = NewOrderSingle(order()).party_ids
 
-        assert [type(party) for party in parties] == [Parties.Instance] * 2
+        assert [type(party) for party in parties] == [Parties] * 2
         assert [party.party_id for party in parties] == ["AL", "BOB"]
 
     def test_absent_group_is_empty(self):
@@ -847,7 +846,7 @@ class TestGroup:
         assert isinstance(NewOrderSingle.party_ids, fields.Group)
 
     def test_the_repr_shows_the_tag_and_the_instance_class(self):
-        assert repr(NewOrderSingle.party_ids) == "Group(453, Parties.Instance)"
+        assert repr(NewOrderSingle.party_ids) == "Group(453, Parties)"
 
     def test_a_class_that_is_not_a_group_instance_raises(self):
         declaration: Any = fields.Group
@@ -867,7 +866,7 @@ class TestGroup:
         declaration: Any = fields.Group
 
         with pytest.raises(TypeError):
-            declaration(453, instance=Parties.Instance)
+            declaration(453, instance=Parties)
 
     def test_a_class_without_a_base_raises(self):
         with pytest.raises(TypeError, match="'Plain' is not a Message"):
