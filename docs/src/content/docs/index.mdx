@@ -89,11 +89,11 @@ Print each order's fields as typed values.
 		for record in refix.decode_log("fix.log", CODEC):
 		    order = record.message
 		    if isinstance(order, NewOrderSingle):
-		        print(order.cl_ord_id, order.side.name, order.order_qty, order.price)
+		        print(order.cl_ord_id, order.instrument.symbol, order.side.name, order.price)
 		```
 
 		```text
-		ORDER-1 BUY 100 101.25
+		ORDER-1 ACME BUY 101.25
 		```
 	</TabItem>
 	<TabItem label="Rust">
@@ -108,22 +108,22 @@ Print each order's fields as typed values.
 		        let Message::NewOrderSingle(order) = Message::from_raw(record.message) else {
 		            continue;
 		        };
-		        let (Some(id), Some(side), Some(qty), Some(price)) = (
+		        let (Some(id), Some(symbol), Some(side), Some(price)) = (
 		            order.cl_ord_id()?,
+		            order.instrument().symbol()?,
 		            order.side()?,
-		            order.order_qty()?,
 		            order.price()?,
 		        ) else {
 		            continue;
 		        };
-		        println!("{id} {side:?} {qty} {price}");
+		        println!("{id} {symbol} {side:?} {price}");
 		    }
 		    Ok(())
 		}
 		```
 
 		```text
-		ORDER-1 Buy 100 101.25
+		ORDER-1 ACME Buy 101.25
 		```
 	</TabItem>
 </Tabs>

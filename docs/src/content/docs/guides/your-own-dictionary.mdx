@@ -15,7 +15,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 The `refix` command-line tool generates [typed messages](/guides/typed-messages/) from your own FIX dictionary.
 
 - It reads a dictionary in QuickFIX's XML format, with the custom messages, fields, values and groups it defines.
-- It writes a Python module, a Rust module or both, each as a single file.
+- It writes a Python package, a Rust module or both, each with a file for every message and component.
 - It accepts a dictionary with common defects, and prints a warning for each thing it dropped or changed.
 
 ## Install the tool
@@ -29,40 +29,43 @@ This installs a prebuilt binary. With a Rust toolchain, `cargo install refix-cli
 ## Generate the code
 
 ```sh
-refix codegen venue.xml --python venue.py --rust venue.rs
+refix codegen venue.xml --python venue --rust src/venue
 ```
 
-Give `--python`, `--rust` or both, each with the path of the file to write. Do not edit the generated files. Run the
-tool again when the dictionary changes.
+Give `--python`, `--rust` or both, each with the directory to write. The directory has the name of the package or
+module, so this one is imported as `venue` in Python and declared as `mod venue;` in Rust.
+
+Do not edit the generated files. Run the tool again when the dictionary changes. It removes the files of messages
+and components that are gone from the dictionary, and leaves any file it did not generate.
 
 ## Other FIX versions
 
-FIX 4.2 and 4.4 have ready-made packages. For another version, generate a module from QuickFIX's dictionary for
+FIX 4.2 and 4.4 have ready-made packages. For another version, generate the code from QuickFIX's dictionary for
 it, found in its [spec directory](https://github.com/quickfix/quickfix/tree/master/spec). For FIX 4.0, 4.1 or 4.3:
 
 ```sh
-refix codegen FIX43.xml --python fix43.py --rust fix43.rs
+refix codegen FIX43.xml --python fix43 --rust src/fix43
 ```
 
 From FIX 5.0 the header, the trailer and the session messages, such as Logon, are in a transport dictionary of
 their own, `FIXT11.xml`. Give it with `--transport`:
 
 ```sh
-refix codegen FIX50SP2.xml --transport FIXT11.xml --python fix50sp2.py --rust fix50sp2.rs
+refix codegen FIX50SP2.xml --transport FIXT11.xml --python fix50sp2 --rust src/fix50sp2
 ```
 
 This works for FIX 5.0, 5.0 SP1 and 5.0 SP2. QuickFIX's `FIX50SP2.xml` also holds every extension pack released
-since SP2, so its Python module is about 10 MB and pyright cannot check code that uses it.
+since SP2, so it gives about 890 files in each language.
 
 Those dictionaries are under the QuickFIX Software License.
 
-## Use the module
+## Use the code
 
 In these examples the dictionary gives NewOrderSingle a custom DeskID (5001) field.
 
 <Tabs syncKey="language">
 	<TabItem label="Python">
-		Put `venue.py` where your code can import it. It needs the `refix` package.
+		Put the `venue` directory where your code can import it. It needs the `refix` package.
 
 		```python
 		import refix
@@ -73,9 +76,12 @@ In these examples the dictionary gives NewOrderSingle a custom DeskID (5001) fie
 		    if isinstance(order, NewOrderSingle):
 		        print(order.cl_ord_id, order.desk_id)
 		```
+
+		Every name is imported from `venue`. `venue.messages`, `venue.components` and `venue.enums` hold the same
+		names by kind.
 	</TabItem>
 	<TabItem label="Rust">
-		Put `venue.rs` in `src/` and declare the module. It needs the `refix-message` crate, so run
+		Generate into `src/venue` and declare the module. It needs the `refix-message` crate, so run
 		`cargo add refix-message`.
 
 		```rust
@@ -97,22 +103,28 @@ In these examples the dictionary gives NewOrderSingle a custom DeskID (5001) fie
 		}
 		```
 
-		Without `#[allow(dead_code)]`, a binary gets a warning for each generated item it does not use.
+		Without `#[allow(dead_code)]`, a binary gets a warning for each generated item it does not use. Every name is
+		imported from `venue`, as the files inside it are private modules.
 	</TabItem>
 </Tabs>
 
-The module is used like the FIX 4.4 package in [Typed messages](/guides/typed-messages/).
+The code is used like the FIX 4.4 package in [Typed messages](/guides/typed-messages/).
 
 ## How names are derived
 
-| In the dictionary        | Python                | Rust                  |
-| ------------------------ | --------------------- | --------------------- |
-| Message `NewOrderSingle` | `NewOrderSingle`      | `NewOrderSingle`      |
-| Field `DeskID`           | `desk_id`             | `desk_id()`           |
-| Field `SettlCycle`       | `settl_cycle`         | `settl_cycle()`       |
-| Its values, as an enum   | `SettlCycle`          | `SettlCycle`          |
-| Value `SAME_DAY`         | `SettlCycle.SAME_DAY` | `SettlCycle::SameDay` |
-| Group `NoAllocAccounts`  | `alloc_accounts`      | `alloc_accounts()`    |
+| In the dictionary                 | Python                         | Rust                          |
+| --------------------------------- | ------------------------------ | ----------------------------- |
+| Message `NewOrderSingle`          | `NewOrderSingle`               | `NewOrderSingle`              |
+| Field `DeskID`                    | `desk_id`                      | `desk_id()`                   |
+| Field `SettlCycle`                | `settl_cycle`                  | `settl_cycle()`               |
+| Its values, as an enum            | `SettlCycle`                   | `SettlCycle`                  |
+| Value `SAME_DAY`                  | `SettlCycle.SAME_DAY`          | `SettlCycle::SameDay`         |
+| Component `Instrument`            | `instrument`                   | `instrument()`                |
+| Its type                          | `Instrument`                   | `Instrument`                  |
+| Group `NoAllocAccounts`           | `alloc_accounts`               | `alloc_accounts()`            |
+| One instance, in `NewOrderSingle` | `NewOrderSingle.AllocAccounts` | `NewOrderSingleAllocAccounts` |
+
+A component that holds only a group gives its own name to the instances, such as `Parties`.
 
 Some names need a change to be valid or unique:
 
@@ -132,7 +144,7 @@ warning: message 'VenueStatus' has unknown msgcat 'venue', which is read as app
 
 | Defect                                              | What the tool does                 |
 | --------------------------------------------------- | ---------------------------------- |
-| A tag appears twice in one message                  | Keeps the first and drops the rest |
+| A message or component lists a tag twice            | Keeps the first and drops the rest |
 | A value code is listed twice for one field          | Keeps the first and drops the rest |
 | A message's `msgcat` is not `admin` or `app`        | Reads it as `app`                  |
 | The XML declaration is not at the start of the file | Ignores it                         |
@@ -142,3 +154,6 @@ Any other problem stops the tool with an error that names it.
 ```text
 error: cannot parse 'venue.xml': message 'VenueStatus' references unknown field 'NoSuchField'
 ```
+
+A tag listed both inside a repeating group and outside it is one of these errors, as a reader could not tell which
+of the two a field belongs to.
