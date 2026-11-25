@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use refix_dictionary::spec::Field;
 use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
@@ -113,13 +113,14 @@ impl Names {
         }
         for message in dictionary.messages() {
             let mut members = Namespace::with_generated(MESSAGE);
+            let used = names.classes_used(message.members());
             for member in flat::members(message.members()) {
                 if let flat::Member::Group(group) = member
                     && matches!(group.declared_in(), MemberContext::Message(_))
                 {
                     let class = names.group_class(group);
                     let owner = Owner::Group(instance_context(group));
-                    hides_no_module_name(&module, class, &owner)?;
+                    hides_no_used_name(&module, &used, class, &owner)?;
                     members.claim(class, owner)?;
                 }
             }
@@ -130,10 +131,11 @@ impl Names {
         }
         for group in declared_groups(dictionary) {
             let mut members = Namespace::with_generated(INSTANCE);
+            let used = names.classes_used(group.members());
             for nested in nested_groups(group) {
                 let class = names.group_class(nested);
                 let owner = Owner::Group(instance_context(nested));
-                hides_no_module_name(&module, class, &owner)?;
+                hides_no_used_name(&module, &used, class, &owner)?;
                 members.claim(class, owner)?;
             }
             names.name_properties(group.members(), members)?;
@@ -155,13 +157,14 @@ impl Names {
     ) -> Result<(), Error> {
         let members = section.members(dictionary);
         let mut namespace = Namespace::with_generated(VIEW);
+        let used = self.classes_used(section.listed(dictionary).into_iter());
         for member in &members {
             if let flat::Member::Group(group) = member
                 && *group.declared_in() == section.context()
             {
                 let class = self.group_class(*group);
                 let owner = Owner::Group(instance_context(*group));
-                hides_no_module_name(module, class, &owner)?;
+                hides_no_used_name(module, &used, class, &owner)?;
                 namespace.claim(class, owner)?;
             }
         }
@@ -245,6 +248,28 @@ impl Names {
         Ok(())
     }
 
+    /// The module classes that the declarations of `members` name.
+    ///
+    /// They are the enums of its fields, the classes of its shared groups
+    /// and the views of its components.
+    fn classes_used<'a>(
+        &self,
+        members: impl Iterator<Item = dictionary::Member<'a>>,
+    ) -> HashSet<String> {
+        members
+            .filter_map(|member| match member {
+                dictionary::Member::Field { field, .. } => {
+                    self.enums.get(&field.tag).map(|names| names.class.clone())
+                }
+                dictionary::Member::Group(group) => {
+                    matches!(group.declared_in(), MemberContext::Component(_))
+                        .then(|| self.group_class(group).to_owned())
+                }
+                dictionary::Member::Component(component) => Some(component.name().to_owned()),
+            })
+            .collect()
+    }
+
     /// The class of a field's enum.
     pub(super) fn enum_class(&self, field: &Field) -> &str {
         &self.enums[&field.tag].class
@@ -281,19 +306,28 @@ impl Names {
     }
 }
 
-/// Fails if `class`, defined in the body of another class, is a module name.
+/// Fails if `class`, defined in the body of another class, is a module name
+/// that body uses.
 ///
-/// The declarations in that body name the module's enums and group classes
-/// without a path, and the class would hide the one of its name.
-fn hides_no_module_name(module: &Namespace, class: &str, owner: &Owner) -> Result<(), Error> {
+/// The declarations in a body name the classes in `used` without a path,
+/// and the class would hide the one of its name. It may not hide a name the
+/// generated code keeps for itself either.
+fn hides_no_used_name(
+    module: &Namespace,
+    used: &HashSet<String>,
+    class: &str,
+    owner: &Owner,
+) -> Result<(), Error> {
     match module.owner(class) {
-        Some(first) => Err(Box::new(NameClash {
-            name: class.to_owned(),
-            first: first.clone(),
-            second: owner.clone(),
-        })
-        .into()),
-        None => Ok(()),
+        Some(first) if *first == Owner::Generated || used.contains(class) => {
+            Err(Box::new(NameClash {
+                name: class.to_owned(),
+                first: first.clone(),
+                second: owner.clone(),
+            })
+            .into())
+        }
+        _ => Ok(()),
     }
 }
 
@@ -526,26 +560,69 @@ mod tests {
     }
 
     #[test]
-    fn a_nested_group_class_named_like_a_module_name_clashes() {
+    fn a_nested_group_class_named_like_a_generated_name_clashes() {
         assert_eq!(
-            clash_in(&with_a_group_in_a_group("NoLogon")),
+            clash_in(&with_a_group_in_a_group("NoRawMessage")),
             NameClash {
-                name: "Logon".to_owned(),
-                first: Owner::Message("Logon".to_owned()),
-                second: nested_group("NoLogon"),
+                name: "RawMessage".to_owned(),
+                first: Owner::Generated,
+                second: nested_group("NoRawMessage"),
             }
         );
     }
 
     #[test]
-    fn a_nested_group_class_named_like_an_enum_clashes() {
+    fn a_group_class_may_be_named_like_a_message() {
+        let dictionary = dictionary(
+            vec![message(
+                "SecurityTypes",
+                "w",
+                vec![group(558, vec![field_ref(167)])],
+            )],
+            vec![
+                field("NoSecurityTypes", 558, DataType::NumInGroup),
+                field("SecurityType", 167, DataType::String),
+            ],
+            vec![],
+        );
+
+        assert!(Names::new(&dictionary, &mut Vec::new()).is_ok());
+    }
+
+    #[test]
+    fn a_group_class_may_be_named_like_the_enum_of_its_own_field() {
+        let dictionary = dictionary(
+            vec![message(
+                "CollateralInquiry",
+                "BB",
+                vec![group(938, vec![field_ref(896)])],
+            )],
+            vec![
+                field("NoCollInquiryQualifier", 938, DataType::NumInGroup),
+                with_values(
+                    field("CollInquiryQualifier", 896, DataType::Int),
+                    &[("0", "TRADEDATE")],
+                ),
+            ],
+            vec![],
+        );
+
+        assert!(Names::new(&dictionary, &mut Vec::new()).is_ok());
+    }
+
+    #[test]
+    fn a_nested_group_class_named_like_an_enum_beside_it_clashes() {
         let dictionary = dictionary(
             vec![message(
                 "Logon",
                 "A",
                 vec![group(
                     384,
-                    vec![field_ref(372), group(9001, vec![field_ref(9002)])],
+                    vec![
+                        field_ref(372),
+                        field_ref(9003),
+                        group(9001, vec![field_ref(9002)]),
+                    ],
                 )],
             )],
             vec![
@@ -569,12 +646,12 @@ mod tests {
     }
 
     #[test]
-    fn a_message_group_class_named_like_an_enum_clashes() {
+    fn a_message_group_class_named_like_an_enum_beside_it_clashes() {
         let dictionary = dictionary(
             vec![message(
                 "Logon",
                 "A",
-                vec![group(384, vec![field_ref(372)])],
+                vec![field_ref(9000), group(384, vec![field_ref(372)])],
             )],
             vec![
                 field("NoMsgTypes", 384, DataType::NumInGroup),
