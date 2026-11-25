@@ -32,6 +32,14 @@ impl UtcTimestamp {
         self.precision
     }
 
+    /// The same instant at another precision.
+    pub const fn with_precision(self, precision: TimePrecision) -> Self {
+        Self {
+            unix_nanos: self.unix_nanos,
+            precision,
+        }
+    }
+
     /// The date in UTC.
     pub fn date(&self) -> Date {
         Date::from_days_since_epoch(self.unix_nanos.div_euclid(NANOS_PER_DAY))
@@ -92,6 +100,20 @@ mod tests {
     fn parts(text: &str) -> (i64, TimePrecision) {
         let value = parse(text).unwrap();
         (value.unix_nanos(), value.precision())
+    }
+
+    mod construction {
+        use super::*;
+
+        #[test]
+        fn changes_the_precision_and_keeps_the_instant() {
+            let value = UtcTimestamp::new(1_793_370_591_123_456_789, TimePrecision::NANOS);
+
+            let coarser = value.with_precision(TimePrecision::MILLIS);
+
+            assert_eq!(coarser.precision(), TimePrecision::MILLIS);
+            assert_eq!(coarser.unix_nanos(), 1_793_370_591_123_456_789);
+        }
     }
 
     mod parsing {

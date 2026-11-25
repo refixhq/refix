@@ -36,6 +36,14 @@ impl Time {
         self.precision
     }
 
+    /// The same time at another precision.
+    pub const fn with_precision(self, precision: TimePrecision) -> Self {
+        Self {
+            nanos_since_midnight: self.nanos_since_midnight,
+            precision,
+        }
+    }
+
     /// Reads a FIX time such as `14:29:51.123`.
     ///
     /// A leap second, `:60`, counts as the first second of the next minute.
@@ -122,6 +130,16 @@ mod tests {
             assert!(Time::new(86_400_999_999_999, TimePrecision::NANOS).is_some());
             assert_eq!(Time::new(86_401_000_000_000, TimePrecision::NANOS), None);
             assert_eq!(Time::new(-1, TimePrecision::NANOS), None);
+        }
+
+        #[test]
+        fn changes_the_precision_and_keeps_the_time() {
+            let value = Time::new(52_191_123_456_789, TimePrecision::NANOS).unwrap();
+
+            let coarser = value.with_precision(TimePrecision::MILLIS);
+
+            assert_eq!(coarser.precision(), TimePrecision::MILLIS);
+            assert_eq!(coarser.nanos_since_midnight(), 52_191_123_456_789);
         }
     }
 
