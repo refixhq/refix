@@ -36,8 +36,8 @@ venv/
 __pypackages__/
 
 # Generated stock package code
-crates/refix-fix42/src/generated.rs
-crates/refix-fix44/src/generated.rs
+crates/refix-fix42/src/generated/
+crates/refix-fix44/src/generated/
 python/refix-fix42/src/refix_fix42/**/*.py
 python/refix-fix44/src/refix_fix44/**/*.py
 

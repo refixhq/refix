@@ -35,6 +35,23 @@ pub(crate) fn group_source_name(group: dictionary::Group<'_>) -> &str {
         .unwrap_or(count_field)
 }
 
+/// The module holding the type named `type_name`, before escaping.
+///
+/// It is the name in snake case, unless that splits an acronym in the wrong
+/// place.
+pub(crate) fn module_base_name(type_name: &str) -> String {
+    match MODULE_EXCEPTIONS
+        .iter()
+        .find(|(name, _)| *name == type_name)
+    {
+        Some((_, module)) => (*module).to_owned(),
+        None => snake_case(type_name),
+    }
+}
+
+/// Types whose snake-case name splits an acronym in the wrong place.
+const MODULE_EXCEPTIONS: &[(&str, &str)] = &[("XMLnonFIX", "xml_non_fix")];
+
 /// Strips a `No` that starts a word, as in `NoPartyIDs` but not `Notional`.
 fn without_no_prefix(name: &str) -> Option<&str> {
     name.strip_prefix("No")
@@ -43,7 +60,7 @@ fn without_no_prefix(name: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{field_base_name, group_accessor_base_name, group_source_name};
+    use super::{field_base_name, group_accessor_base_name, group_source_name, module_base_name};
     use crate::test_utils::with_group;
     use refix_dictionary::Tag;
     use refix_dictionary::spec::{DataType, EnumValue, Field};
@@ -129,5 +146,16 @@ mod tests {
     #[test]
     fn a_count_field_without_the_prefix_is_used_as_is() {
         assert_eq!(accessor_named(Some("Parties"), "LegCount"), "leg_count");
+    }
+
+    #[test]
+    fn module_names_are_snake_case() {
+        assert_eq!(module_base_name("NewOrderSingle"), "new_order_single");
+        assert_eq!(module_base_name("SecAltIDGrp"), "sec_alt_id_grp");
+    }
+
+    #[test]
+    fn a_module_name_that_would_split_an_acronym_is_listed() {
+        assert_eq!(module_base_name("XMLnonFIX"), "xml_non_fix");
     }
 }

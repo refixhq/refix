@@ -2,7 +2,7 @@ use refix_dictionary::dictionary;
 use refix_dictionary::spec::{EnumValue, Field};
 
 use crate::conversion::Conversion;
-use crate::naming::{field_base_name, group_accessor_base_name};
+use crate::naming::{field_base_name, group_accessor_base_name, module_base_name};
 use crate::python::Error;
 use crate::snake_case;
 
@@ -36,14 +36,8 @@ pub(super) fn component_property_name(component: &str) -> String {
 
 /// The module holding the class named `class`.
 pub(super) fn module_name(class: &str) -> String {
-    match MODULE_EXCEPTIONS.iter().find(|(name, _)| *name == class) {
-        Some((_, module)) => (*module).to_owned(),
-        None => identifier(snake_case(class)),
-    }
+    identifier(module_base_name(class))
 }
-
-/// Classes whose snake-case name splits an acronym in the wrong place.
-const MODULE_EXCEPTIONS: &[(&str, &str)] = &[("XMLnonFIX", "xml_non_fix")];
 
 pub(super) fn member_name(field: &Field, value: &EnumValue) -> Result<String, Error> {
     let mut name = value
@@ -139,15 +133,9 @@ mod tests {
     }
 
     #[test]
-    fn module_names_are_snake_case() {
+    fn keyword_module_names_take_a_trailing_underscore() {
         assert_eq!(module_name("NewOrderSingle"), "new_order_single");
-        assert_eq!(module_name("SecAltIDGrp"), "sec_alt_id_grp");
         assert_eq!(module_name("Yield"), "yield_");
-    }
-
-    #[test]
-    fn a_module_name_that_would_split_an_acronym_is_listed() {
-        assert_eq!(module_name("XMLnonFIX"), "xml_non_fix");
     }
 
     #[test]

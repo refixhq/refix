@@ -34,13 +34,13 @@ fn codegen(outputs: &[(&str, &str)]) -> PathBuf {
     directory
 }
 
-/// The modules of the Python package at `root`, by path.
-fn python_modules(root: &Path) -> BTreeMap<PathBuf, String> {
+/// The generated files at `root` with `extension`, by path.
+fn modules(root: &Path, extension: &str) -> BTreeMap<PathBuf, String> {
     let mut modules = BTreeMap::new();
     for folder in ["", "components", "messages"] {
         for entry in std::fs::read_dir(root.join(folder)).unwrap() {
             let path = entry.unwrap().path();
-            if path.extension().is_some_and(|extension| extension == "py") {
+            if path.extension().is_some_and(|found| found == extension) {
                 let name = path.file_name().unwrap();
                 let code = std::fs::read_to_string(&path).unwrap();
                 modules.insert(Path::new(folder).join(name), code);
@@ -53,38 +53,65 @@ fn python_modules(root: &Path) -> BTreeMap<PathBuf, String> {
 fn python_golden() -> BTreeMap<PathBuf, String> {
     let root =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../python/refix-engine/tests/toy_generated");
-    python_modules(&root)
+    modules(&root, "py")
 }
 
-const RUST_GOLDEN: &str = include_str!("../../refix-codegen/tests/data/toy_generated.rs");
+fn rust_golden() -> BTreeMap<PathBuf, String> {
+    let root =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../refix-codegen/tests/data/toy_generated");
+    modules(&root, "rs")
+}
 
 #[test]
-fn writes_the_rust_module() {
-    let directory = codegen(&[("--rust", "toy.rs")]);
+fn writes_the_rust_module_tree() {
+    let directory = codegen(&[("--rust", "toy")]);
 
-    let written = std::fs::read_to_string(directory.join("toy.rs")).unwrap();
+    let written = modules(&directory.join("toy"), "rs");
     std::fs::remove_dir_all(&directory).unwrap();
-    assert_eq!(written, RUST_GOLDEN);
+    assert_eq!(written, rust_golden());
 }
 
 #[test]
 fn writes_the_python_package() {
     let directory = codegen(&[("--python", "toy")]);
 
-    let written = python_modules(&directory.join("toy"));
+    let written = modules(&directory.join("toy"), "py");
     std::fs::remove_dir_all(&directory).unwrap();
     assert_eq!(written, python_golden());
 }
 
 #[test]
 fn writes_every_output_from_one_run() {
-    let directory = codegen(&[("--rust", "toy.rs"), ("--python", "toy")]);
+    let directory = codegen(&[("--rust", "rust/toy"), ("--python", "python/toy")]);
 
-    let rust = std::fs::read_to_string(directory.join("toy.rs")).unwrap();
-    let python = python_modules(&directory.join("toy"));
+    let rust = modules(&directory.join("rust/toy"), "rs");
+    let python = modules(&directory.join("python/toy"), "py");
     std::fs::remove_dir_all(&directory).unwrap();
-    assert_eq!(rust, RUST_GOLDEN);
+    assert_eq!(rust, rust_golden());
     assert_eq!(python, python_golden());
+}
+
+#[test]
+fn a_rust_directory_no_module_can_be_named_like_is_refused() {
+    let directory = scratch_directory();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_refix"))
+        .arg("codegen")
+        .arg(toy_xml())
+        .arg("--rust")
+        .arg(directory.join("toy.rs"))
+        .output()
+        .unwrap();
+    let written = directory.join("toy.rs").exists();
+    std::fs::remove_dir_all(&directory).unwrap();
+
+    assert!(!output.status.success());
+    assert!(!written);
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "error: --rust takes the directory of a module, and 'toy.rs' is not a name a rust \
+         module can have\n"
+    );
 }
 
 #[test]
@@ -140,9 +167,9 @@ fn labels_each_warning_with_its_language() {
         .arg("codegen")
         .arg(&dictionary)
         .arg("--rust")
-        .arg(directory.join("clash.rs"))
+        .arg(directory.join("rust/clash"))
         .arg("--python")
-        .arg(directory.join("clash"))
+        .arg(directory.join("python/clash"))
         .output()
         .unwrap();
     std::fs::remove_dir_all(&directory).unwrap();
@@ -168,7 +195,7 @@ const NO_HEADER: &str = "warning: the dictionary has no header, which from FIX 5
 #[test]
 fn joins_a_dictionary_with_its_transport() {
     let directory = scratch_directory();
-    let module = directory.join("fix50.rs");
+    let module = directory.join("fix50");
 
     let output = Command::new(env!("CARGO_BIN_EXE_refix"))
         .arg("codegen")
@@ -179,16 +206,21 @@ fn joins_a_dictionary_with_its_transport() {
         .arg(&module)
         .output()
         .unwrap();
-    let code = std::fs::read_to_string(&module).unwrap();
+    let code = |file: &str| std::fs::read_to_string(module.join(file)).unwrap();
+    let (root, header) = (code("mod.rs"), code("components/header.rs"));
+    let (logon, order) = (
+        code("messages/logon.rs"),
+        code("messages/new_order_single.rs"),
+    );
     std::fs::remove_dir_all(&directory).unwrap();
 
     assert!(output.status.success());
-    assert!(code.starts_with(
+    assert!(root.starts_with(
         "// @generated by refix codegen from FIX50.xml and FIXT11.xml. Do not edit.\n"
     ));
-    assert!(code.contains("pub struct Header<'a>("));
-    assert!(code.contains("pub struct Logon(RawMessage);"));
-    assert!(code.contains("pub struct NewOrderSingle(RawMessage);"));
+    assert!(header.contains("pub struct Header<'a>("));
+    assert!(logon.contains("pub struct Logon(RawMessage);"));
+    assert!(order.contains("pub struct NewOrderSingle(RawMessage);"));
     assert!(
         !String::from_utf8(output.stderr)
             .unwrap()
@@ -204,7 +236,7 @@ fn a_dictionary_without_a_header_gets_a_warning() {
         .arg("codegen")
         .arg(quickfix_xml("FIX50.xml"))
         .arg("--rust")
-        .arg(directory.join("fix50.rs"))
+        .arg(directory.join("fix50"))
         .output()
         .unwrap();
     std::fs::remove_dir_all(&directory).unwrap();
@@ -227,7 +259,7 @@ fn an_error_names_both_dictionaries() {
         .arg("--transport")
         .arg(quickfix_xml("FIXT11.xml"))
         .arg("--rust")
-        .arg(directory.join("toy.rs"))
+        .arg(directory.join("toy"))
         .output()
         .unwrap();
     std::fs::remove_dir_all(&directory).unwrap();

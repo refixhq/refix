@@ -1,8 +1,9 @@
-use refix_dictionary::Dictionary;
+use refix_dictionary::{Dictionary, dictionary};
 
 use super::groups::{KNOWN_TAGS, emit_group, emit_known_tags, emit_lazy_tags, known_tags_of};
-use super::layout::indent;
+use super::layout::{MAX_WIDTH, indent};
 use super::messages::{Lifetime, emit_accessors};
+use super::modules::SHARED;
 use super::names::Names;
 use super::printing::emit_debug;
 use crate::envelope::{Envelope, Section};
@@ -21,15 +22,11 @@ pub(super) fn emit_view(
     names: &Names,
 ) -> String {
     let name = section.type_name();
-    let members = section.members(dictionary);
     let walks_groups = envelope.with_groups.contains(&section);
-    let (fields, from_scope) = if walks_groups {
-        (
-            "(refix_message::Scope<'a>, KnownTags<'static>)",
-            "Self(scope, Self::envelope_tags().get())",
-        )
+    let from_scope = if walks_groups {
+        "Self(scope, Self::envelope_tags().get())"
     } else {
-        ("(refix_message::Scope<'a>)", "Self(scope)")
+        "Self(scope)"
     };
 
     let mut methods = Vec::new();
@@ -57,8 +54,9 @@ pub(super) fn emit_view(
 
     let mut items = vec![
         format!(
-            "/// The {} fields of a message.\n#[derive(Clone, Copy)]\npub struct {name}<'a>{fields};\n",
-            section.member_name()
+            "/// The {} fields of a message.\n{}",
+            section.member_name(),
+            emit_view_struct(name, walks_groups)
         ),
         format!(
             "impl<'a> From<refix_message::Scope<'a>> for {name}<'a> {{\n    fn from(scope: refix_message::Scope<'a>) -> Self {{\n        {from_scope}\n    }}\n}}\n"
@@ -66,13 +64,43 @@ pub(super) fn emit_view(
         format!("impl<'a> {name}<'a> {{\n{}}}\n", methods.join("\n")),
         emit_debug(name, &format!("self.0.display_known(&{KNOWN_TAGS})")),
     ];
-    items.extend(members.iter().filter_map(|member| match member {
-        flat::Member::Group(group) if *group.declared_in() == section.context() => {
-            Some(emit_group(*group, names))
-        }
-        _ => None,
-    }));
+    let groups = section_groups(section, dictionary);
+    items.extend(groups.into_iter().map(|group| emit_group(group, names)));
     items.join("\n")
+}
+
+/// The groups a section declares itself.
+pub(super) fn section_groups(
+    section: Section,
+    dictionary: &Dictionary,
+) -> Vec<dictionary::Group<'_>> {
+    let members = section.members(dictionary).into_iter();
+    members
+        .filter_map(|member| match member {
+            flat::Member::Group(group) if *group.declared_in() == section.context() => Some(group),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A view's struct, which wraps a scope and, to walk groups, the known tags.
+///
+/// The rest of the generated code builds it from its fields.
+pub(super) fn emit_view_struct(name: &str, keeps_known_tags: bool) -> String {
+    let mut fields = vec![format!("{SHARED} refix_message::Scope<'a>")];
+    if keeps_known_tags {
+        fields.push(format!("{SHARED} KnownTags<'static>"));
+    }
+    let head = format!("#[derive(Clone, Copy)]\npub struct {name}<'a>(");
+    let one_line = format!("pub struct {name}<'a>({});", fields.join(", "));
+    if one_line.len() <= MAX_WIDTH {
+        return format!("{head}{});\n", fields.join(", "));
+    }
+    let fields: String = fields
+        .iter()
+        .map(|field| format!("    {field},\n"))
+        .collect();
+    format!("{head}\n{fields});\n")
 }
 
 /// The message method returning a section's view. A view that walks groups
@@ -87,4 +115,33 @@ pub(super) fn emit_view_accessor(section: Section, envelope: &Envelope) -> Strin
     format!(
         "    pub fn {name}(&self) -> {type_name}<'_> {{\n        {type_name}({arguments})\n    }}\n"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::emit_view_struct;
+
+    #[test]
+    fn a_view_wraps_a_scope_that_other_files_can_set() {
+        assert_eq!(
+            emit_view_struct("Trailer", false),
+            "#[derive(Clone, Copy)]\npub struct Trailer<'a>(pub(in super::super) refix_message::Scope<'a>);\n"
+        );
+    }
+
+    #[test]
+    fn a_view_that_walks_groups_keeps_the_known_tags() {
+        assert_eq!(
+            emit_view_struct("Header", true),
+            "#[derive(Clone, Copy)]\npub struct Header<'a>(\n    pub(in super::super) refix_message::Scope<'a>,\n    pub(in super::super) KnownTags<'static>,\n);\n"
+        );
+    }
+
+    #[test]
+    fn a_long_name_puts_the_scope_on_its_own_line() {
+        assert_eq!(
+            emit_view_struct("UnderlyingStreamTerminationDateBusinessCenterGrp", false),
+            "#[derive(Clone, Copy)]\npub struct UnderlyingStreamTerminationDateBusinessCenterGrp<'a>(\n    pub(in super::super) refix_message::Scope<'a>,\n);\n"
+        );
+    }
 }

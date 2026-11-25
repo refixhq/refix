@@ -9,6 +9,7 @@ pub enum Error {
     UnrepresentableGroupName { context: MemberContext },
     UnrepresentableComponentName { component: String },
     NameClash(Box<NameClash>),
+    ModuleClash(Box<NameClash>),
 }
 
 impl From<Box<NameClash>> for Error {
@@ -36,6 +37,7 @@ impl std::fmt::Display for Error {
                 write!(f, "component '{component}' cannot be a rust method name")
             }
             Error::NameClash(clash) => write!(f, "rust name {clash}"),
+            Error::ModuleClash(clash) => write!(f, "rust module {clash}"),
         }
     }
 }

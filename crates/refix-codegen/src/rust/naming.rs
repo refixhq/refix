@@ -2,7 +2,9 @@ use refix_dictionary::dictionary;
 use refix_dictionary::spec::{EnumValue, Field};
 
 use crate::groups::instance_context;
-use crate::naming::{field_base_name, group_accessor_base_name, group_source_name};
+use crate::naming::{
+    field_base_name, group_accessor_base_name, group_source_name, module_base_name,
+};
 use crate::rust::Error;
 use crate::{pascal_case, snake_case};
 
@@ -72,10 +74,22 @@ pub(super) fn component_accessor_name(component: &str) -> Result<String, Error> 
     })
 }
 
+/// The module holding the type named `type_name`.
+///
+/// A keyword takes a trailing underscore, so the file is named as the
+/// module is.
+pub(super) fn module_name(type_name: &str) -> String {
+    let name = module_base_name(type_name);
+    if RESERVED_WORDS.contains(&name.as_str()) || UNESCAPABLE.contains(&name.as_str()) {
+        return format!("{name}_");
+    }
+    name
+}
+
 /// Escapes a keyword as a raw identifier, or `None` for a keyword that
 /// cannot be escaped.
 fn identifier(name: String) -> Option<String> {
-    if matches!(name.as_str(), "self" | "super" | "crate") {
+    if UNESCAPABLE.contains(&name.as_str()) {
         return None;
     }
     if RESERVED_WORDS.contains(&name.as_str()) {
@@ -83,6 +97,9 @@ fn identifier(name: String) -> Option<String> {
     }
     Some(name)
 }
+
+/// The keywords that cannot be raw identifiers.
+const UNESCAPABLE: &[&str] = &["self", "super", "crate"];
 
 /// Rust's strict and reserved keywords.
 const RESERVED_WORDS: &[&str] = &[
@@ -96,7 +113,8 @@ const RESERVED_WORDS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::{
-        component_accessor_name, group_accessor_name, group_type_name, method_name, variant_name,
+        component_accessor_name, group_accessor_name, group_type_name, method_name, module_name,
+        variant_name,
     };
     use crate::rust::Error;
     use crate::test_utils::with_group;
@@ -129,6 +147,18 @@ mod tests {
 
     fn accessor_named(component: Option<&str>, count_field: &str) -> Result<String, Error> {
         with_group(component, count_field, group_accessor_name)
+    }
+
+    #[test]
+    fn module_names_are_snake_case() {
+        assert_eq!(module_name("NewOrderSingle"), "new_order_single");
+        assert_eq!(module_name("XMLnonFIX"), "xml_non_fix");
+    }
+
+    #[test]
+    fn keyword_module_names_take_a_trailing_underscore() {
+        assert_eq!(module_name("Yield"), "yield_");
+        assert_eq!(module_name("Super"), "super_");
     }
 
     #[test]

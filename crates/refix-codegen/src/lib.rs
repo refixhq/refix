@@ -6,7 +6,6 @@ mod conversion;
 mod dialect;
 mod envelope;
 mod flat;
-mod generated;
 mod groups;
 mod literal;
 mod namespace;
@@ -19,7 +18,6 @@ mod test_utils;
 mod warning;
 
 pub use case_converter::{pascal_case, snake_case};
-pub use generated::Generated;
 pub use namespace::{NameClash, Owner};
 pub use package::{Module, Package, WriteError};
 pub use warning::Warning;

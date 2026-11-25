@@ -3,6 +3,7 @@ use refix_dictionary::{Dictionary, MemberContext, Tag, dictionary};
 use super::docs::{code, member_docs};
 use super::layout::{MAX_WIDTH, indent, slice};
 use super::messages::{Lifetime, emit_accessors};
+use super::modules::SHARED;
 use super::names::Names;
 use super::printing::emit_debug;
 use crate::envelope::Section;
@@ -64,14 +65,22 @@ pub(super) fn emit_group(group: dictionary::Group<'_>, names: &Names) -> String 
         emit_instance_impl(group, names),
         emit_debug(name, "self.0"),
     ];
-    for member in flat::members(group.members()) {
-        if let flat::Member::Group(nested) = member
-            && matches!(nested.declared_in(), MemberContext::Group { .. })
-        {
-            items.push(emit_group(nested, names));
-        }
-    }
+    items.extend(instance_groups(group).map(|nested| emit_group(nested, names)));
     items.join("\n")
+}
+
+/// The groups declared directly in a group's instances.
+pub(super) fn instance_groups<'a>(
+    group: dictionary::Group<'a>,
+) -> impl Iterator<Item = dictionary::Group<'a>> {
+    flat::members(group.members()).filter_map(|member| match member {
+        flat::Member::Group(nested)
+            if matches!(nested.declared_in(), MemberContext::Group { .. }) =>
+        {
+            Some(nested)
+        }
+        _ => None,
+    })
 }
 
 /// The table an instance is walked with, its known tags, then its methods.
@@ -122,7 +131,7 @@ pub(super) fn emit_group_accessor(
 fn emit_table(group: dictionary::Group<'_>, names: &Names) -> String {
     let width = MAX_WIDTH - 4;
     let (count_tag, delimiter, members, nested) = table_arguments(group, names);
-    let head = "const TABLE: GroupTable<'static> = GroupTable::new(";
+    let head = format!("{SHARED} const TABLE: GroupTable<'static> = GroupTable::new(");
     let one_line = format!(
         "{head}Tag({count_tag}), Tag({delimiter}), &[{}], &[{}]);",
         members.join(", "),
@@ -218,7 +227,7 @@ pub(super) fn emit_lazy_tags(name: &str, own: &[String], parts: &[String]) -> St
         format!("{head}\n{});\n", indent(&arguments, 1))
     };
     format!(
-        "const fn {name}() -> &'static LazyKnownTags {{\n{}    &TAGS\n}}\n",
+        "{SHARED} const fn {name}() -> &'static LazyKnownTags {{\n{}    &TAGS\n}}\n",
         indent(&list, 1)
     )
 }

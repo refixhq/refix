@@ -1,5 +1,5 @@
 use clap::{ArgGroup, Args, Parser, Subcommand};
-use refix_codegen::Generated;
+use refix_codegen::Package;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -27,8 +27,8 @@ struct Codegen {
     /// messages, such as FIXT11.xml for FIX 5.0.
     #[arg(long, value_name = "PATH")]
     transport: Option<PathBuf>,
-    /// Path of the generated Rust module.
-    #[arg(long, group = "outputs", value_name = "PATH")]
+    /// Directory of the generated Rust module, named as the module is.
+    #[arg(long, group = "outputs", value_name = "DIRECTORY")]
     rust: Option<PathBuf>,
     /// Directory of the generated Python package, named as it is imported.
     #[arg(long, group = "outputs", value_name = "DIRECTORY")]
@@ -80,18 +80,26 @@ fn codegen(args: &Codegen) -> Result<(), String> {
     }
 
     if let Some(output) = &args.rust {
-        let generated = refix_codegen::rust::generate(&parsed.dictionary, &source)
+        if let Some(name) = unusable_name(output) {
+            return Err(format!(
+                "--rust takes the directory of a module, and '{name}' is not a name a rust \
+                 module can have"
+            ));
+        }
+        let package = refix_codegen::rust::generate(&parsed.dictionary, &source)
             .map_err(|error| format!("cannot generate from '{dictionary_path}': {error}"))?;
-        write(generated, output, "rust")?;
+        write(&package, output, "rust")?;
     }
     if let Some(output) = &args.python {
-        check_importable(output)?;
+        if let Some(name) = unusable_name(output) {
+            return Err(format!(
+                "--python takes the directory of a package, and '{name}' is not a name python \
+                 can import"
+            ));
+        }
         let package = refix_codegen::python::generate(&parsed.dictionary, &source)
             .map_err(|error| format!("cannot generate from '{dictionary_path}': {error}"))?;
-        for warning in &package.warnings {
-            eprintln!("warning: python: {warning}");
-        }
-        package.write(output).map_err(|error| error.to_string())?;
+        write(&package, output, "python")?;
     }
 
     Ok(())
@@ -109,29 +117,21 @@ fn file_name(path: &Path) -> String {
         .into_owned()
 }
 
-/// Refuses a package directory that Python could not import by its name,
-/// such as the `fix44.py` an earlier release took.
-fn check_importable(directory: &Path) -> Result<(), String> {
-    let Some(name) = directory.file_name() else {
-        return Ok(());
-    };
-    let name = name.to_string_lossy();
+/// The name of an output directory when no module or package can have it,
+/// such as the `fix44.rs` or `fix44.py` an earlier release took.
+fn unusable_name(directory: &Path) -> Option<String> {
+    let name = directory.file_name()?.to_string_lossy();
     let mut characters = name.chars();
     let starts_a_name = characters
         .next()
         .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
-    if starts_a_name && characters.all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        return Ok(());
-    }
-    Err(format!(
-        "--python takes the directory of a package, and '{name}' is not a name python can import"
-    ))
+    let is_a_name = starts_a_name && characters.all(|c| c.is_ascii_alphanumeric() || c == '_');
+    (!is_a_name).then(|| name.into_owned())
 }
 
-fn write(generated: Generated, output: &Path, language: &str) -> Result<(), String> {
-    for warning in &generated.warnings {
+fn write(package: &Package, output: &Path, language: &str) -> Result<(), String> {
+    for warning in &package.warnings {
         eprintln!("warning: {language}: {warning}");
     }
-    fs::write(output, generated.code)
-        .map_err(|error| format!("cannot write '{}': {error}", output.display()))
+    package.write(output).map_err(|error| error.to_string())
 }
