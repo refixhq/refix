@@ -15,7 +15,7 @@ categories.workspace = true
 include = ["src/**/*.rs", "generated.sha256", "README.md", "LICENSE-*"]
 
 [dependencies]
-refix-message = { workspace = true }
+refix-message = { version = "0.4.6", path = "../refix-message" }
 
 [dev-dependencies]
 bytes = { workspace = true }
