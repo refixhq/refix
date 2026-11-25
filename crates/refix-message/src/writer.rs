@@ -2,7 +2,7 @@ mod error;
 
 use crate::framing::SOH;
 use crate::message::RawField;
-use crate::{RawMessage, Tag};
+use crate::{Decimal, RawMessage, Tag};
 use bytes::Bytes;
 pub use error::WriteError;
 
@@ -11,14 +11,15 @@ pub use error::WriteError;
 /// The fields are written in the order of the calls.
 ///
 /// ```
-/// use refix_message::{FieldWriter, Tag};
+/// use refix_message::{Decimal, FieldWriter, Tag};
 ///
 /// let mut body = FieldWriter::new();
 /// body.write_str(Tag(11), "ORDER-1")?;
 /// body.write_str(Tag(55), "ACME")?;
+/// body.write_decimal(Tag(44), Decimal::new(10125, -2));
 /// let body = body.finish();
 ///
-/// assert_eq!(body.to_string(), "11=ORDER-1|55=ACME");
+/// assert_eq!(body.to_string(), "11=ORDER-1|55=ACME|44=101.25");
 /// assert_eq!(body.get_str(Tag(55))?, Some("ACME"));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -57,11 +58,86 @@ impl FieldWriter {
         if value.contains(&SOH) {
             return Err(WriteError::SeparatorInValue { tag });
         }
-        let mut digits = [0; 10];
-        self.bytes.extend_from_slice(decimal(&mut digits, tag.0));
-        self.bytes.push(b'=');
-        let value_start = self.bytes.len();
+        let value_start = self.begin(tag);
         self.bytes.extend_from_slice(value);
+        self.end(tag, value_start);
+        Ok(())
+    }
+
+    /// Writes a field with `value` as its text.
+    ///
+    /// Fails and panics as [`write`](Self::write) does.
+    pub fn write_str(&mut self, tag: Tag, value: &str) -> Result<(), WriteError> {
+        self.write(tag, value.as_bytes())
+    }
+
+    /// Writes a field with `value` as an integer.
+    ///
+    /// Panics as [`write`](Self::write) does.
+    pub fn write_int(&mut self, tag: Tag, value: i64) {
+        let value_start = self.begin(tag);
+        if value < 0 {
+            self.bytes.push(b'-');
+        }
+        let mut buffer = [0; 20];
+        self.bytes
+            .extend_from_slice(digits(&mut buffer, value.unsigned_abs()));
+        self.end(tag, value_start);
+    }
+
+    /// Writes a field with `Y` for true or `N` for false.
+    ///
+    /// Panics as [`write`](Self::write) does.
+    pub fn write_bool(&mut self, tag: Tag, value: bool) {
+        let value_start = self.begin(tag);
+        self.bytes.push(if value { b'Y' } else { b'N' });
+        self.end(tag, value_start);
+    }
+
+    /// Writes a field with `value` as a decimal, keeping its scale.
+    ///
+    /// A positive exponent is written as zeros, so `Decimal::new(15, 3)` is `15000`.
+    /// Panics as [`write`](Self::write) does.
+    pub fn write_decimal(&mut self, tag: Tag, value: Decimal) {
+        let value_start = self.begin(tag);
+        if value.mantissa() < 0 {
+            self.bytes.push(b'-');
+        }
+        let mut buffer = [0; 20];
+        let digits = digits(&mut buffer, value.mantissa().unsigned_abs());
+        let scale = usize::from(value.exponent().unsigned_abs());
+        if value.exponent() >= 0 {
+            self.bytes.extend_from_slice(digits);
+            self.zeros(scale);
+        } else if digits.len() > scale {
+            let (whole, fraction) = digits.split_at(digits.len() - scale);
+            self.bytes.extend_from_slice(whole);
+            self.bytes.push(b'.');
+            self.bytes.extend_from_slice(fraction);
+        } else {
+            self.bytes.extend_from_slice(b"0.");
+            self.zeros(scale - digits.len());
+            self.bytes.extend_from_slice(digits);
+        }
+        self.end(tag, value_start);
+    }
+
+    /// The fields written, as a message.
+    pub fn finish(self) -> RawMessage {
+        RawMessage::new(Bytes::from(self.bytes), self.fields)
+    }
+
+    /// Writes the tag and `=`, and returns where the value starts.
+    fn begin(&mut self, tag: Tag) -> usize {
+        let mut buffer = [0; 20];
+        self.bytes
+            .extend_from_slice(digits(&mut buffer, u64::from(tag.0)));
+        self.bytes.push(b'=');
+        self.bytes.len()
+    }
+
+    /// Writes the separator and records the field whose value started at `value_start`.
+    fn end(&mut self, tag: Tag, value_start: usize) {
         let value_end = self.bytes.len();
         self.bytes.push(SOH);
         assert!(
@@ -73,24 +149,15 @@ impl FieldWriter {
             value_start: value_start as u32,
             value_end: value_end as u32,
         });
-        Ok(())
     }
 
-    /// Writes a field with `value` as its text.
-    ///
-    /// Fails and panics as [`write`](Self::write) does.
-    pub fn write_str(&mut self, tag: Tag, value: &str) -> Result<(), WriteError> {
-        self.write(tag, value.as_bytes())
-    }
-
-    /// The fields written, as a message.
-    pub fn finish(self) -> RawMessage {
-        RawMessage::new(Bytes::from(self.bytes), self.fields)
+    fn zeros(&mut self, count: usize) {
+        self.bytes.resize(self.bytes.len() + count, b'0');
     }
 }
 
 /// The decimal digits of `number`, written at the end of `buffer`.
-fn decimal(buffer: &mut [u8; 10], mut number: u32) -> &[u8] {
+fn digits(buffer: &mut [u8; 20], mut number: u64) -> &[u8] {
     let mut start = buffer.len();
     loop {
         start -= 1;
@@ -168,5 +235,78 @@ mod tests {
 
         assert_eq!(result, Err(WriteError::SeparatorInValue { tag: Tag(58) }));
         assert_eq!(writer.finish().bytes().as_ref(), b"11=ORDER-1\x01");
+    }
+
+    #[test]
+    fn writes_an_integer_that_reads_back() {
+        for value in [0, 7, 100, -5, i64::MAX, i64::MIN] {
+            let mut writer = FieldWriter::new();
+            writer.write_int(Tag(38), value);
+
+            let message = writer.finish();
+
+            assert_eq!(message.get_str(Tag(38)), Ok(Some(&*value.to_string())));
+            assert_eq!(message.get_int(Tag(38)), Ok(Some(value)));
+        }
+    }
+
+    #[test]
+    fn writes_a_boolean_as_y_or_n() {
+        let mut writer = FieldWriter::new();
+        writer.write_bool(Tag(43), true);
+        writer.write_bool(Tag(97), false);
+
+        let message = writer.finish();
+
+        assert_eq!(message.bytes().as_ref(), b"43=Y\x0197=N\x01");
+        assert_eq!(message.get_bool(Tag(43)), Ok(Some(true)));
+        assert_eq!(message.get_bool(Tag(97)), Ok(Some(false)));
+    }
+
+    #[test]
+    fn writes_a_decimal_with_its_scale() {
+        let cases = [
+            (Decimal::new(10125, -2), "101.25"),
+            (Decimal::new(150, -2), "1.50"),
+            (Decimal::new(-5, -3), "-0.005"),
+            (Decimal::new(5, -1), "0.5"),
+            (Decimal::new(0, -2), "0.00"),
+            (Decimal::new(23, 0), "23"),
+            (Decimal::new(-15, 3), "-15000"),
+            (Decimal::new(i64::MIN, -19), "-0.9223372036854775808"),
+        ];
+        for (value, expected) in cases {
+            let mut writer = FieldWriter::new();
+            writer.write_decimal(Tag(44), value);
+
+            let message = writer.finish();
+
+            assert_eq!(message.get_str(Tag(44)), Ok(Some(expected)));
+            assert_eq!(value.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn a_written_decimal_reads_back_with_the_same_scale() {
+        let mut writer = FieldWriter::new();
+        writer.write_decimal(Tag(44), Decimal::new(150, -2));
+
+        let read = writer.finish().get_decimal(Tag(44)).unwrap().unwrap();
+
+        assert_eq!((read.mantissa(), read.exponent()), (150, -2));
+    }
+
+    #[test]
+    fn writes_the_widest_exponents() {
+        let mut writer = FieldWriter::new();
+        writer.write_decimal(Tag(44), Decimal::new(1, i8::MAX));
+        writer.write_decimal(Tag(31), Decimal::new(1, i8::MIN));
+
+        let message = writer.finish();
+
+        let large = format!("1{}", "0".repeat(127));
+        let small = format!("0.{}1", "0".repeat(127));
+        assert_eq!(message.get_str(Tag(44)), Ok(Some(&*large)));
+        assert_eq!(message.get_str(Tag(31)), Ok(Some(&*small)));
     }
 }
