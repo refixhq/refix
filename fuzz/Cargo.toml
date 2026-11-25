@@ -36,3 +36,10 @@ path = "fuzz_targets/tokenize_tiling.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "write_round_trip"
+path = "fuzz_targets/write_round_trip.rs"
+test = false
+doc = false
+bench = false

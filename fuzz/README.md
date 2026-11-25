@@ -1,11 +1,12 @@
 # Fuzzing refix-message
 
-Three targets, run with `cargo-fuzz` (`cargo install cargo-fuzz`) on a nightly toolchain. From the repo root:
+Four targets, run with `cargo-fuzz` (`cargo install cargo-fuzz`) on a nightly toolchain. From the repo root:
 
 ```sh
 just fuzz scan_invariants seeds
 just fuzz chunking_equivalence seeds_chunking
 just fuzz tokenize_tiling seeds_tokenize
+just fuzz write_round_trip seeds_write
 ```
 
 To invoke `cargo fuzz` directly, run from the repo root and create the corpus directory first, e.g.
@@ -24,6 +25,9 @@ cargo +nightly fuzz run scan_invariants \
   size yields the same frames as scanning it whole.
 - `tokenize_tiling`: the whole tokenizer; a returned message's index must tile the frame - fields in wire order
   without overlap, every value ending on SOH, the last SOH ending the frame. Exercises the data field extents.
+- `write_round_trip`: the input is read as fields to write, each `tag=value` ended by `|`, with an empty field between
+  the header and the body. A value is rejected only when it is empty or holds SOH, the framed message tokenizes to
+  the fields the writer indexed, and those are the fields written. Tag 96 is written as a data field after its length.
 
 `dict.txt` gives the mutator the wire tokens; without it almost every input dies at the BeginString anchor.
 
@@ -69,3 +73,14 @@ size 7 only.
   understated length, one digit away from every fallback path -> 96 as `a`, then a sentinel run `b`
 - `xml_data`: `8=FIX.4.4|9=20|35=0|212=4|213=<x/>|10=204|`
   a second length pair -> 213 indexed as `<x/>`
+
+`seeds_write/`, for `write_round_trip`. Here `|` is the byte in the file and SOH is shown as `^`:
+
+- `data`: `34=1||58=ok|96=a^b|`
+  data value with embedded SOH -> written as `95=3`, then 96 as `a^b`
+- `no_body`: `34=1|`
+  header fields alone -> a frame with no body fields
+- `order`: `49=ME|56=YOU|34=3||11=ord1|55=AAPL|54=1|38=100|`
+  header and body -> a frame that reads back
+- `rejected`: `34=1||58=|58=a^b|35=D|`
+  empty value and SOH in a plain value are not written, and MsgType in the body stops the framing
