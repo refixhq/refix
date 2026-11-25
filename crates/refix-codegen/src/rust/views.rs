@@ -4,15 +4,17 @@ use super::groups::{emit_group, emit_known_tags};
 use super::layout::{MAX_WIDTH, indent};
 use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
+use super::printing::emit_debug;
 use crate::envelope::{Envelope, Section};
 use crate::flat;
+use crate::groups::known_tags;
 
 /// A section's view, then the types of the groups the section declares
 /// itself.
 ///
 /// A view whose section holds a group keeps the known tags to walk it with.
 /// Built from a scope, it knows only the envelope's tags. A message passes
-/// its own.
+/// its own. `Debug` prints the section's own fields.
 pub(super) fn emit_view(
     section: Section,
     dictionary: &Dictionary,
@@ -38,6 +40,11 @@ pub(super) fn emit_view(
             1,
         ));
     }
+    let tags = known_tags(members.iter().copied());
+    methods.push(indent(
+        &emit_known_tags("const TAGS", &tags, MAX_WIDTH - 4),
+        1,
+    ));
     methods.push(
         "    pub fn raw(&self) -> refix_message::Scope<'a> {\n        self.0\n    }\n".to_owned(),
     );
@@ -50,13 +57,14 @@ pub(super) fn emit_view(
 
     let mut items = vec![
         format!(
-            "/// The {} fields of a message.\n#[derive(Clone, Copy, Debug)]\npub struct {name}<'a>{fields};\n",
+            "/// The {} fields of a message.\n#[derive(Clone, Copy)]\npub struct {name}<'a>{fields};\n",
             section.member_name()
         ),
         format!(
             "impl<'a> From<refix_message::Scope<'a>> for {name}<'a> {{\n    fn from(scope: refix_message::Scope<'a>) -> Self {{\n        {from_scope}\n    }}\n}}\n"
         ),
         format!("impl<'a> {name}<'a> {{\n{}}}\n", methods.join("\n")),
+        emit_debug(name, "self.0.display_known(&Self::TAGS)"),
     ];
     items.extend(members.iter().filter_map(|member| match member {
         flat::Member::Group(group) if *group.declared_in() == section.context() => {

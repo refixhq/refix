@@ -5,6 +5,7 @@ use super::groups::emit_known_tags;
 use super::layout::{MAX_WIDTH, indent};
 use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
+use super::printing::emit_debug;
 use crate::components::{component_tags, holds_group};
 
 /// A component's view over the scope of whatever includes the component.
@@ -37,9 +38,7 @@ pub(super) fn emit_component(component: dictionary::Component<'_>, names: &Names
             code(name)
         ),
         format!("impl<'a> {name}<'a> {{\n{}}}\n", methods.join("\n")),
-        format!(
-            "impl std::fmt::Debug for {name}<'_> {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        write!(f, \"{name}({{}})\", self.0.display_known(&Self::TAGS))\n    }}\n}}\n"
-        ),
+        emit_debug(name, "self.0.display_known(&Self::TAGS)"),
     ]
     .join("\n")
 }

@@ -9,6 +9,7 @@ mod layout;
 mod messages;
 mod names;
 mod naming;
+mod printing;
 mod views;
 
 use refix_dictionary::Dictionary;
@@ -656,7 +657,7 @@ use refix_message::{Dialect, GroupTable, Instances, InvalidValue, KnownTags, Raw
 pub const DIALECT: Dialect<'static> = Dialect::new();
 
 /// An instance of the `NoPartyIDs` (453) group.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Parties<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for Parties<'a> {
@@ -692,8 +693,14 @@ impl<'a> Parties<'a> {
     }
 }
 
+impl std::fmt::Debug for Parties<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Parties({})", self.0)
+    }
+}
+
 /// An instance of the `NoPartySubIDs` (802) group.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct PtysSubGrp<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for PtysSubGrp<'a> {
@@ -713,6 +720,12 @@ impl<'a> PtysSubGrp<'a> {
     #[doc(alias = "PartySubID")]
     pub fn party_sub_id(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(523))
+    }
+}
+
+impl std::fmt::Debug for PtysSubGrp<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PtysSubGrp({})", self.0)
     }
 }
 

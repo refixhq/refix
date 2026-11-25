@@ -106,7 +106,7 @@ impl PartyRole {
 }
 
 /// An instance of the `NoPartyIDs` (453) group.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Parties<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for Parties<'a> {
@@ -150,8 +150,14 @@ impl<'a> Parties<'a> {
     }
 }
 
+impl std::fmt::Debug for Parties<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Parties({})", self.0)
+    }
+}
+
 /// An instance of the `NoPartySubIDs` (802) group.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct PtysSubGrp<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for PtysSubGrp<'a> {
@@ -174,8 +180,14 @@ impl<'a> PtysSubGrp<'a> {
     }
 }
 
+impl std::fmt::Debug for PtysSubGrp<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PtysSubGrp({})", self.0)
+    }
+}
+
 /// An instance of the `NoSecurityAltID` (454) group.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct SecAltIDGrp<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for SecAltIDGrp<'a> {
@@ -195,6 +207,12 @@ impl<'a> SecAltIDGrp<'a> {
     #[doc(alias = "SecurityAltID")]
     pub fn security_alt_id(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(455))
+    }
+}
+
+impl std::fmt::Debug for SecAltIDGrp<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SecAltIDGrp({})", self.0)
     }
 }
 
@@ -282,7 +300,7 @@ impl std::fmt::Debug for OrderQtyData<'_> {
 }
 
 /// The header fields of a message.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Header<'a>(refix_message::Scope<'a>, KnownTags<'static>);
 
 impl<'a> From<refix_message::Scope<'a>> for Header<'a> {
@@ -295,6 +313,10 @@ impl<'a> Header<'a> {
     pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
         Tag(8), Tag(9), Tag(10), Tag(34), Tag(35), Tag(49), Tag(52), Tag(56), Tag(89), Tag(93),
         Tag(627), Tag(628),
+    ]);
+
+    const TAGS: KnownTags<'static> = KnownTags::new(&[
+        Tag(8), Tag(9), Tag(34), Tag(35), Tag(49), Tag(52), Tag(56), Tag(627), Tag(628),
     ]);
 
     pub fn raw(&self) -> refix_message::Scope<'a> {
@@ -350,8 +372,14 @@ impl<'a> Header<'a> {
     }
 }
 
+impl std::fmt::Debug for Header<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Header({})", self.0.display_known(&Self::TAGS))
+    }
+}
+
 /// An instance of the `NoHops` (627) group.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct HeaderHops<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for HeaderHops<'a> {
@@ -374,8 +402,14 @@ impl<'a> HeaderHops<'a> {
     }
 }
 
+impl std::fmt::Debug for HeaderHops<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HeaderHops({})", self.0)
+    }
+}
+
 /// The trailer fields of a message.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct Trailer<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for Trailer<'a> {
@@ -385,6 +419,8 @@ impl<'a> From<refix_message::Scope<'a>> for Trailer<'a> {
 }
 
 impl<'a> Trailer<'a> {
+    const TAGS: KnownTags<'static> = KnownTags::new(&[Tag(10), Tag(89), Tag(93)]);
+
     pub fn raw(&self) -> refix_message::Scope<'a> {
         self.0
     }
@@ -405,6 +441,12 @@ impl<'a> Trailer<'a> {
     #[doc(alias = "CheckSum")]
     pub fn check_sum(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(10))
+    }
+}
+
+impl std::fmt::Debug for Trailer<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Trailer({})", self.0.display_known(&Self::TAGS))
     }
 }
 
@@ -567,7 +609,7 @@ impl std::fmt::Display for Logon {
 }
 
 /// An instance of the `NoMsgTypes` (384) group.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct LogonMsgTypes<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for LogonMsgTypes<'a> {
@@ -587,6 +629,12 @@ impl<'a> LogonMsgTypes<'a> {
     #[doc(alias = "RefMsgType")]
     pub fn ref_msg_type(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(372))
+    }
+}
+
+impl std::fmt::Debug for LogonMsgTypes<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "LogonMsgTypes({})", self.0)
     }
 }
 
@@ -644,7 +692,7 @@ impl std::fmt::Display for MassQuote {
 }
 
 /// An instance of the `NoQuoteSets` (296) group.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct MassQuoteQuoteSets<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for MassQuoteQuoteSets<'a> {
@@ -682,8 +730,14 @@ impl<'a> MassQuoteQuoteSets<'a> {
     }
 }
 
+impl std::fmt::Debug for MassQuoteQuoteSets<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MassQuoteQuoteSets({})", self.0)
+    }
+}
+
 /// An instance of the `NoQuoteEntries` (295) group.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct MassQuoteQuoteSetsQuoteEntries<'a>(refix_message::Scope<'a>);
 
 impl<'a> From<refix_message::Scope<'a>> for MassQuoteQuoteSetsQuoteEntries<'a> {
@@ -723,6 +777,12 @@ impl<'a> MassQuoteQuoteSetsQuoteEntries<'a> {
     #[doc(alias = "Symbol")]
     pub fn symbol(&self) -> Result<Option<&'a str>, InvalidValue> {
         self.0.get_str(Tag(55))
+    }
+}
+
+impl std::fmt::Debug for MassQuoteQuoteSetsQuoteEntries<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MassQuoteQuoteSetsQuoteEntries({})", self.0)
     }
 }
 

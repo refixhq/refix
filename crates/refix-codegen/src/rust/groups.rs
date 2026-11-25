@@ -4,6 +4,7 @@ use super::docs::{code, member_docs};
 use super::layout::{MAX_WIDTH, indent, slice};
 use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
+use super::printing::emit_debug;
 use crate::flat;
 use crate::groups::{known_tags, member_tags};
 
@@ -45,13 +46,14 @@ fn collect_groups<'a>(
 
 /// The type of a group's instances.
 ///
-/// The types of the groups declared directly in its instances follow it.
+/// `Debug` prints the fields of the instance. The types of the groups
+/// declared directly in its instances follow it.
 pub(super) fn emit_group(group: dictionary::Group<'_>, names: &Names) -> String {
     let name = names.group_type(group);
     let count_field = group.count_field();
     let mut items = vec![
         format!(
-            "/// An instance of the {} ({}) group.\n#[derive(Clone, Copy, Debug)]\npub struct {name}<'a>(refix_message::Scope<'a>);\n",
+            "/// An instance of the {} ({}) group.\n#[derive(Clone, Copy)]\npub struct {name}<'a>(refix_message::Scope<'a>);\n",
             code(&count_field.name),
             count_field.tag
         ),
@@ -59,6 +61,7 @@ pub(super) fn emit_group(group: dictionary::Group<'_>, names: &Names) -> String 
             "impl<'a> From<refix_message::Scope<'a>> for {name}<'a> {{\n    fn from(scope: refix_message::Scope<'a>) -> Self {{\n        Self(scope)\n    }}\n}}\n"
         ),
         emit_instance_impl(group, names),
+        emit_debug(name, "self.0"),
     ];
     for member in flat::members(group.members()) {
         if let flat::Member::Group(nested) = member
