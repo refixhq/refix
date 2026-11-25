@@ -6,6 +6,7 @@ pub use error::GroupTableError;
 use layout::Layout;
 use std::fmt;
 use std::marker::PhantomData;
+use std::sync::OnceLock;
 
 /// CheckSum(10) closes every frame, so it always ends a group.
 const CHECK_SUM: Tag = Tag(10);
@@ -179,6 +180,48 @@ impl<'a> KnownTags<'a> {
 
     pub(crate) fn contains(&self, tag: Tag) -> bool {
         self.0.binary_search(&tag).is_ok()
+    }
+}
+
+/// Known tags merged on first use from lists that are each written once.
+///
+/// Codegen emits these as `static` items. A message, component or group
+/// instance lists its own tags and names the lists of what it includes.
+#[derive(Debug)]
+pub struct LazyKnownTags {
+    own: &'static [Tag],
+    parts: &'static [&'static LazyKnownTags],
+    merged: OnceLock<Box<[Tag]>>,
+}
+
+impl LazyKnownTags {
+    /// `own` may be in any order and may repeat a tag of `parts`.
+    pub const fn new(own: &'static [Tag], parts: &'static [&'static LazyKnownTags]) -> Self {
+        Self {
+            own,
+            parts,
+            merged: OnceLock::new(),
+        }
+    }
+
+    /// The merged tags.
+    ///
+    /// The first call builds them. Every later call returns the same list.
+    pub fn get(&'static self) -> KnownTags<'static> {
+        KnownTags(self.merged.get_or_init(|| {
+            let mut tags = Vec::new();
+            self.collect(&mut tags);
+            tags.sort_unstable();
+            tags.dedup();
+            tags.into_boxed_slice()
+        }))
+    }
+
+    fn collect(&self, tags: &mut Vec<Tag>) {
+        tags.extend_from_slice(self.own);
+        for part in self.parts {
+            part.collect(tags);
+        }
     }
 }
 
@@ -876,6 +919,29 @@ mod tests {
         #[should_panic(expected = "known tags must be sorted and unique")]
         fn duplicate_known_tags_are_rejected() {
             KnownTags::new(&[Tag(35), Tag(35)]);
+        }
+    }
+
+    mod lazy {
+        use super::*;
+
+        static SUB_IDS: LazyKnownTags = LazyKnownTags::new(&[Tag(523)], &[]);
+        static PARTIES: LazyKnownTags =
+            LazyKnownTags::new(&[Tag(448), Tag(802), Tag(447)], &[&SUB_IDS]);
+        static ORDER: LazyKnownTags =
+            LazyKnownTags::new(&[Tag(453), Tag(55), Tag(448)], &[&PARTIES]);
+
+        #[test]
+        fn merges_its_own_tags_with_its_parts_at_any_depth() {
+            assert_eq!(
+                ORDER.get().0,
+                [Tag(55), Tag(447), Tag(448), Tag(453), Tag(523), Tag(802)]
+            );
+        }
+
+        #[test]
+        fn every_call_returns_the_same_list() {
+            assert!(std::ptr::eq(PARTIES.get().0, PARTIES.get().0));
         }
     }
 
