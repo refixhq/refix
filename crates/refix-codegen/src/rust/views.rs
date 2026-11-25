@@ -36,7 +36,7 @@ pub(super) fn emit_view(
     let mut methods = Vec::new();
     if walks_groups {
         methods.push(indent(
-            &emit_known_tags("pub const KNOWN_TAGS", &envelope.tags, MAX_WIDTH - 4),
+            &emit_known_tags("const KNOWN_TAGS", &envelope.tags, MAX_WIDTH - 4),
             1,
         ));
     }

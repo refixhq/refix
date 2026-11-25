@@ -14,8 +14,8 @@ use crate::groups::message_known_tags;
 
 /// A message's struct and impl, then the types of the groups it declares.
 ///
-/// Its known tags include the `envelope`'s, and it reaches each view the
-/// envelope has.
+/// It reaches each view the `envelope` has. A message that walks a group
+/// lists its known tags, the envelope's included.
 pub(super) fn emit_message(
     message: dictionary::Message<'_>,
     envelope: &Envelope,
@@ -28,6 +28,12 @@ pub(super) fn emit_message(
     ];
     items.extend(emit_message_groups(message, names));
     items.join("\n")
+}
+
+/// Whether a message reads a group, itself or through one of its views.
+pub(super) fn walks_groups(message: dictionary::Message<'_>, envelope: &Envelope) -> bool {
+    !envelope.with_groups.is_empty()
+        || flat::members(message.members()).any(|member| matches!(member, flat::Member::Group(_)))
 }
 
 fn emit_message_struct(message: dictionary::Message<'_>) -> String {
@@ -44,22 +50,24 @@ fn emit_message_impl(
     envelope: &Envelope,
     names: &Names,
 ) -> String {
-    let mut members = vec![
-        format!(
-            "    pub const MSG_TYPE: &[u8] = {};\n",
-            byte_str_literal(message.msg_type())
-        ),
-        indent(
+    let mut members = vec![format!(
+        "    pub const MSG_TYPE: &[u8] = {};\n",
+        byte_str_literal(message.msg_type())
+    )];
+    if walks_groups(message, envelope) {
+        members.push(indent(
             &emit_known_tags(
-                "pub const KNOWN_TAGS",
+                "const KNOWN_TAGS",
                 &message_known_tags(message, &envelope.tags),
                 MAX_WIDTH - 4,
             ),
             1,
-        ),
+        ));
+    }
+    members.extend([
         "    pub fn from_raw(raw: RawMessage) -> Self {\n        Self(raw)\n    }\n".to_owned(),
         "    pub fn raw(&self) -> &RawMessage {\n        &self.0\n    }\n".to_owned(),
-    ];
+    ]);
     for section in &envelope.sections {
         members.push(emit_view_accessor(*section, envelope));
     }

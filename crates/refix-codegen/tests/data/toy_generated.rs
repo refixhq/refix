@@ -310,7 +310,7 @@ impl<'a> From<refix_message::Scope<'a>> for Header<'a> {
 }
 
 impl<'a> Header<'a> {
-    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
+    const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
         Tag(8), Tag(9), Tag(10), Tag(34), Tag(35), Tag(49), Tag(52), Tag(56), Tag(89), Tag(93),
         Tag(627), Tag(628),
     ]);
@@ -456,7 +456,7 @@ pub struct NewOrderSingle(RawMessage);
 impl NewOrderSingle {
     pub const MSG_TYPE: &[u8] = b"D";
 
-    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
+    const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
         Tag(8), Tag(9), Tag(10), Tag(11), Tag(18), Tag(34), Tag(35), Tag(38), Tag(40), Tag(44),
         Tag(49), Tag(52), Tag(55), Tag(56), Tag(64), Tag(89), Tag(93), Tag(114), Tag(200), Tag(273),
         Tag(448), Tag(452), Tag(453), Tag(454), Tag(455), Tag(523), Tag(627), Tag(628), Tag(802),
@@ -568,7 +568,7 @@ pub struct Logon(RawMessage);
 impl Logon {
     pub const MSG_TYPE: &[u8] = b"A";
 
-    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
+    const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
         Tag(8), Tag(9), Tag(10), Tag(34), Tag(35), Tag(49), Tag(52), Tag(56), Tag(89), Tag(93),
         Tag(372), Tag(384), Tag(627), Tag(628),
     ]);
@@ -644,7 +644,7 @@ pub struct MassQuote(RawMessage);
 impl MassQuote {
     pub const MSG_TYPE: &[u8] = b"i";
 
-    pub const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
+    const KNOWN_TAGS: KnownTags<'static> = KnownTags::new(&[
         Tag(8), Tag(9), Tag(10), Tag(34), Tag(35), Tag(49), Tag(52), Tag(55), Tag(56), Tag(89),
         Tag(93), Tag(117), Tag(295), Tag(296), Tag(299), Tag(302), Tag(454), Tag(455), Tag(627),
         Tag(628), Tag(1186),
