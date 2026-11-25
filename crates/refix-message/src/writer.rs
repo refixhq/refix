@@ -174,6 +174,32 @@ impl FieldWriter {
         self.end(tag, value_start);
     }
 
+    /// Writes a data field after the length field that counts its bytes.
+    ///
+    /// The value may hold the separator.
+    /// An empty value is an error, and nothing is written for it.
+    ///
+    /// Panics as [`write`](Self::write) does.
+    pub fn write_data(
+        &mut self,
+        length_tag: Tag,
+        tag: Tag,
+        value: &[u8],
+    ) -> Result<(), WriteError> {
+        if value.is_empty() {
+            return Err(WriteError::EmptyValue { tag });
+        }
+        let length_start = self.begin(length_tag);
+        let mut buffer = [0; 20];
+        self.bytes
+            .extend_from_slice(digits(&mut buffer, value.len() as u64));
+        self.end(length_tag, length_start);
+        let value_start = self.begin(tag);
+        self.bytes.extend_from_slice(value);
+        self.end(tag, value_start);
+        Ok(())
+    }
+
     /// The fields written, as a message.
     pub fn finish(self) -> RawMessage {
         RawMessage::new(Bytes::from(self.bytes), self.fields)
@@ -496,5 +522,27 @@ mod tests {
             assert_eq!(message.get_str(Tag(200)), Ok(Some(expected)));
             assert_eq!(message.get_month_year(Tag(200)), Ok(Some(value)));
         }
+    }
+
+    #[test]
+    fn writes_the_length_before_a_data_field() {
+        let mut writer = FieldWriter::new();
+        writer.write_data(Tag(95), Tag(96), b"a\x01b=c").unwrap();
+
+        let message = writer.finish();
+
+        assert_eq!(message.bytes().as_ref(), b"95=5\x0196=a\x01b=c\x01");
+        assert_eq!(message.get_int(Tag(95)), Ok(Some(5)));
+        assert_eq!(message.get(Tag(96)), Some(&b"a\x01b=c"[..]));
+    }
+
+    #[test]
+    fn rejects_an_empty_data_value_and_writes_nothing() {
+        let mut writer = FieldWriter::new();
+
+        let result = writer.write_data(Tag(95), Tag(96), b"");
+
+        assert_eq!(result, Err(WriteError::EmptyValue { tag: Tag(96) }));
+        assert!(writer.finish().bytes().is_empty());
     }
 }
