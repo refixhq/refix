@@ -512,6 +512,27 @@ fn a_view_in_a_group_instance_prints_that_instance_alone() {
 }
 
 #[test]
+fn warm_up_builds_every_known_tags_list() {
+    let lists = TOY_GENERATED.matches("LazyKnownTags::new(").count();
+    let (_, warm_up) = TOY_GENERATED.split_once("pub fn warm_up() {\n").unwrap();
+    let built = warm_up.lines().take_while(|line| *line != "}").count();
+
+    assert_eq!(built, lists);
+}
+
+#[test]
+fn a_group_reads_the_same_after_a_warm_up() {
+    toy::warm_up();
+    let raw = Tokenizer::default()
+        .tokenize(frame("35=D|453=2|448=AL|448=BOB|"))
+        .unwrap();
+
+    let order = NewOrderSingle::from_raw(raw);
+
+    assert_eq!(order.party_ids().unwrap().len(), 2);
+}
+
+#[test]
 fn a_group_instance_prints_its_own_fields() {
     let raw = Tokenizer::default()
         .tokenize(frame("35=D|453=2|448=AL|802=1|523=S1|448=BOB|"))
