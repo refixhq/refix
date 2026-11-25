@@ -1,6 +1,7 @@
 //! The `refix codegen` command, run as a subprocess.
 
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -17,9 +18,9 @@ fn scratch_directory() -> PathBuf {
     directory
 }
 
-/// Runs `refix codegen` on the toy with `outputs` as (flag, file name)
-/// pairs, returning each written module.
-fn codegen(outputs: &[(&str, &str)]) -> Vec<String> {
+/// Runs `refix codegen` on the toy with `outputs` as (flag, name) pairs,
+/// returning the directory the outputs are in.
+fn codegen(outputs: &[(&str, &str)]) -> PathBuf {
     let directory = scratch_directory();
     let mut command = Command::new(env!("CARGO_BIN_EXE_refix"));
     command.arg("codegen").arg(toy_xml());
@@ -30,32 +31,82 @@ fn codegen(outputs: &[(&str, &str)]) -> Vec<String> {
     let status = command.status().unwrap();
 
     assert!(status.success());
-    let written = outputs
-        .iter()
-        .map(|(_, name)| std::fs::read_to_string(directory.join(name)).unwrap())
-        .collect();
-    std::fs::remove_dir_all(&directory).unwrap();
-    written
+    directory
+}
+
+/// The modules of the Python package at `root`, by path.
+fn python_modules(root: &Path) -> BTreeMap<PathBuf, String> {
+    let mut modules = BTreeMap::new();
+    for folder in ["", "components", "messages"] {
+        for entry in std::fs::read_dir(root.join(folder)).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|extension| extension == "py") {
+                let name = path.file_name().unwrap();
+                let code = std::fs::read_to_string(&path).unwrap();
+                modules.insert(Path::new(folder).join(name), code);
+            }
+        }
+    }
+    modules
+}
+
+fn python_golden() -> BTreeMap<PathBuf, String> {
+    let root =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../python/refix-engine/tests/toy_generated");
+    python_modules(&root)
 }
 
 const RUST_GOLDEN: &str = include_str!("../../refix-codegen/tests/data/toy_generated.rs");
-const PYTHON_GOLDEN: &str = include_str!("../../../python/refix-engine/tests/toy_generated.py");
 
 #[test]
 fn writes_the_rust_module() {
-    assert_eq!(codegen(&[("--rust", "toy.rs")]), [RUST_GOLDEN]);
+    let directory = codegen(&[("--rust", "toy.rs")]);
+
+    let written = std::fs::read_to_string(directory.join("toy.rs")).unwrap();
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(written, RUST_GOLDEN);
 }
 
 #[test]
-fn writes_the_python_module() {
-    assert_eq!(codegen(&[("--python", "toy.py")]), [PYTHON_GOLDEN]);
+fn writes_the_python_package() {
+    let directory = codegen(&[("--python", "toy")]);
+
+    let written = python_modules(&directory.join("toy"));
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(written, python_golden());
 }
 
 #[test]
 fn writes_every_output_from_one_run() {
+    let directory = codegen(&[("--rust", "toy.rs"), ("--python", "toy")]);
+
+    let rust = std::fs::read_to_string(directory.join("toy.rs")).unwrap();
+    let python = python_modules(&directory.join("toy"));
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(rust, RUST_GOLDEN);
+    assert_eq!(python, python_golden());
+}
+
+#[test]
+fn a_python_directory_python_cannot_import_is_refused() {
+    let directory = scratch_directory();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_refix"))
+        .arg("codegen")
+        .arg(toy_xml())
+        .arg("--python")
+        .arg(directory.join("toy.py"))
+        .output()
+        .unwrap();
+    let written = directory.join("toy.py").exists();
+    std::fs::remove_dir_all(&directory).unwrap();
+
+    assert!(!output.status.success());
+    assert!(!written);
     assert_eq!(
-        codegen(&[("--rust", "toy.rs"), ("--python", "toy.py")]),
-        [RUST_GOLDEN, PYTHON_GOLDEN]
+        String::from_utf8(output.stderr).unwrap(),
+        "error: --python takes the directory of a package, and 'toy.py' is not a name python \
+         can import\n"
     );
 }
 
@@ -91,7 +142,7 @@ fn labels_each_warning_with_its_language() {
         .arg("--rust")
         .arg(directory.join("clash.rs"))
         .arg("--python")
-        .arg(directory.join("clash.py"))
+        .arg(directory.join("clash"))
         .output()
         .unwrap();
     std::fs::remove_dir_all(&directory).unwrap();

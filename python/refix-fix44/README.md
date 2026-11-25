@@ -11,8 +11,8 @@ generated from QuickFIX's `FIX44.xml`.
 ...     "11=ORDER-1|55=ACME|54=1|60=20261008-09:30:00|40=2|44=101.25|38=100|10=194|"
 ... )
 >>> order = from_raw(Tokenizer().tokenize(frame.replace("|", "\x01").encode()))
->>> type(order)
-<class 'refix_fix44.NewOrderSingle'>
+>>> type(order).__name__
+'NewOrderSingle'
 >>> order.header.sender_comp_id
 'SENDER'
 >>> order.header.msg_seq_num

@@ -11,6 +11,7 @@ mod groups;
 mod literal;
 mod namespace;
 mod naming;
+mod package;
 pub mod python;
 pub mod rust;
 #[cfg(test)]
@@ -20,4 +21,5 @@ mod warning;
 pub use case_converter::{pascal_case, snake_case};
 pub use generated::Generated;
 pub use namespace::{NameClash, Owner};
+pub use package::{Module, Package, WriteError};
 pub use warning::Warning;

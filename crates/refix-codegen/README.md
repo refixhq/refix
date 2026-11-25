@@ -30,8 +30,9 @@ fn main() {
 }
 ```
 
-The source name goes in the generated file's header. Rust output depends on `refix-message`, and `python::generate`
-emits a module for the `refix` package on PyPI the same way. `refix-cli` runs both from the command line.
+The source name goes in the generated file's header. Rust output depends on `refix-message`. `python::generate`
+returns a package for the `refix` package on PyPI, which `Package::write` puts in a directory. `refix-cli` runs both
+from the command line.
 
 ## License
 

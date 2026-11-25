@@ -38,8 +38,8 @@ __pypackages__/
 # Generated stock package code
 crates/refix-fix42/src/generated.rs
 crates/refix-fix44/src/generated.rs
-python/refix-fix42/src/refix_fix42/__init__.py
-python/refix-fix44/src/refix_fix44/__init__.py
+python/refix-fix42/src/refix_fix42/**/*.py
+python/refix-fix44/src/refix_fix44/**/*.py
 
 # Docs site
 node_modules/

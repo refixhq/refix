@@ -28,8 +28,8 @@ pattern = '(?m)^version = "(?P<version>[^"]+)"'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/refix_fix44"]
-# Packages the gitignored generated module.
-artifacts = ["src/refix_fix44/__init__.py"]
+# Packages the gitignored generated modules.
+artifacts = ["src/refix_fix44/**/*.py"]
 
 [tool.pyright]
 include = ["src"]

@@ -30,8 +30,8 @@ struct Codegen {
     /// Path of the generated Rust module.
     #[arg(long, group = "outputs", value_name = "PATH")]
     rust: Option<PathBuf>,
-    /// Path of the generated Python module.
-    #[arg(long, group = "outputs", value_name = "PATH")]
+    /// Directory of the generated Python package, named as it is imported.
+    #[arg(long, group = "outputs", value_name = "DIRECTORY")]
     python: Option<PathBuf>,
 }
 
@@ -85,9 +85,13 @@ fn codegen(args: &Codegen) -> Result<(), String> {
         write(generated, output, "rust")?;
     }
     if let Some(output) = &args.python {
-        let generated = refix_codegen::python::generate(&parsed.dictionary, &source)
+        check_importable(output)?;
+        let package = refix_codegen::python::generate(&parsed.dictionary, &source)
             .map_err(|error| format!("cannot generate from '{dictionary_path}': {error}"))?;
-        write(generated, output, "python")?;
+        for warning in &package.warnings {
+            eprintln!("warning: python: {warning}");
+        }
+        package.write(output).map_err(|error| error.to_string())?;
     }
 
     Ok(())
@@ -103,6 +107,25 @@ fn file_name(path: &Path) -> String {
         .map(|name| name.to_string_lossy())
         .unwrap_or_else(|| path.to_string_lossy())
         .into_owned()
+}
+
+/// Refuses a package directory that Python could not import by its name,
+/// such as the `fix44.py` an earlier release took.
+fn check_importable(directory: &Path) -> Result<(), String> {
+    let Some(name) = directory.file_name() else {
+        return Ok(());
+    };
+    let name = name.to_string_lossy();
+    let mut characters = name.chars();
+    let starts_a_name = characters
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+    if starts_a_name && characters.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Ok(());
+    }
+    Err(format!(
+        "--python takes the directory of a package, and '{name}' is not a name python can import"
+    ))
 }
 
 fn write(generated: Generated, output: &Path, language: &str) -> Result<(), String> {

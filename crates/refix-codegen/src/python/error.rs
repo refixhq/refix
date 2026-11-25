@@ -4,6 +4,7 @@ use crate::NameClash;
 pub enum Error {
     UnrepresentableValue { field: String, description: String },
     NameClash(Box<NameClash>),
+    ModuleClash(Box<NameClash>),
 }
 
 impl From<Box<NameClash>> for Error {
@@ -22,6 +23,7 @@ impl std::fmt::Display for Error {
                 )
             }
             Error::NameClash(clash) => write!(f, "python name {clash}"),
+            Error::ModuleClash(clash) => write!(f, "python module {clash}"),
         }
     }
 }

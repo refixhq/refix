@@ -275,6 +275,11 @@ impl Names {
         &self.enums[&field.tag].class
     }
 
+    /// The class of a field's enum, for a field that has one.
+    pub(super) fn enum_class_of(&self, field: &Field) -> Option<&str> {
+        self.enums.get(&field.tag).map(|names| names.class.as_str())
+    }
+
     /// The members of a field's enum, one per value.
     pub(super) fn enum_members(&self, field: &Field) -> &[String] {
         &self.enums[&field.tag].members
