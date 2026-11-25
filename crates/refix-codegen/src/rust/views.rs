@@ -1,13 +1,12 @@
 use refix_dictionary::Dictionary;
 
-use super::groups::{emit_group, emit_known_tags};
-use super::layout::{MAX_WIDTH, indent};
+use super::groups::{KNOWN_TAGS, emit_group, emit_known_tags, emit_lazy_tags, known_tags_of};
+use super::layout::indent;
 use super::messages::{Lifetime, emit_accessors};
 use super::names::Names;
 use super::printing::emit_debug;
 use crate::envelope::{Envelope, Section};
 use crate::flat;
-use crate::groups::known_tags;
 
 /// A section's view, then the types of the groups the section declares
 /// itself.
@@ -27,7 +26,7 @@ pub(super) fn emit_view(
     let (fields, from_scope) = if walks_groups {
         (
             "(refix_message::Scope<'a>, KnownTags<'static>)",
-            "Self(scope, Self::KNOWN_TAGS)",
+            "Self(scope, Self::envelope_tags().get())",
         )
     } else {
         ("(refix_message::Scope<'a>)", "Self(scope)")
@@ -35,14 +34,15 @@ pub(super) fn emit_view(
 
     let mut methods = Vec::new();
     if walks_groups {
-        methods.push(indent(
-            &emit_known_tags("const KNOWN_TAGS", &envelope.tags, MAX_WIDTH - 4),
-            1,
-        ));
+        let sections: Vec<String> = envelope
+            .sections
+            .iter()
+            .map(|section| known_tags_of(section.type_name()))
+            .collect();
+        methods.push(indent(&emit_lazy_tags("envelope_tags", &[], &sections), 1));
     }
-    let tags = known_tags(members.iter().copied());
     methods.push(indent(
-        &emit_known_tags("const TAGS", &tags, MAX_WIDTH - 4),
+        &emit_known_tags(section.listed(dictionary).into_iter(), &[], names),
         1,
     ));
     methods.push(
@@ -64,7 +64,7 @@ pub(super) fn emit_view(
             "impl<'a> From<refix_message::Scope<'a>> for {name}<'a> {{\n    fn from(scope: refix_message::Scope<'a>) -> Self {{\n        {from_scope}\n    }}\n}}\n"
         ),
         format!("impl<'a> {name}<'a> {{\n{}}}\n", methods.join("\n")),
-        emit_debug(name, "self.0.display_known(&Self::TAGS)"),
+        emit_debug(name, &format!("self.0.display_known(&{KNOWN_TAGS})")),
     ];
     items.extend(members.iter().filter_map(|member| match member {
         flat::Member::Group(group) if *group.declared_in() == section.context() => {
@@ -80,9 +80,9 @@ pub(super) fn emit_view(
 pub(super) fn emit_view_accessor(section: Section, envelope: &Envelope) -> String {
     let (name, type_name) = (section.member_name(), section.type_name());
     let arguments = if envelope.with_groups.contains(&section) {
-        "self.0.scope(), Self::KNOWN_TAGS"
+        format!("self.0.scope(), {KNOWN_TAGS}")
     } else {
-        "self.0.scope()"
+        "self.0.scope()".to_owned()
     };
     format!(
         "    pub fn {name}(&self) -> {type_name}<'_> {{\n        {type_name}({arguments})\n    }}\n"

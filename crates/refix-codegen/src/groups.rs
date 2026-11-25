@@ -51,39 +51,9 @@ pub(crate) fn member_tags(group: dictionary::Group<'_>) -> Vec<Tag> {
     tags
 }
 
-/// Every tag in `members` at any depth, group count tags included, sorted.
-pub(crate) fn known_tags<'a>(members: impl Iterator<Item = flat::Member<'a>>) -> Vec<Tag> {
-    let mut tags = Vec::new();
-    collect_tags(members, &mut tags);
-    tags.sort();
-    tags.dedup();
-    tags
-}
-
-/// Every tag a message can contain, its envelope's included, sorted.
-pub(crate) fn message_known_tags(message: dictionary::Message<'_>, envelope: &[Tag]) -> Vec<Tag> {
-    let mut tags = envelope.to_vec();
-    collect_tags(flat::members(message.members()), &mut tags);
-    tags.sort();
-    tags.dedup();
-    tags
-}
-
-fn collect_tags<'a>(members: impl Iterator<Item = flat::Member<'a>>, tags: &mut Vec<Tag>) {
-    for member in members {
-        match member {
-            flat::Member::Field { field, .. } => tags.push(field.tag),
-            flat::Member::Group(group) => {
-                tags.push(group.count_field().tag);
-                collect_tags(flat::members(group.members()), tags);
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{declared_groups, instance_context, known_tags, member_tags, message_known_tags};
+    use super::{declared_groups, instance_context, member_tags};
     use crate::flat;
     use refix_dictionary::spec::{
         Category, DataType, Field, FieldRef, Group, Member, Message, Protocol, Spec, Version,
@@ -167,37 +137,6 @@ mod tests {
         let parties = groups(flat::members(message.members()))[0];
 
         assert_eq!(member_tags(parties), [Tag(448), Tag(452), Tag(802)]);
-    }
-
-    #[test]
-    fn known_tags_reach_every_depth() {
-        let dictionary = dictionary();
-        let message = dictionary.messages().next().unwrap();
-
-        assert_eq!(
-            known_tags(flat::members(message.members())),
-            [Tag(448), Tag(452), Tag(453), Tag(523), Tag(802)]
-        );
-    }
-
-    #[test]
-    fn a_message_knows_its_envelope() {
-        let dictionary = dictionary();
-        let message = dictionary.messages().next().unwrap();
-
-        assert_eq!(
-            message_known_tags(message, &[Tag(10), Tag(49), Tag(627)]),
-            [
-                Tag(10),
-                Tag(49),
-                Tag(448),
-                Tag(452),
-                Tag(453),
-                Tag(523),
-                Tag(627),
-                Tag(802)
-            ]
-        );
     }
 
     #[test]

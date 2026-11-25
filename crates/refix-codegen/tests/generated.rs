@@ -8,7 +8,7 @@ use refix_message::{
     Date, Decimal, InvalidValue, MonthYear, Tag, Time, TimePrecision, Tokenizer, UtcTimestamp,
 };
 
-// Not every generated item is read here, e.g. a leaf group's KNOWN_TAGS.
+// Not every generated item is read here, e.g. `DIALECT`.
 #[allow(dead_code)]
 #[path = "data/toy_generated.rs"]
 mod toy;

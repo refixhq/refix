@@ -27,6 +27,7 @@ const ROOT: &[&str] = &[
     "Instances",
     "InvalidValue",
     "KnownTags",
+    "LazyKnownTags",
     "Message",
     "MonthYear",
     "MultipleValues",
@@ -49,19 +50,19 @@ const ROOT: &[&str] = &[
 
 /// The constants and methods every message defines.
 const MESSAGE: &[&str] = &[
-    "KNOWN_TAGS",
     "MSG_TYPE",
     "from_raw",
     "header",
+    "known_tags",
     "raw",
     "trailer",
 ];
 
-/// The methods every group instance and header or trailer view defines.
-const INSTANCE: &[&str] = &["raw"];
+/// The methods a group instance or a header or trailer view defines.
+const INSTANCE: &[&str] = &["envelope_tags", "known_tags", "raw"];
 
-/// The constant and method every component's view defines.
-const COMPONENT: &[&str] = &["TAGS", "raw"];
+/// The methods every component's view defines.
+const COMPONENT: &[&str] = &["known_tags", "raw"];
 
 /// Every name the generated Rust uses, settled before anything is emitted.
 pub(super) struct Names {

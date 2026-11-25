@@ -3,19 +3,18 @@ use refix_dictionary::{MemberContext, Tag, dictionary};
 
 use super::components::emit_component_accessor;
 use super::docs::{code, member_docs, plain};
-use super::groups::{emit_group, emit_group_accessor, emit_known_tags};
-use super::layout::{MAX_WIDTH, indent};
+use super::groups::{KNOWN_TAGS, emit_group, emit_group_accessor, emit_known_tags};
+use super::layout::indent;
 use super::names::Names;
 use super::views::emit_view_accessor;
 use crate::conversion::Conversion;
 use crate::envelope::Envelope;
 use crate::flat;
-use crate::groups::message_known_tags;
 
 /// A message's struct and impl, then the types of the groups it declares.
 ///
 /// It reaches each view the `envelope` has. A message that walks a group
-/// lists its known tags, the envelope's included.
+/// holds its known tags, the envelope's included.
 pub(super) fn emit_message(
     message: dictionary::Message<'_>,
     envelope: &Envelope,
@@ -56,11 +55,7 @@ fn emit_message_impl(
     )];
     if walks_groups(message, envelope) {
         members.push(indent(
-            &emit_known_tags(
-                "const KNOWN_TAGS",
-                &message_known_tags(message, &envelope.tags),
-                MAX_WIDTH - 4,
-            ),
+            &emit_known_tags(message.members(), &envelope.sections, names),
             1,
         ));
     }
@@ -75,7 +70,7 @@ fn emit_message_impl(
         message.members(),
         names,
         Lifetime::Receiver,
-        "Self::KNOWN_TAGS",
+        KNOWN_TAGS,
     ));
 
     format!("impl {} {{\n{}}}\n", message.name(), members.join("\n"))
