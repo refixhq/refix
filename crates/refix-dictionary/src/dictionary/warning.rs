@@ -5,10 +5,10 @@ use std::fmt;
 /// [`crate::Dictionary`] sound.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Warning {
-    /// A tag listed again in a message, at any depth, after `kept`.
+    /// A tag that one list names twice.
     ///
-    /// A field that a scope and a component it includes both list is not
-    /// one.
+    /// A tag of the header or trailer that a message names itself is one
+    /// as well.
     DuplicateField {
         tag: Tag,
         kept: MemberContext,
@@ -56,17 +56,15 @@ mod tests {
 
     #[test]
     fn a_duplicate_in_two_places_names_both() {
-        let message = MemberContext::Message("NewOrderSingle".to_owned());
         let warning = Warning::DuplicateField {
-            tag: Tag(448),
-            kept: message.clone(),
-            dropped: message.group("NoPartyIDs"),
+            tag: Tag(49),
+            kept: MemberContext::Header,
+            dropped: MemberContext::Message("NewOrderSingle".to_owned()),
         };
 
         assert_eq!(
             warning.to_string(),
-            "tag 448 in group 'NoPartyIDs' in message 'NewOrderSingle' is dropped, as it already \
-             appears in message 'NewOrderSingle'"
+            "tag 49 in message 'NewOrderSingle' is dropped, as it already appears in the header"
         );
     }
 }

@@ -481,6 +481,26 @@ mod tests {
     }
 
     #[test]
+    fn a_message_keeps_a_header_field_its_component_lists() {
+        let mut spec = spec_of(
+            vec![field("ClOrdID", 11), field("SenderCompID", 49)],
+            vec![component("Sender", vec![field_ref(49, false)])],
+            vec![message(
+                "NewOrderSingle",
+                vec![field_ref(11, true), component_ref("Sender", false)],
+            )],
+        );
+        spec.header = vec![field_ref(49, true)];
+
+        let resolved = spec.resolve().unwrap();
+
+        let message = resolved.dictionary.messages().next().unwrap();
+        let sender = component_at(message.members(), 1);
+        assert_eq!(field_members(sender.members()), [(Tag(49), false)]);
+        assert_eq!(resolved.warnings, []);
+    }
+
+    #[test]
     fn a_trailer_tag_in_a_message_is_dropped_from_the_message() {
         let mut spec = spec_of(
             vec![field("Signature", 89)],
@@ -1503,7 +1523,7 @@ mod tests {
         }
 
         #[test]
-        fn a_tag_in_a_scope_and_in_its_group_is_dropped_from_the_group() {
+        fn a_tag_in_a_scope_and_in_its_group_is_an_error() {
             let spec = spec_of(
                 parties_fields(),
                 vec![],
@@ -1520,23 +1540,90 @@ mod tests {
                 )],
             );
 
-            let resolved = spec.resolve().unwrap();
-
-            let group = group_at(resolved.dictionary.messages().next().unwrap(), 1);
-            assert_eq!(field_members(group.members()), [(Tag(447), true)]);
-            assert_eq!(group.delimiter().tag, Tag(447));
             assert_eq!(
-                resolved.warnings,
-                [Warning::DuplicateField {
+                spec.resolve().unwrap_err(),
+                Error::AmbiguousTag {
                     tag: Tag(448),
-                    kept: nos_context(),
-                    dropped: nos_context().group("NoPartyIDs"),
-                }]
+                    first: nos_context(),
+                    second: nos_context().group("NoPartyIDs"),
+                }
             );
         }
 
         #[test]
-        fn a_group_a_message_and_its_component_both_list_is_kept_once() {
+        fn a_header_tag_in_a_group_is_an_error() {
+            let mut spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![group(453, false, vec![field_ref(448, false)])],
+                )],
+            );
+            spec.header = vec![field_ref(448, false)];
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::AmbiguousTag {
+                    tag: Tag(448),
+                    first: MemberContext::Header,
+                    second: nos_context().group("NoPartyIDs"),
+                }
+            );
+        }
+
+        #[test]
+        fn sibling_groups_sharing_a_tag_are_an_error() {
+            let mut fields = parties_fields();
+            fields.push(field("NoNestedPartyIDs", 539));
+            let spec = spec_of(
+                fields,
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![
+                        group(453, false, vec![field_ref(448, false)]),
+                        group(539, false, vec![field_ref(448, false)]),
+                    ],
+                )],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::AmbiguousTag {
+                    tag: Tag(448),
+                    first: nos_context().group("NoPartyIDs"),
+                    second: nos_context().group("NoNestedPartyIDs"),
+                }
+            );
+        }
+
+        #[test]
+        fn a_count_tag_also_listed_as_a_field_is_an_error() {
+            let spec = spec_of(
+                parties_fields(),
+                vec![],
+                vec![message(
+                    "NewOrderSingle",
+                    vec![
+                        field_ref(453, false),
+                        group(453, false, vec![field_ref(448, false)]),
+                    ],
+                )],
+            );
+
+            assert_eq!(
+                spec.resolve().unwrap_err(),
+                Error::AmbiguousTag {
+                    tag: Tag(453),
+                    first: nos_context(),
+                    second: nos_context(),
+                }
+            );
+        }
+
+        #[test]
+        fn a_group_a_message_and_its_component_both_list_is_an_error() {
             let spec = spec_of(
                 parties_fields(),
                 vec![component(
@@ -1555,113 +1642,13 @@ mod tests {
                 )],
             );
 
-            let resolved = spec.resolve().unwrap();
-
-            let message = resolved.dictionary.messages().next().unwrap();
-            let named = component_at(message.members(), 1);
-            assert_eq!(field_members(named.members()), [(Tag(447), false)]);
-            assert_eq!(
-                resolved.warnings,
-                [Warning::DuplicateField {
-                    tag: Tag(453),
-                    kept: nos_context(),
-                    dropped: nos_context(),
-                }]
-            );
-        }
-
-        #[test]
-        fn a_group_left_without_members_is_an_error() {
-            let spec = spec_of(
-                parties_fields(),
-                vec![],
-                vec![message(
-                    "NewOrderSingle",
-                    vec![
-                        field_ref(448, false),
-                        group(453, false, vec![field_ref(448, false)]),
-                    ],
-                )],
-            );
-
             assert_eq!(
                 spec.resolve().unwrap_err(),
-                Error::EmptyGroup {
-                    context: nos_context().group("NoPartyIDs"),
-                }
-            );
-        }
-
-        #[test]
-        fn a_count_tag_also_used_as_a_field_drops_the_group() {
-            let spec = spec_of(
-                parties_fields(),
-                vec![],
-                vec![message(
-                    "NewOrderSingle",
-                    vec![
-                        field_ref(453, false),
-                        group(453, false, vec![field_ref(448, false)]),
-                    ],
-                )],
-            );
-
-            let resolved = spec.resolve().unwrap();
-
-            let message = resolved.dictionary.messages().next().unwrap();
-            assert_eq!(field_members(message.members()), [(Tag(453), false)]);
-            assert_eq!(
-                resolved.warnings,
-                [Warning::DuplicateField {
+                Error::AmbiguousTag {
                     tag: Tag(453),
-                    kept: nos_context(),
-                    dropped: nos_context(),
-                }]
-            );
-        }
-
-        #[test]
-        fn sibling_groups_sharing_a_tag_keep_it_in_the_first() {
-            let mut fields = parties_fields();
-            fields.push(field("NoNestedPartyIDs", 539));
-            let spec = spec_of(
-                fields,
-                vec![],
-                vec![message(
-                    "NewOrderSingle",
-                    vec![
-                        group(
-                            453,
-                            false,
-                            vec![field_ref(448, false), field_ref(447, false)],
-                        ),
-                        group(
-                            539,
-                            false,
-                            vec![field_ref(448, false), field_ref(452, false)],
-                        ),
-                    ],
-                )],
-            );
-
-            let resolved = spec.resolve().unwrap();
-
-            let message = resolved.dictionary.messages().next().unwrap();
-            assert_eq!(
-                field_members(group_at(message, 0).members()),
-                [(Tag(448), true), (Tag(447), false)]
-            );
-            assert_eq!(
-                field_members(group_at(message, 1).members()),
-                [(Tag(452), true)]
-            );
-            assert_eq!(
-                resolved.warnings,
-                [Warning::DuplicateField {
-                    tag: Tag(448),
-                    kept: nos_context().group("NoPartyIDs"),
-                    dropped: nos_context().group("NoNestedPartyIDs"),
-                }]
+                    first: nos_context(),
+                    second: nos_context(),
+                }
             );
         }
 

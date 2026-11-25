@@ -10,8 +10,9 @@ impl Spec {
     /// Resolves this spec into a [`Dictionary`], checking its integrity.
     ///
     /// A message or group instance and the components it includes may list
-    /// the same field. A tag listed again in any other way is dropped with
-    /// a [`Warning`].
+    /// the same field. A tag that one list names twice is dropped with a
+    /// [`Warning`], as is one that a message names after the header or
+    /// trailer. A tag listed again in any other way is an error.
     pub fn resolve(self) -> Result<Resolved, Error> {
         let mut resolver = Resolver::new(&self)?;
         resolver.expand_components()?;
@@ -176,12 +177,12 @@ impl<'a> Resolver<'a> {
         Ok(resolved)
     }
 
-    /// Drops every member whose tag is already listed, in document order
-    /// and at any depth, with a warning for each.
+    /// Drops every member whose tag its list has named already, in
+    /// document order, with a warning for each.
     ///
     /// A component shares the scope of whatever includes it. A field stays
     /// when its earlier listings are in the same scope and came through
-    /// other components.
+    /// other components. A tag listed again in any other way is an error.
     fn drop_repeated_tags(
         &mut self,
         members: &mut Vec<ResolvedMember>,
@@ -203,14 +204,20 @@ impl<'a> Resolver<'a> {
             match listings.entry(tag) {
                 Entry::Occupied(mut first) => {
                     let first = first.get_mut();
-                    if member.carries_fields() && first.may_be_shared_from(scope) {
-                        first.paths.push(scope.path.clone());
-                        kept.push(member);
-                    } else {
+                    if first.is_repeated_by(&member, scope) {
                         self.warnings.push(Warning::DuplicateField {
                             tag,
-                            kept: first.context.clone(),
+                            kept: first.context().clone(),
                             dropped: scope.context.clone(),
+                        });
+                    } else if first.may_be_shared_with(&member, scope) {
+                        first.scopes.push(scope.clone());
+                        kept.push(member);
+                    } else {
+                        return Err(Error::AmbiguousTag {
+                            tag,
+                            first: first.context().clone(),
+                            second: scope.context.clone(),
                         });
                     }
                 }
@@ -221,7 +228,6 @@ impl<'a> Resolver<'a> {
                         let instance = scope.context.group(&count_field.name);
                         let scope = Scope::of(&instance);
                         self.drop_repeated_tags(&mut group.members, &scope, listings)?;
-                        group.delimiter_index = delimit(&mut group.members, &instance)?;
                     }
                     kept.push(member);
                 }
@@ -289,6 +295,7 @@ impl<'a> Resolver<'a> {
 type Listings = HashMap<Tag, Listing>;
 
 /// Where a message, section or group instance lists its members.
+#[derive(Clone, Eq, PartialEq)]
 struct Scope {
     context: MemberContext,
     /// The components the members are listed through, outermost first.
@@ -315,35 +322,54 @@ impl Scope {
     }
 }
 
-/// The scope that lists a tag first.
+/// The lists that name a tag, the first one first.
 #[derive(Clone)]
 struct Listing {
-    context: MemberContext,
-    /// The component paths that list the tag as a field.
-    ///
-    /// A group's count tag has none, so it is never shared.
-    paths: Vec<Vec<String>>,
+    scopes: Vec<Scope>,
+    /// Whether the tag counts a group.
+    counts_group: bool,
 }
 
 impl Listing {
     fn of(member: &ResolvedMember, scope: &Scope) -> Self {
-        let paths = if member.carries_fields() {
-            vec![scope.path.clone()]
-        } else {
-            Vec::new()
-        };
         Self {
-            context: scope.context.clone(),
-            paths,
+            scopes: vec![scope.clone()],
+            counts_group: !member.carries_fields(),
         }
+    }
+
+    /// Where the tag is listed first.
+    fn context(&self) -> &MemberContext {
+        &self.scopes[0].context
+    }
+
+    /// Whether `member` is a listing its list may not make.
+    ///
+    /// A list may not name a tag twice. The own list of a message or the
+    /// trailer may not name a tag of a section before it.
+    fn is_repeated_by(&self, member: &ResolvedMember, scope: &Scope) -> bool {
+        let follows_a_section = scope.path.is_empty() && *self.context() != scope.context;
+        self.reads_like(member, scope) && (self.scopes.contains(scope) || follows_a_section)
     }
 
     /// Whether `scope` may list the field as well.
     ///
     /// It may when it is the same scope and reaches the field through
     /// components that have not listed it yet.
-    fn may_be_shared_from(&self, scope: &Scope) -> bool {
-        self.context == scope.context && !self.paths.is_empty() && !self.paths.contains(&scope.path)
+    fn may_be_shared_with(&self, member: &ResolvedMember, scope: &Scope) -> bool {
+        self.reads_like(member, scope) && !self.counts_group && !self.scopes.contains(scope)
+    }
+
+    /// Whether the wire reads `member` in `scope` as it reads this listing.
+    ///
+    /// Both are fields or both are groups, in one message or group
+    /// instance. The header, a message and the trailer are one.
+    fn reads_like(&self, member: &ResolvedMember, scope: &Scope) -> bool {
+        let is_instance = |context: &MemberContext| matches!(context, MemberContext::Group { .. });
+        let is_same_instance = *self.context() == scope.context
+            || !(is_instance(self.context()) || is_instance(&scope.context));
+        let counts_group = !member.carries_fields();
+        is_same_instance && self.counts_group == counts_group
     }
 }
 

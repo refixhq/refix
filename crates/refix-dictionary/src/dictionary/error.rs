@@ -68,6 +68,16 @@ pub enum Error {
     EmptyGroup {
         context: MemberContext,
     },
+    /// A tag listed in two places that a message on the wire cannot tell
+    /// apart.
+    ///
+    /// One listing is inside a group and the other outside it, or one of
+    /// them counts a group.
+    AmbiguousTag {
+        tag: Tag,
+        first: MemberContext,
+        second: MemberContext,
+    },
 }
 
 impl fmt::Display for Error {
@@ -152,6 +162,15 @@ impl fmt::Display for Error {
             Error::EmptyGroup { context } => {
                 write!(f, "{context} has no members")
             }
+            Error::AmbiguousTag { tag, first, second } if first == second => {
+                write!(
+                    f,
+                    "tag {tag} counts a group in {first}, which lists it again"
+                )
+            }
+            Error::AmbiguousTag { tag, first, second } => {
+                write!(f, "tag {tag} is listed in {first} and in {second}")
+            }
         }
     }
 }
@@ -215,6 +234,37 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "field 'PriceType' lists both 1 and 01, which are the same number"
+        );
+    }
+
+    #[test]
+    fn a_tag_inside_a_group_and_outside_it_names_both_places() {
+        let message = MemberContext::Message("NewOrderSingle".to_owned());
+        let error = Error::AmbiguousTag {
+            tag: Tag(448),
+            first: message.clone(),
+            second: message.group("NoPartyIDs"),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "tag 448 is listed in message 'NewOrderSingle' and in group 'NoPartyIDs' in message \
+             'NewOrderSingle'"
+        );
+    }
+
+    #[test]
+    fn a_count_tag_listed_again_names_its_one_place() {
+        let message = MemberContext::Message("NewOrderSingle".to_owned());
+        let error = Error::AmbiguousTag {
+            tag: Tag(453),
+            first: message.clone(),
+            second: message,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "tag 453 counts a group in message 'NewOrderSingle', which lists it again"
         );
     }
 }
