@@ -17,7 +17,8 @@ mod value;
 
 pub use dialect::Dialect;
 pub use group::{
-    Group, GroupLayout, GroupTable, GroupTableError, Instances, KnownTags, OwnedGroupTable,
+    Group, GroupLayout, GroupTable, GroupTableError, Instances, KnownTags, LazyKnownTags,
+    OwnedGroupTable,
 };
 pub use log::LogReader;
 pub use message::{RawMessage, Scope, Slot};
