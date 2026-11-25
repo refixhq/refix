@@ -46,6 +46,7 @@ const ROOT: &[&str] = &[
     "std",
     "str",
     "u8",
+    "warm_up",
 ];
 
 /// The constants and methods every message defines.

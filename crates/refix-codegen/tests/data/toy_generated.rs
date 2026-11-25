@@ -892,3 +892,26 @@ impl std::fmt::Display for Message {
         }
     }
 }
+
+/// Builds the tag lists that group reads share.
+///
+/// Each list is otherwise built by the first read that needs it. Call this
+/// once at startup to keep that work out of the first messages.
+pub fn warm_up() {
+    Header::envelope_tags().get();
+    Header::known_tags().get();
+    Trailer::known_tags().get();
+    Instrument::known_tags().get();
+    SecurityXML::known_tags().get();
+    OrderQtyData::known_tags().get();
+    HeaderHops::known_tags().get();
+    Parties::known_tags().get();
+    PtysSubGrp::known_tags().get();
+    SecAltIDGrp::known_tags().get();
+    LogonMsgTypes::known_tags().get();
+    MassQuoteQuoteSets::known_tags().get();
+    MassQuoteQuoteSetsQuoteEntries::known_tags().get();
+    NewOrderSingle::known_tags().get();
+    Logon::known_tags().get();
+    MassQuote::known_tags().get();
+}

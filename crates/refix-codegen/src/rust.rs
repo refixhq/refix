@@ -11,6 +11,7 @@ mod names;
 mod naming;
 mod printing;
 mod views;
+mod warm_up;
 
 use refix_dictionary::Dictionary;
 
@@ -27,6 +28,7 @@ use groups::{emit_group, shared_groups};
 use messages::{emit_message, walks_groups};
 use names::Names;
 use views::emit_view;
+use warm_up::emit_warm_up;
 
 pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Error> {
     let mut warnings = Vec::new();
@@ -74,6 +76,7 @@ pub fn generate(dictionary: &Dictionary, source: &str) -> Result<Generated, Erro
         .chain(views)
         .chain(messages)
         .chain(emit_dispatch(dictionary))
+        .chain(emit_warm_up(dictionary, &envelope, &names))
         .collect::<Vec<String>>()
         .join("\n");
     let has_groups = !envelope.with_groups.is_empty()
@@ -816,6 +819,16 @@ impl std::fmt::Display for Message {
             Self::Unrecognized(raw) => std::fmt::Display::fmt(raw, f),
         }
     }
+}
+
+/// Builds the tag lists that group reads share.
+///
+/// Each list is otherwise built by the first read that needs it. Call this
+/// once at startup to keep that work out of the first messages.
+pub fn warm_up() {
+    Parties::known_tags().get();
+    PtysSubGrp::known_tags().get();
+    NewOrderSingle::known_tags().get();
 }
 "#;
 
