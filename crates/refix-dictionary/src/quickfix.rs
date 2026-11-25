@@ -1266,31 +1266,30 @@ mod tests {
             let parsed = parse(
                 "<fix major='4' minor='4'><messages>\
                  <message name='AllocationInstruction' msgtype='J' msgcat='app'>\
-                 <field name='AccruedInterestAmt' required='N'/>\
                  <group name='NoAllocs' required='N'>\
                  <field name='AllocAccount' required='N'/>\
-                 <field name='AccruedInterestAmt' required='N'/>\
+                 <field name='AllocAccount' required='N'/>\
                  </group></message></messages><fields>\
-                 <field number='159' name='AccruedInterestAmt' type='AMT'/>\
                  <field number='78' name='NoAllocs' type='NUMINGROUP'/>\
                  <field number='79' name='AllocAccount' type='STRING'/>\
                  </fields></fix>",
             )
             .unwrap();
 
-            let message = MemberContext::Message("AllocationInstruction".to_owned());
+            let allocs =
+                MemberContext::Message("AllocationInstruction".to_owned()).group("NoAllocs");
             assert_eq!(
                 parsed.warnings,
                 [Warning::Invalid(dictionary::Warning::DuplicateField {
-                    tag: Tag(159),
-                    kept: message.clone(),
-                    dropped: message.group("NoAllocs"),
+                    tag: Tag(79),
+                    kept: allocs.clone(),
+                    dropped: allocs,
                 })]
             );
             assert_eq!(
                 parsed.warnings[0].to_string(),
-                "tag 159 in group 'NoAllocs' in message 'AllocationInstruction' is dropped, as it \
-                 already appears in message 'AllocationInstruction'"
+                "tag 79 is dropped from group 'NoAllocs' in message 'AllocationInstruction', which \
+                 lists it more than once"
             );
         }
 
