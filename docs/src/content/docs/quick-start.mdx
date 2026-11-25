@@ -49,11 +49,11 @@ Save this as `fix.log`. It holds a NewOrderSingle and a Heartbeat, each after a 
 		for record in refix.decode_log("fix.log", CODEC):
 		    order = record.message
 		    if isinstance(order, NewOrderSingle):
-		        print(order.cl_ord_id, order.side.name, order.order_qty, order.price)
+		        print(order.cl_ord_id, order.instrument.symbol, order.side.name, order.price)
 		```
 
 		```text
-		ORDER-1 BUY 100 101.25
+		ORDER-1 ACME BUY 101.25
 		```
 
 		A field that is absent reads as `None`, and a value that cannot be read raises `InvalidValueError`.
@@ -70,22 +70,22 @@ Save this as `fix.log`. It holds a NewOrderSingle and a Heartbeat, each after a 
 		        let Message::NewOrderSingle(order) = Message::from_raw(record.message) else {
 		            continue;
 		        };
-		        let (Some(id), Some(side), Some(qty), Some(price)) = (
+		        let (Some(id), Some(symbol), Some(side), Some(price)) = (
 		            order.cl_ord_id()?,
+		            order.instrument().symbol()?,
 		            order.side()?,
-		            order.order_qty()?,
 		            order.price()?,
 		        ) else {
 		            continue;
 		        };
-		        println!("{id} {side:?} {qty} {price}");
+		        println!("{id} {symbol} {side:?} {price}");
 		    }
 		    Ok(())
 		}
 		```
 
 		```text
-		ORDER-1 Buy 100 101.25
+		ORDER-1 ACME Buy 101.25
 		```
 
 		A field that is absent reads as `Ok(None)`, and a value that cannot be read is an `Err`.
@@ -94,3 +94,6 @@ Save this as `fix.log`. It holds a NewOrderSingle and a Heartbeat, each after a 
 
 The reader finds each message after its prefix and works out the separator the log uses. Each message is then read
 as the type its MsgType names, so the Heartbeat is skipped here.
+
+FIX 4.4 keeps Symbol (55) in its Instrument component, so the order reads it through `instrument`.
+[Typed messages](/guides/typed-messages/#components) covers components, groups and the header.

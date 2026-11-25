@@ -17,17 +17,18 @@ dictionary.
 
 - Each message type in the dictionary has its own type, with an accessor for every field the dictionary gives it.
 - Values are converted to the field's type, and a field with a fixed set of values is an enum.
+- Fields that the dictionary keeps in a component, such as Instrument, are read through that component.
 - A repeating group is read as a sequence of instances.
 - Messages and values that the dictionary does not list are kept, not rejected.
 
 ## Choose a dictionary
 
 - For standard FIX 4.2 or 4.4, install the `refix-fix42` or `refix-fix44` package next to `refix`.
-- For any other dictionary, such as a venue's or another FIX version, generate your own module with the
+- For any other dictionary, such as a venue's or another FIX version, generate your own code with the
   command-line tool. [Your own dictionary](/guides/your-own-dictionary/) explains how.
 
-The examples on this page use `refix-fix44`. `refix-fix42` and a module generated from your own dictionary are used
-the same way, with the names their dictionary gives.
+The examples on this page use `refix-fix44`. `refix-fix42` and code generated from your own dictionary are used the
+same way, with the names their dictionary gives.
 
 ## Get typed messages
 
@@ -41,8 +42,8 @@ the same way, with the names their dictionary gives.
 		    message = record.message
 		```
 
-		`CODEC` comes with every generated module. For a raw message from somewhere else, the module's `from_raw`
-		does the same conversion. Give the module's `DIALECT` to the tokenizer or the message stream that reads it.
+		`CODEC` comes with every generated package. For a raw message from somewhere else, the package's `from_raw`
+		does the same conversion. Give the package's `DIALECT` to the tokenizer or the message stream that reads it.
 	</TabItem>
 	<TabItem label="Rust">
 		```rust
@@ -74,7 +75,7 @@ Each message is read as the type its MsgType names.
 		    case NewOrderSingle():
 		        print("order", message.cl_ord_id)
 		    case MarketDataSnapshotFullRefresh():
-		        print("snapshot", message.symbol)
+		        print("snapshot", message.md_req_id)
 		    case refix.RawMessage():
 		        print("not in the dictionary:", message.get_str(35))
 		```
@@ -86,7 +87,7 @@ Each message is read as the type its MsgType names.
 		match Message::from_raw(record.message) {
 		    Message::NewOrderSingle(order) => println!("order {:?}", order.cl_ord_id()?),
 		    Message::MarketDataSnapshotFullRefresh(snapshot) => {
-		        println!("snapshot {:?}", snapshot.symbol()?);
+		        println!("snapshot {:?}", snapshot.md_req_id()?);
 		    }
 		    Message::Unrecognized(raw) => println!("not in the dictionary: {raw}"),
 		    _ => {}
@@ -112,7 +113,6 @@ The examples read this order:
 		order.side           # <Side.BUY: '1'>
 		order.ord_type       # <OrdType.LIMIT: '2'>
 		order.price          # Decimal('101.25')
-		order.order_qty      # Decimal('100')
 		order.transact_time  # datetime(2026, 11, 3, 9, 30, 36, 250000, tzinfo=timezone.utc)
 		order.text           # None
 		```
@@ -127,7 +127,6 @@ The examples read this order:
 		let side = order.side()?;           // Some(Side::Buy)
 		let ord_type = order.ord_type()?;   // Some(OrdType::Limit)
 		let price = order.price()?;         // Some(101.25)
-		let qty = order.order_qty()?;       // Some(100)
 		let time = order.transact_time()?;  // Some(2026-11-03 09:30:36.250 UTC)
 		let text = order.text()?;           // None
 		```
@@ -167,6 +166,37 @@ Each accessor is named after its field in the dictionary, in snake case.
 		A value the dictionary does not list reads as the enum's `Unrecognized` variant, which holds it.
 	</TabItem>
 </Tabs>
+
+## Components
+
+A dictionary keeps related fields in components. In FIX 4.4, Symbol (55) is in Instrument and OrderQty (38) is in
+OrderQtyData. A message reads those fields through the component.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		order.instrument.symbol         # 'ACME'
+		order.instrument.security_id    # None
+		order.order_qty_data.order_qty  # Decimal('100')
+		```
+
+		Reading `order.symbol` raises `AttributeError`, and a type checker reports it.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		let symbol = order.instrument().symbol()?;      // Some("ACME")
+		let id = order.instrument().security_id()?;     // None
+		let qty = order.order_qty_data().order_qty()?;  // Some(100)
+		```
+
+		`order.symbol()` does not compile.
+	</TabItem>
+</Tabs>
+
+The accessor is the component's name in the dictionary, in snake case. A component has a type of its own, such as
+`Instrument`, so one function can take the instrument of any message.
+
+FIX 4.2 has no components, so `refix-fix42` reads every field from the message.
 
 ## Header and trailer
 
@@ -230,10 +260,17 @@ snapshot has two entries:
 		```
 
 		The group also has `len`, `is_empty` and `get`, and is empty when the group is absent.
+
+		The first group read of each message type builds a list of tags, which takes a few microseconds.
+		`refix_fix44::warm_up()` builds every list, so call it at startup to keep that out of the first messages.
 	</TabItem>
 </Tabs>
 
-A group inside a group is read the same way from each instance.
+Each instance has a type of its own, here `MDFullGrp`. A group inside a group is read the same way from each
+instance.
+
+A component that holds only a group has no accessor of its own. Parties holds NoPartyIDs (453), so an order reads
+it as `party_ids`.
 
 ## Fields outside the dictionary
 
