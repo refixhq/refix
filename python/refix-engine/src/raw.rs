@@ -13,7 +13,7 @@ use crate::group::{GroupTable, KnownTags};
 import_exception!(refix.errors, InvalidValueError);
 
 /// Python's `decimal.Decimal`, imported on first use.
-static DECIMAL_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+pub(crate) static DECIMAL_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
 /// `refix.values.MonthYear`, imported on first use.
 static MONTH_YEAR_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();

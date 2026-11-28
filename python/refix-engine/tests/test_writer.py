@@ -1,5 +1,6 @@
 import enum
 import pickle
+from decimal import Decimal
 
 import pytest
 import refix
@@ -8,6 +9,17 @@ from refix.errors import WriteError
 
 class Side(enum.StrEnum):
     BUY = "1"
+
+
+class PartyRole(enum.IntEnum):
+    CLIENT_ID = 3
+
+
+def written(write: str, tag: int, value: object) -> refix.RawMessage:
+    """Returns the message of one field written with the method named `write`."""
+    writer = refix.FieldWriter()
+    getattr(writer, write)(tag, value)
+    return writer.finish()
 
 
 class TestWrite:
@@ -57,6 +69,85 @@ class TestWrite:
             writer.write(58, b"")
         with pytest.raises(WriteError, match="separator in the value for field 58"):
             writer.write(58, b"a\x01b")
+
+
+class TestWriteInt:
+    @pytest.mark.parametrize("value", [0, 100, -5, 2**63 - 1, -(2**63)])
+    def test_writes_an_integer_that_reads_back(self, value: int):
+        message = written("write_int", 38, value)
+
+        assert message.get_str(38) == str(value)
+        assert message.get_int(38) == value
+
+    def test_writes_an_int_enum_as_its_value(self):
+        assert written("write_int", 452, PartyRole.CLIENT_ID).bytes == b"452=3\x01"
+
+    def test_bool_raises(self):
+        with pytest.raises(TypeError, match="write_int takes an int, not bool"):
+            written("write_int", 43, True)
+
+    def test_integer_past_64_bits_raises(self):
+        with pytest.raises(OverflowError):
+            written("write_int", 38, 2**63)
+
+
+class TestWriteBool:
+    def test_writes_y_and_n(self):
+        writer = refix.FieldWriter()
+        writer.write_bool(43, True)
+        writer.write_bool(97, False)
+
+        message = writer.finish()
+
+        assert message.bytes == b"43=Y\x0197=N\x01"
+        assert message.get_bool(43) is True
+        assert message.get_bool(97) is False
+
+    def test_int_raises(self):
+        with pytest.raises(TypeError):
+            written("write_bool", 43, 1)
+
+
+class TestWriteDecimal:
+    @pytest.mark.parametrize(
+        ("value", "text"),
+        [
+            (Decimal("101.25"), "101.25"),
+            (Decimal("1.50"), "1.50"),
+            (Decimal("-0.005"), "-0.005"),
+            (Decimal("1.5E+3"), "1500"),
+            (Decimal("5E-7"), "0.0000005"),
+            (Decimal(0), "0"),
+        ],
+    )
+    def test_writes_a_decimal_with_its_scale(self, value: Decimal, text: str):
+        message = written("write_decimal", 44, value)
+
+        assert message.get_str(44) == text
+        assert message.get_decimal(44) == value
+
+    @pytest.mark.parametrize("value", [100, -5, 2**70])
+    def test_writes_an_int(self, value: int):
+        assert written("write_decimal", 38, value).get_str(38) == str(value)
+
+    @pytest.mark.parametrize("value", [1.5, "1.5", True])
+    def test_other_types_raise(self, value: object):
+        with pytest.raises(TypeError):
+            written("write_decimal", 44, value)
+
+    @pytest.mark.parametrize(("value", "name"), [(1.5, "float"), (True, "bool")])
+    def test_names_the_type_it_does_not_take(self, value: object, name: str):
+        message = f"write_decimal takes a Decimal or an int, not {name}"
+        with pytest.raises(TypeError, match=message):
+            written("write_decimal", 44, value)
+
+    @pytest.mark.parametrize("text", ["NaN", "sNaN", "Infinity", "-Infinity"])
+    def test_values_that_are_not_numbers_raise(self, text: str):
+        with pytest.raises(WriteError) as excinfo:
+            written("write_decimal", 44, Decimal(text))
+
+        assert excinfo.value.tag == 44
+        assert str(excinfo.value) == f"{text} cannot be written to field 44"
 
 
 class TestFinish:
