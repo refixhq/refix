@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/refixhq/refix/compare/refix-cli-v0.3.0...refix-cli-v0.3.1) - 2026-11-28
+
+### Other
+
+- update Cargo.lock dependencies
+
 ## [0.3.0](https://github.com/refixhq/refix/compare/refix-cli-v0.2.8...refix-cli-v0.3.0) - 2026-11-25
 
 ### Added

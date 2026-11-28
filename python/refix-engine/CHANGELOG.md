@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1](https://github.com/refixhq/refix/compare/python-v0.13.0...python-v0.13.1) - 2026-11-28
+
+### Other
+
+- updated the following local packages: refix-message
+
 ## [0.13.0](https://github.com/refixhq/refix/compare/python-v0.12.0...python-v0.13.0) - 2026-11-28
 
 ### Added

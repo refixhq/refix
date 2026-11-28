@@ -690,7 +690,7 @@ dependencies = [
 
 [[package]]
 name = "refix-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "clap",
  "refix-codegen",
@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "refix-engine"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "bytes",
  "pyo3",
@@ -725,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "refix-fix42"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "bytes",
  "refix",
@@ -734,7 +734,7 @@ dependencies = [
 
 [[package]]
 name = "refix-fix44"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "bytes",
  "refix",
@@ -743,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "refix-message"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "bigdecimal",
  "bytes",
