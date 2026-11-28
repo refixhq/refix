@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5](https://github.com/refixhq/refix/compare/refix-v0.3.4...refix-v0.3.5) - 2026-11-28
+
+### Other
+
+- describe writing raw messages ([#214](https://github.com/refixhq/refix/pull/214))
+
 ## [0.3.4](https://github.com/refixhq/refix/compare/refix-v0.3.3...refix-v0.3.4) - 2026-11-17
 
 ### Other
