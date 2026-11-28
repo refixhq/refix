@@ -19,6 +19,10 @@ bench = false
 name = "tokenize"
 harness = false
 
+[[bench]]
+name = "write"
+harness = false
+
 [dependencies]
 bigdecimal-04 = { workspace = true, optional = true }
 bytes = { workspace = true }
