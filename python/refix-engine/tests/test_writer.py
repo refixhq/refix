@@ -1,5 +1,6 @@
 import enum
 import pickle
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -148,6 +149,204 @@ class TestWriteDecimal:
 
         assert excinfo.value.tag == 44
         assert str(excinfo.value) == f"{text} cannot be written to field 44"
+
+
+class TestWriteDate:
+    def test_writes_a_date_that_reads_back(self):
+        message = written("write_date", 75, date(2026, 11, 3))
+
+        assert message.get_str(75) == "20261103"
+        assert message.get_date(75) == date(2026, 11, 3)
+
+    @pytest.mark.parametrize(
+        ("value", "name"),
+        [(datetime(2026, 11, 3, tzinfo=UTC), "datetime"), ("20261103", "str")],
+    )
+    def test_other_types_raise(self, value: object, name: str):
+        with pytest.raises(TypeError, match=f"write_date takes a date, not {name}"):
+            written("write_date", 75, value)
+
+
+class TestWriteTime:
+    def test_writes_milliseconds_and_cuts_the_rest(self):
+        message = written("write_time", 273, time(9, 30, 36, 250_999))
+
+        assert message.get_str(273) == "09:30:36.250"
+
+    @pytest.mark.parametrize(
+        ("precision", "text"),
+        [(0, "09:30:36"), (1, "09:30:36.2"), (6, "09:30:36.250999")],
+    )
+    def test_writes_the_digits_asked_for(self, precision: int, text: str):
+        writer = refix.FieldWriter()
+        writer.write_time(273, time(9, 30, 36, 250_999), precision=precision)
+
+        message = writer.finish()
+
+        assert message.get_str(273) == text
+        assert message.get_time(273) == time(9, 30, 36, 250_999).replace(
+            microsecond=250_999 // 10 ** (6 - precision) * 10 ** (6 - precision)
+        )
+
+    def test_precision_past_nine_digits_raises(self):
+        writer = refix.FieldWriter()
+
+        with pytest.raises(ValueError, match="precision must be from 0 to 9 digits"):
+            writer.write_time(273, time(9, 30, 36), precision=10)
+
+    def test_time_with_a_time_zone_raises(self):
+        with pytest.raises(WriteError) as excinfo:
+            written("write_time", 273, time(9, 30, 36, tzinfo=UTC))
+
+        assert excinfo.value.tag == 273
+        assert str(excinfo.value) == (
+            "datetime.time(9, 30, 36, tzinfo=datetime.timezone.utc) "
+            "cannot be written to field 273"
+        )
+
+    def test_other_types_raise(self):
+        with pytest.raises(TypeError, match="write_time takes a time, not str"):
+            written("write_time", 273, "09:30:36")
+
+
+class TestWriteTimeNs:
+    def test_writes_nanoseconds(self):
+        message = written("write_time_ns", 273, 34_236_250_999_999)
+
+        assert message.get_str(273) == "09:30:36.250999999"
+        assert message.get_time_ns(273) == 34_236_250_999_999
+
+    def test_writes_the_digits_asked_for(self):
+        writer = refix.FieldWriter()
+        writer.write_time_ns(273, 34_236_250_999_999, precision=3)
+
+        assert writer.finish().get_str(273) == "09:30:36.250"
+
+    def test_writes_a_leap_second(self):
+        writer = refix.FieldWriter()
+        writer.write_time_ns(273, 86_400_500_000_000, precision=3)
+
+        assert writer.finish().get_str(273) == "23:59:60.500"
+
+    @pytest.mark.parametrize("value", [-1, 86_401_000_000_000])
+    def test_value_outside_a_day_raises(self, value: int):
+        with pytest.raises(WriteError) as excinfo:
+            written("write_time_ns", 273, value)
+
+        assert excinfo.value.tag == 273
+
+
+class TestWriteUtcTimestamp:
+    def test_writes_milliseconds_and_cuts_the_rest(self):
+        stamp = datetime(2026, 11, 3, 9, 30, 36, 250_999, tzinfo=UTC)
+
+        message = written("write_utc_timestamp", 60, stamp)
+
+        assert message.get_str(60) == "20261103-09:30:36.250"
+        assert message.get_utc_timestamp(60) == stamp.replace(microsecond=250_000)
+
+    @pytest.mark.parametrize(
+        ("precision", "text"),
+        [
+            (0, "20261103-09:30:36"),
+            (6, "20261103-09:30:36.250999"),
+            (9, "20261103-09:30:36.250999000"),
+        ],
+    )
+    def test_writes_the_digits_asked_for(self, precision: int, text: str):
+        writer = refix.FieldWriter()
+        stamp = datetime(2026, 11, 3, 9, 30, 36, 250_999, tzinfo=UTC)
+        writer.write_utc_timestamp(60, stamp, precision=precision)
+
+        assert writer.finish().get_str(60) == text
+
+    def test_converts_another_time_zone_to_utc(self):
+        zone = timezone(timedelta(hours=2))
+        stamp = datetime(2026, 11, 3, 11, 30, 36, tzinfo=zone)
+
+        message = written("write_utc_timestamp", 60, stamp)
+
+        assert message.get_str(60) == "20261103-09:30:36.000"
+
+    def test_writes_a_time_before_1970(self):
+        stamp = datetime(1969, 12, 31, 23, 59, 59, 999_000, tzinfo=UTC)
+
+        message = written("write_utc_timestamp", 60, stamp)
+
+        assert message.get_str(60) == "19691231-23:59:59.999"
+
+    def test_datetime_without_a_time_zone_raises(self):
+        naive = datetime(2026, 11, 3, 9, 30, 36)  # noqa: DTZ001
+
+        with pytest.raises(WriteError) as excinfo:
+            written("write_utc_timestamp", 60, naive)
+
+        assert excinfo.value.tag == 60
+        assert str(excinfo.value) == (
+            "datetime.datetime(2026, 11, 3, 9, 30, 36) cannot be written to field 60"
+        )
+
+    @pytest.mark.parametrize("year", [1, 1677, 2263, 9999])
+    def test_year_that_nanoseconds_cannot_hold_raises(self, year: int):
+        with pytest.raises(WriteError):
+            written("write_utc_timestamp", 60, datetime(year, 6, 1, tzinfo=UTC))
+
+    def test_other_types_raise(self):
+        message = "write_utc_timestamp takes a datetime, not date"
+        with pytest.raises(TypeError, match=message):
+            written("write_utc_timestamp", 60, date(2026, 11, 3))
+
+
+class TestWriteUtcTimestampNs:
+    def test_writes_nanoseconds(self):
+        message = written("write_utc_timestamp_ns", 60, 1_793_370_591_123_456_789)
+
+        assert message.get_str(60) == "20261030-14:29:51.123456789"
+        assert message.get_utc_timestamp_ns(60) == 1_793_370_591_123_456_789
+
+    def test_writes_the_digits_asked_for(self):
+        writer = refix.FieldWriter()
+        writer.write_utc_timestamp_ns(60, 1_793_370_591_123_456_789, precision=3)
+
+        assert writer.finish().get_str(60) == "20261030-14:29:51.123"
+
+
+class TestWriteMonthYear:
+    @pytest.mark.parametrize(
+        ("value", "text"),
+        [
+            (refix.MonthYear(2026, 12), "202612"),
+            (refix.MonthYear(2026, 12, day=18), "20261218"),
+            (refix.MonthYear(2026, 12, week=3), "202612w3"),
+        ],
+    )
+    def test_writes_each_form(self, value: refix.MonthYear, text: str):
+        message = written("write_month_year", 200, value)
+
+        assert message.get_str(200) == text
+        assert message.get_month_year(200) == value
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            refix.MonthYear(2026, 13),
+            refix.MonthYear(2026, 2, day=30),
+            refix.MonthYear(2026, 12, week=6),
+            refix.MonthYear(2026, 12, day=18, week=3),
+            refix.MonthYear(70_000, 12),
+        ],
+    )
+    def test_value_that_names_no_month_raises(self, value: refix.MonthYear):
+        with pytest.raises(WriteError) as excinfo:
+            written("write_month_year", 200, value)
+
+        assert excinfo.value.tag == 200
+        assert str(excinfo.value) == f"{value!r} cannot be written to field 200"
+
+    def test_other_types_raise(self):
+        message = "write_month_year takes a MonthYear, not str"
+        with pytest.raises(TypeError, match=message):
+            written("write_month_year", 200, "202612")
 
 
 class TestFinish:
