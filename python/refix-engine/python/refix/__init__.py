@@ -1,6 +1,7 @@
 from refix._core import (
     MALFORMED_TAG,
     Dialect,
+    FieldWriter,
     Garble,
     GroupTable,
     KnownTags,
@@ -20,6 +21,7 @@ __all__ = [
     "MALFORMED_TAG",
     "Codec",
     "Dialect",
+    "FieldWriter",
     "Garble",
     "GroupTable",
     "KnownTags",

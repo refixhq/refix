@@ -5,6 +5,7 @@ mod log;
 mod raw;
 mod stream;
 mod tokenizer;
+mod writer;
 
 use pyo3::prelude::*;
 
@@ -43,6 +44,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<stream::Garble>()?;
     m.add_class::<stream::MessageStream>()?;
     m.add_class::<tokenizer::Tokenizer>()?;
+    m.add_class::<writer::FieldWriter>()?;
     m.add("MALFORMED_TAG", refix_message::Tag::MALFORMED.0)?;
     Ok(())
 }

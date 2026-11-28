@@ -62,3 +62,15 @@ class InvalidValueError(ValueError):
 
     def __str__(self) -> str:
         return f"invalid value in field {self.tag}"
+
+
+class WriteError(ValueError):
+    """A value cannot be written as a field."""
+
+    def __init__(self, tag: int, message: str) -> None:
+        super().__init__(tag, message)
+        self.tag = tag
+        self.message = message
+
+    def __str__(self) -> str:
+        return self.message
