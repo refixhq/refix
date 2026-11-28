@@ -1,6 +1,7 @@
 from refix._core import (
     MALFORMED_TAG,
     Dialect,
+    FieldWriter,
     Garble,
     GroupTable,
     KnownTags,
@@ -8,6 +9,7 @@ from refix._core import (
     RawMessage,
     Scope,
     Tokenizer,
+    frame,
     version,
 )
 from refix.codec import Codec
@@ -20,6 +22,7 @@ __all__ = [
     "MALFORMED_TAG",
     "Codec",
     "Dialect",
+    "FieldWriter",
     "Garble",
     "GroupTable",
     "KnownTags",
@@ -32,5 +35,6 @@ __all__ = [
     "Tokenizer",
     "__version__",
     "decode_log",
+    "frame",
     "read_log",
 ]

@@ -13,10 +13,10 @@ use crate::group::{GroupTable, KnownTags};
 import_exception!(refix.errors, InvalidValueError);
 
 /// Python's `decimal.Decimal`, imported on first use.
-static DECIMAL_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+pub(crate) static DECIMAL_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
 /// `refix.values.MonthYear`, imported on first use.
-static MONTH_YEAR_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+pub(crate) static MONTH_YEAR_TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
 /// The bytes of a FIX message and an index of every field in wire order.
 ///
@@ -31,6 +31,10 @@ impl RawMessage {
 
     pub(crate) fn scope(&self) -> CoreScope<'_> {
         self.0.scope()
+    }
+
+    pub(crate) fn core(&self) -> &CoreRawMessage {
+        &self.0
     }
 }
 
