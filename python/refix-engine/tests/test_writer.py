@@ -1,4 +1,5 @@
 import enum
+import io
 import pickle
 from datetime import UTC, date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -347,6 +348,111 @@ class TestWriteMonthYear:
         message = "write_month_year takes a MonthYear, not str"
         with pytest.raises(TypeError, match=message):
             written("write_month_year", 200, "202612")
+
+
+class TestWriteData:
+    def test_writes_the_length_before_the_data(self):
+        writer = refix.FieldWriter()
+        writer.write_data(95, 96, b"a\x01b=c")
+
+        message = writer.finish()
+
+        assert message.bytes == b"95=5\x0196=a\x01b=c\x01"
+        assert message.get_int(95) == 5
+        assert message.get(96) == b"a\x01b=c"
+
+    def test_empty_value_raises_and_writes_nothing(self):
+        writer = refix.FieldWriter()
+
+        with pytest.raises(WriteError) as excinfo:
+            writer.write_data(95, 96, b"")
+
+        assert excinfo.value.tag == 96
+        assert writer.finish().bytes == b""
+
+
+class TestWriteFields:
+    def test_writes_the_fields_of_a_written_message_after_its_own(self):
+        instrument = refix.FieldWriter()
+        instrument.write_str(55, "ACME")
+        instrument.write_str(48, "US0000000001")
+        writer = refix.FieldWriter()
+        writer.write_str(11, "ORDER-1")
+        writer.write_fields(instrument.finish())
+        writer.write_int(38, 100)
+
+        message = writer.finish()
+
+        assert str(message) == "11=ORDER-1|55=ACME|48=US0000000001|38=100"
+        assert message.get_int(38) == 100
+
+    def test_writes_fields_read_from_a_log_with_the_separator(self):
+        (record,) = refix.read_log(io.BytesIO(b"8=FIX.4.4|9=5|35=0|10=163|\n"))
+        writer = refix.FieldWriter()
+        writer.write_fields(record.message)
+
+        message = writer.finish()
+
+        assert message.bytes == b"8=FIX.4.4\x019=5\x0135=0\x0110=163\x01"
+
+
+def header(seq: int) -> refix.RawMessage:
+    writer = refix.FieldWriter()
+    writer.write_str(49, "BUYSIDE")
+    writer.write_str(56, "VENUE")
+    writer.write_int(34, seq)
+    return writer.finish()
+
+
+def body() -> refix.RawMessage:
+    writer = refix.FieldWriter()
+    writer.write_str(11, "ORDER-1")
+    return writer.finish()
+
+
+class TestFrame:
+    def test_frames_a_header_and_a_body(self):
+        message = refix.frame("FIX.4.4", "D", header(7), body())
+
+        assert str(message) == (
+            "8=FIX.4.4|9=41|35=D|49=BUYSIDE|56=VENUE|34=7|11=ORDER-1|10=041"
+        )
+        assert message.get_str(35) == "D"
+
+    def test_a_framed_message_reads_back_through_the_tokenizer(self):
+        writer = refix.FieldWriter()
+        writer.write_data(95, 96, b"a\x01b=c")
+        message = refix.frame("FIX.4.4", "B", header(7), writer.finish())
+
+        read = refix.Tokenizer().tokenize(message.bytes)
+
+        assert read.entries() == message.entries()
+        assert read.get(96) == b"a\x01b=c"
+
+    def test_frames_a_message_with_no_body_fields(self):
+        message = refix.frame("FIX.4.4", "0", header(8), refix.FieldWriter().finish())
+
+        assert str(message) == "8=FIX.4.4|9=30|35=0|49=BUYSIDE|56=VENUE|34=8|10=154"
+
+    @pytest.mark.parametrize("tag", [8, 9, 35, 10])
+    def test_field_that_framing_writes_raises(self, tag: int):
+        writer = refix.FieldWriter()
+        writer.write_str(tag, "1")
+        fields = writer.finish()
+
+        with pytest.raises(WriteError) as in_body:
+            refix.frame("FIX.4.4", "D", header(7), fields)
+        with pytest.raises(WriteError) as in_header:
+            refix.frame("FIX.4.4", "D", fields, body())
+
+        assert in_body.value.tag == in_header.value.tag == tag
+        assert str(in_body.value) == f"field {tag} is written by framing"
+
+    def test_empty_msg_type_raises(self):
+        with pytest.raises(WriteError) as excinfo:
+            refix.frame("FIX.4.4", "", header(7), body())
+
+        assert excinfo.value.tag == 35
 
 
 class TestFinish:

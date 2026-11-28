@@ -32,6 +32,10 @@ impl RawMessage {
     pub(crate) fn scope(&self) -> CoreScope<'_> {
         self.0.scope()
     }
+
+    pub(crate) fn core(&self) -> &CoreRawMessage {
+        &self.0
+    }
 }
 
 #[pymethods]

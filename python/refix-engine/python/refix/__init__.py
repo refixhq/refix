@@ -9,6 +9,7 @@ from refix._core import (
     RawMessage,
     Scope,
     Tokenizer,
+    frame,
     version,
 )
 from refix.codec import Codec
@@ -34,5 +35,6 @@ __all__ = [
     "Tokenizer",
     "__version__",
     "decode_log",
+    "frame",
     "read_log",
 ]

@@ -5,10 +5,12 @@ use pyo3::types::{
     PyAnyMethods, PyBool, PyDate, PyDateTime, PyInt, PyString, PyStringMethods, PyTime,
     PyTypeMethods,
 };
-use pyo3::{Bound, Py, PyAny, PyErr, PyResult, import_exception, intern, pyclass, pymethods};
+use pyo3::{
+    Bound, Py, PyAny, PyErr, PyResult, import_exception, intern, pyclass, pyfunction, pymethods,
+};
 use refix_message::{
     Date, FieldWriter as CoreFieldWriter, MonthYear, Tag, Time, TimePrecision, UtcTimestamp,
-    WriteError as CoreWriteError,
+    WriteError as CoreWriteError, frame as core_frame,
 };
 
 use crate::raw::{DECIMAL_TYPE, MONTH_YEAR_TYPE, RawMessage};
@@ -209,10 +211,42 @@ impl FieldWriter {
         Ok(())
     }
 
+    /// Write a data field after the length field that counts its bytes.
+    ///
+    /// The value may hold the separator. An empty value raises `WriteError`.
+    fn write_data(&mut self, length_tag: u32, tag: u32, value: &[u8]) -> PyResult<()> {
+        self.0
+            .write_data(Tag(length_tag), Tag(tag), value)
+            .map_err(to_py_err)
+    }
+
+    /// Write every field of `fields` again, in the same order.
+    fn write_fields(&mut self, fields: &Bound<'_, RawMessage>) {
+        self.0.write_fields(fields.get().core());
+    }
+
     /// Return the fields written as a message, and start again with none.
     fn finish(&mut self) -> RawMessage {
         RawMessage::new(std::mem::take(&mut self.0).finish())
     }
+}
+
+/// Return `header` and `body` framed into a whole message.
+///
+/// Writes BeginString (8), BodyLength (9) and MsgType (35), then the fields of
+/// `header` and of `body`, then CheckSum (10). One of those four fields in
+/// `header` or `body` raises `WriteError`.
+#[pyfunction]
+pub(crate) fn frame(
+    begin_string: &str,
+    msg_type: &str,
+    header: &Bound<'_, RawMessage>,
+    body: &Bound<'_, RawMessage>,
+) -> PyResult<RawMessage> {
+    let (header, body) = (header.get().core(), body.get().core());
+    core_frame(begin_string, msg_type, header, body)
+        .map(RawMessage::new)
+        .map_err(to_py_err)
 }
 
 const NANOS_PER_SECOND: i64 = 1_000_000_000;

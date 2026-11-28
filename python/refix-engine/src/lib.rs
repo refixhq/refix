@@ -18,6 +18,7 @@ fn version() -> &'static str {
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add_function(wrap_pyfunction!(writer::frame, m)?)?;
     m.add_class::<dialect::Dialect>()?;
     m.add_class::<raw::RawMessage>()?;
     m.add_class::<raw::Scope>()?;
