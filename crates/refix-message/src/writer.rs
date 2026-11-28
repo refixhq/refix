@@ -11,6 +11,10 @@ pub use frame::frame;
 const NANOS_PER_SECOND: u64 = 1_000_000_000;
 const SECONDS_PER_DAY: u32 = 86_400;
 
+/// The room a writer takes on its first write.
+const FIRST_BYTES: usize = 256;
+const FIRST_FIELDS: usize = 32;
+
 /// Writes fields and gives them back as a [`RawMessage`].
 ///
 /// The fields are written in the order of the calls.
@@ -36,6 +40,8 @@ pub struct FieldWriter {
 
 impl FieldWriter {
     /// A writer with nothing written.
+    ///
+    /// It takes room for a small message on its first write.
     pub fn new() -> Self {
         Self::default()
     }
@@ -217,6 +223,10 @@ impl FieldWriter {
 
     /// Writes the tag and `=`, and returns where the value starts.
     fn begin(&mut self, tag: Tag) -> usize {
+        if self.bytes.capacity() == 0 {
+            self.bytes.reserve(FIRST_BYTES);
+            self.fields.reserve(FIRST_FIELDS);
+        }
         let mut buffer = [0; 20];
         self.bytes
             .extend_from_slice(digits(&mut buffer, u64::from(tag.0)));
@@ -406,6 +416,17 @@ mod tests {
 
         assert!(message.bytes().is_empty());
         assert_eq!(message.entries().count(), 0);
+    }
+
+    #[test]
+    fn takes_room_on_the_first_write() {
+        let mut writer = FieldWriter::new();
+        assert_eq!(writer.bytes.capacity(), 0);
+
+        writer.write_int(Tag(34), 7);
+
+        assert!(writer.bytes.capacity() >= FIRST_BYTES);
+        assert!(writer.fields.capacity() >= FIRST_FIELDS);
     }
 
     #[test]
