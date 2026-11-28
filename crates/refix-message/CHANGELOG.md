@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8](https://github.com/refixhq/refix/compare/refix-message-v0.4.7...refix-message-v0.4.8) - 2026-11-28
+
+### Added
+
+- frame a header and a body into a message ([#211](https://github.com/refixhq/refix/pull/211))
+- write typed values into a raw message ([#210](https://github.com/refixhq/refix/pull/210))
+- write fields into a raw message ([#208](https://github.com/refixhq/refix/pull/208))
+
+### Other
+
+- describe writing raw messages ([#214](https://github.com/refixhq/refix/pull/214))
+
 ## [0.4.7](https://github.com/refixhq/refix/compare/refix-message-v0.4.6...refix-message-v0.4.7) - 2026-11-25
 
 ### Added

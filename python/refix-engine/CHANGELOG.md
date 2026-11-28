@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0](https://github.com/refixhq/refix/compare/python-v0.12.0...python-v0.13.0) - 2026-11-28
+
+### Added
+
+- *(python)* write raw messages ([#213](https://github.com/refixhq/refix/pull/213))
+
+### Other
+
+- describe writing raw messages ([#214](https://github.com/refixhq/refix/pull/214))
+
 ## [0.12.0](https://github.com/refixhq/refix/compare/python-v0.11.0...python-v0.12.0) - 2026-11-25
 
 ### Added
