@@ -17,8 +17,8 @@
 </div>
 
 > [!WARNING]
-> ReFIX is in early development. Currently, it supports reading TagValue FIX messages and code generation for
-> typed messages. Message serialisation, the network and session layers are not implemented yet,
+> ReFIX is in early development. Currently, it supports reading TagValue FIX messages, writing them by tag and code
+> generation for typed messages. Building typed messages, the network and session layers are not implemented yet,
 > and APIs change between 0.x releases.
 
 ## Quick start

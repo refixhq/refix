@@ -1,6 +1,6 @@
 ---
 title: Raw messages
-description: Read the fields of any FIX message by tag, without a dictionary.
+description: Read and write the fields of any FIX message by tag, without a dictionary.
 head:
   - tag: title
     content: Parse FIX messages in Rust and Python | ReFIX
@@ -25,6 +25,7 @@ A raw message reads the fields of any FIX message by tag, with no dictionary.
 | A log                            | The [log reader](/guides/reading-logs/). Each record holds one. |
 | Bytes that hold one message      | The [tokenizer](#one-message-from-bytes).                       |
 | Bytes arriving from a connection | The [message stream](#messages-from-a-connection).              |
+| Fields you write                 | The [field writer](#write-a-message).                           |
 
 The log reader is lenient. The tokenizer and the message stream are strict, and need SOH separators, a correct
 BodyLength and a correct CheckSum.
@@ -218,3 +219,183 @@ fields are built in. Name any custom ones in a dialect:
 		`MessageStream::new` and `LogReader::new` take a dialect in the same way.
 	</TabItem>
 </Tabs>
+
+## Write a message
+
+A field writer writes fields by tag, in the order of the calls. Write the header fields and the body fields, then
+frame them into a message.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		from datetime import UTC, datetime
+		from decimal import Decimal
+
+		import refix
+
+		now = datetime.now(UTC)
+
+		header = refix.FieldWriter()
+		header.write_str(49, "BUYSIDE")
+		header.write_str(56, "VENUE")
+		header.write_int(34, 3)
+		header.write_utc_timestamp(52, now)
+
+		body = refix.FieldWriter()
+		body.write_str(11, "ORDER-1")
+		body.write_str(55, "ACME")
+		body.write_str(54, "1")
+		body.write_utc_timestamp(60, now)
+		body.write_str(40, "2")
+		body.write_decimal(44, Decimal("101.25"))
+		body.write_int(38, 100)
+
+		message = refix.frame("FIX.4.4", "D", header.finish(), body.finish())
+		```
+
+		`message.bytes` holds the bytes to send.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		use refix::message::{Decimal, FieldWriter, Tag, TimePrecision, UtcTimestamp, frame};
+
+		let now = UtcTimestamp::new(unix_nanos, TimePrecision::MILLIS);
+
+		let mut header = FieldWriter::new();
+		header.write_str(Tag(49), "BUYSIDE")?;
+		header.write_str(Tag(56), "VENUE")?;
+		header.write_int(Tag(34), 3);
+		header.write_utc_timestamp(Tag(52), now);
+
+		let mut body = FieldWriter::new();
+		body.write_str(Tag(11), "ORDER-1")?;
+		body.write_str(Tag(55), "ACME")?;
+		body.write_str(Tag(54), "1")?;
+		body.write_utc_timestamp(Tag(60), now);
+		body.write_str(Tag(40), "2")?;
+		body.write_decimal(Tag(44), Decimal::new(10125, -2));
+		body.write_int(Tag(38), 100);
+
+		let message = frame("FIX.4.4", "D", &header.finish(), &body.finish())?;
+		```
+
+		`message.bytes()` holds the bytes to send. `unix_nanos` is the time in nanoseconds since 1970.
+	</TabItem>
+</Tabs>
+
+The result is a raw message, the same as one that was read:
+
+```text
+8=FIX.4.4|9=126|35=D|49=BUYSIDE|56=VENUE|34=3|52=20261103-09:30:36.250|11=ORDER-1|55=ACME|54=1|60=20261103-09:30:36.250|40=2|44=101.25|38=100|10=103
+```
+
+`frame` writes BeginString (8), BodyLength (9), MsgType (35) and CheckSum (10), so the header and the body must not
+hold them.
+
+The writer has no dictionary. It does not check that a tag exists, that the required fields are there or that the
+fields of a group are in order. It rejects an empty value and a value that contains SOH.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		A rejected value raises `WriteError` from `refix.errors`, which names the tag.
+	</TabItem>
+	<TabItem label="Rust">
+		A rejected value is an `Err` holding a `WriteError`, which names the tag. Only `write`, `write_str` and
+		`write_data` can fail.
+	</TabItem>
+</Tabs>
+
+Each method writes one field.
+
+| Method                | Python             | Rust           |
+| --------------------- | ------------------ | -------------- |
+| `write`               | `bytes`            | `&[u8]`        |
+| `write_str`           | `str`              | `&str`         |
+| `write_int`           | `int`              | `i64`          |
+| `write_bool`          | `bool`             | `bool`         |
+| `write_decimal`       | `Decimal` or `int` | `Decimal`      |
+| `write_utc_timestamp` | `datetime`         | `UtcTimestamp` |
+| `write_date`          | `date`             | `Date`         |
+| `write_time`          | `time`             | `Time`         |
+| `write_month_year`    | `MonthYear`        | `MonthYear`    |
+
+Timestamps and times are written with a set number of fraction digits. Digits past it are cut, not rounded.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		writer.write_utc_timestamp(60, now)               # 60=20261103-09:30:36.250
+		writer.write_utc_timestamp(60, now, precision=6)  # 60=20261103-09:30:36.250999
+		```
+
+		The default is 3 digits, and `precision` takes 0 to 9. A `datetime` needs a time zone and is converted to
+		UTC. `write_utc_timestamp_ns` and `write_time_ns` take nanoseconds as an `int`, for values finer than
+		`datetime` and `time` can hold.
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		let micros = now.with_precision(TimePrecision::MICROS);
+
+		writer.write_utc_timestamp(Tag(60), now);     // 60=20261103-09:30:36.250
+		writer.write_utc_timestamp(Tag(60), micros);  // 60=20261103-09:30:36.250999
+		```
+
+		A `UtcTimestamp` or a `Time` carries its precision, and `with_precision` changes it.
+	</TabItem>
+</Tabs>
+
+### Data fields
+
+`write_data` writes the length field and then the data, which may contain SOH.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		writer.write_data(95, 96, payload)
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		writer.write_data(Tag(95), Tag(96), payload)?;
+		```
+	</TabItem>
+</Tabs>
+
+### Fields written once
+
+`write_fields` writes every field of a raw message again. Use it for fields that go into many messages.
+
+<Tabs syncKey="language">
+	<TabItem label="Python">
+		```python
+		instrument = refix.FieldWriter()
+		instrument.write_str(55, "ACME")
+		instrument.write_str(48, "US0000000001")
+		instrument.write_str(22, "4")
+		block = instrument.finish()
+
+		body = refix.FieldWriter()
+		body.write_str(11, "ORDER-2")
+		body.write_fields(block)
+		body.write_int(38, 100)
+		```
+	</TabItem>
+	<TabItem label="Rust">
+		```rust
+		let mut instrument = FieldWriter::new();
+		instrument.write_str(Tag(55), "ACME")?;
+		instrument.write_str(Tag(48), "US0000000001")?;
+		instrument.write_str(Tag(22), "4")?;
+		let block = instrument.finish();
+
+		let mut body = FieldWriter::new();
+		body.write_str(Tag(11), "ORDER-2")?;
+		body.write_fields(&block);
+		body.write_int(Tag(38), 100);
+		```
+	</TabItem>
+</Tabs>
+
+```text
+11=ORDER-2|55=ACME|48=US0000000001|22=4|38=100
+```

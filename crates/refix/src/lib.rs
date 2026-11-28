@@ -1,9 +1,9 @@
 //! A FIX engine written in pure Rust. Under active development, and APIs
 //! change between 0.x releases.
 //!
-//! [`message`] frames, tokenises and reads raw FIX messages. Typed FIX 4.4
-//! messages are in `refix-fix44`, and `refix-cli` generates them from your
-//! own dictionary.
+//! [`message`] frames, tokenises, reads and writes raw FIX messages. Typed
+//! FIX 4.4 messages are in `refix-fix44`, and `refix-cli` generates them from
+//! your own dictionary.
 //!
 //! ```
 //! use refix::message::{LogReader, Tag};

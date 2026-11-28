@@ -3,8 +3,8 @@ title: Roadmap
 description: What ReFIX does today and what is planned next.
 ---
 
-ReFIX is in early development. It reads FIX messages today. Building messages and running sessions are planned
-next. APIs change between 0.x releases.
+ReFIX is in early development. It reads FIX messages and writes them by tag today. Building typed messages and
+running sessions are planned next. APIs change between 0.x releases.
 
 ## Works today
 
@@ -12,13 +12,14 @@ In both Rust and Python:
 
 - [Reading logs](/guides/reading-logs/) with any separator and a logger's prefix before each message.
 - [Reading raw messages](/guides/raw-messages/) from bytes or a connection, and their fields by tag.
+- [Writing raw messages](/guides/raw-messages/#write-a-message) by tag, framed with BodyLength and CheckSum.
 - [Typed messages](/guides/typed-messages/) for FIX 4.2 and 4.4.
 - [Generating typed messages](/guides/your-own-dictionary/) from your own dictionary, for FIX 4.0 to FIX 5.0 SP2.
 
 ## Planned next
 
 - Ready-made packages for more FIX versions beside `refix-fix42` and `refix-fix44`, starting with FIX 5.0 SP2.
-- Building messages and writing them in wire form.
+- Building typed messages from their fields.
 - The session layer, which connects to a counterparty and handles logon, heartbeats, sequence numbers and resends.
 
 There are no dates for these yet.

@@ -19,8 +19,9 @@ fn main() {
 }
 ```
 
-`MessageStream` frames a session's bytes strictly, and `Tokenizer::tokenize` reads a single frame. Typed messages are
-generated on top of the tokenizer: `refix-fix44` for FIX 4.4, or `refix-cli` for your own dictionary.
+`MessageStream` frames a session's bytes strictly, and `Tokenizer::tokenize` reads a single frame. `FieldWriter`
+writes fields by tag, and `frame` makes a header and a body into a message. Typed messages are generated on top of
+the tokenizer: `refix-fix44` for FIX 4.4, or `refix-cli` for your own dictionary.
 
 ## Features
 
