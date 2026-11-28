@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.9](https://github.com/refixhq/refix/compare/refix-message-v0.4.8...refix-message-v0.4.9) - 2026-11-28
+
+### Other
+
+- reserve room on a writer's first write ([#216](https://github.com/refixhq/refix/pull/216))
+
 ## [0.4.8](https://github.com/refixhq/refix/compare/refix-message-v0.4.7...refix-message-v0.4.8) - 2026-11-28
 
 ### Added

@@ -1,7 +1,7 @@
 [package]
 name = "refix-fix42"
 description = "Typed FIX 4.2 protocol messages for the ReFIX engine"
-version = "0.4.1"
+version = "0.4.2"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,7 +15,7 @@ categories.workspace = true
 include = ["src/**/*.rs", "generated.sha256", "README.md", "LICENSE-*"]
 
 [dependencies]
-refix-message = { version = "0.4.8", path = "../refix-message" }
+refix-message = { version = "0.4.9", path = "../refix-message" }
 
 [dev-dependencies]
 bytes = { workspace = true }
